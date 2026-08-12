@@ -14,6 +14,61 @@ numbers with a comparative reading at best.
 
 ---
 
+## Phase 1 — the oracle, and the noise floor
+
+`scripts/accuracy.py`, TabPFN v2.5 pinned to fp32, `auto_scale_n_estimators=False`, G=40 groups
+of 250 kernels (500 features — one estimator's full view), e=1, 3 seeds.
+
+| Dataset | seed 0 | seed 1 | seed 2 | sd | mean ensembling gain |
+|---|---|---|---|---|---|
+| Coffee | 1.0000 | 1.0000 | 1.0000 | 0.0000 | +0.0000 |
+| Trace | 1.0000 | 1.0000 | 1.0000 | 0.0000 | +0.0000 |
+| GunPoint | 0.9933 | 1.0000 | 1.0000 | 0.0038 | +0.0032 |
+| FaceFour | 0.9773 | 0.9773 | 0.9773 | 0.0000 | +0.0299 |
+| Beef | 0.8333 | 0.8667 | 0.7667 | **0.0509** | **+0.0792** |
+
+Mean accuracy across 15 runs: **0.9595**.
+
+**The noise floor is 0.0509**, and it is not evenly distributed — it is *entirely* Beef. Four of
+the five datasets are at or near ceiling and reproduce exactly across seeds, so they cannot
+discriminate between anything. Any claimed effect smaller than ~5 points on Beef, or smaller
+than ~0.4 points on GunPoint, is not a result. This is the number PLAN.md requires before an
+accuracy comparison means anything, and it should be read as "one dataset can move, the rest are
+saturated" rather than as a single global tolerance.
+
+**Ensembling earns its keep exactly where the task is hard.** The gain from averaging across the
+40 groups is +0.0792 on Beef and +0.0299 on FaceFour, and identically zero on the three datasets
+that were already perfect. On Beef the per-group mean accuracy is ~0.74 while the ensemble
+reaches 0.77–0.87 — the averaging is doing real work, not decoration. That is worth knowing
+because it is the part of the paper's design that survived the move to G=40 unchanged.
+
+### Does the backbone swap cost anything?
+
+`tabpfn-v2-5` will not load in DuckDB, so the oracle runs TabPFN v2.5 and the pipeline runs
+TabICL v2. Same ROCKET features, same seed, same grouping:
+
+| Dataset | TabPFN v2.5 (oracle) | TabICL v2 (DuckDB) | delta | seed sd |
+|---|---|---|---|---|
+| Coffee | 1.0000 | 1.0000 | +0.0000 | 0.0000 |
+| Trace | 1.0000 | 1.0000 | +0.0000 | 0.0000 |
+| GunPoint | 0.9933 | 0.9933 | +0.0000 | 0.0038 |
+| FaceFour | 0.9773 | 0.9773 | +0.0000 | 0.0000 |
+| Beef | 0.8333 | 0.7667 | **−0.0667** | 0.0509 |
+
+**Four of five are identical, and the one difference is the size of its own noise.** Beef's
+−0.0667 is two test rows out of thirty, against a seed-to-seed sd of 0.0509 on that same
+dataset — so this subset cannot distinguish the two backbones, and it would be wrong to report
+that TabICL is worse.
+
+This bears on PLAN.md's Phase 3b prediction, which expected TabICL v2 to do *relatively badly*
+on ROCKET features because its prior is width-sensitive and rotation-hostile, and ROCKET
+features are synthetic projections with no stable per-column identity. At **500-feature groups**
+that penalty does not appear. The honest reading is narrow: the tabicl fork measured its width
+penalty at much greater widths, and this configuration deliberately keeps every group inside one
+estimator's 500-feature budget — so the experiment as run does not put the prediction under
+strain. Testing it properly needs the wide-group configuration, which anofox cannot reach at
+e=1.
+
 ## Phase 2 — `anofox_tabfm` probe
 
 Full write-up in [PHASE2_FINDINGS.md](PHASE2_FINDINGS.md). Two results reshaped the design.
@@ -172,10 +227,14 @@ engine — so a 40-group run is ~1.1 MB of SQL.
 
 ## Not done
 
-- **Phase 1's accuracy table and noise floor.** The harness runs and the licence gate is
-  cleared; the multi-seed run was still going at the end of the session. Until it finishes there
-  is **no measured noise floor**, and per PLAN.md's own rule no accuracy comparison here should
-  be treated as real.
+- **A noise floor worth the name.** One was measured (0.0509) but it rests on a single dataset:
+  four of the five saturate and reproduce exactly, so the subset has almost no resolving power.
+  Three seeds on one informative dataset is a weak floor. Widening the subset toward datasets
+  that are hard but not ceiling-bound would buy more than more seeds on these.
+- **e=8 versus e=1.** `--compare-estimators 8,1` exists and was never run: at 500-feature
+  groups e=1 already covers every feature, so the interesting comparison is the paper's
+  2,000-feature groups at e=8 against this configuration — which is a different experiment than
+  the flag performs, and an expensive one.
 - **Anything on a pod.** No RunPod instance was created — that spends money and needs a human.
   Every number above is local.
 - **Multivariate and variable-length series.** Still unspecified in SPEC.md §7, so

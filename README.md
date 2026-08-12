@@ -51,9 +51,26 @@ what the pipeline uses by default. Details and reproduction in
 | | |
 |---|---|
 | Conformance (C++ vs. Python oracle) | max abs diff **1.8e-15**, PPV differences exactly 0 |
+| End-to-end predictions, C++ vs. Python features | **150/150 identical** rows (GunPoint) |
 | `rocket_transform` vs. numpy oracle | **7.1×** faster at 4,000 series, 1.7× at 200 |
 | Pure-SQL ROCKET | correct, and ~**4×10⁵** slower than Python — a fallback, not an option |
-| GunPoint, end to end | see `reference/phase5_GunPoint.json` |
+| Extension test suite | 12 assertions via DuckDB's sqllogictest runner |
+
+Accuracy on five UCR datasets, G=40, e=1 — the oracle (TabPFN v2.5, fp32) beside the DuckDB
+pipeline (TabICL v2), with the measured seed-to-seed noise for scale:
+
+| Dataset | TabPFN (oracle) | TabICL (DuckDB) | seed sd |
+|---|---|---|---|
+| Coffee | 1.0000 | 1.0000 | 0.0000 |
+| Trace | 1.0000 | 1.0000 | 0.0000 |
+| GunPoint | 0.9933 | 0.9933 | 0.0038 |
+| FaceFour | 0.9773 | 0.9773 | 0.0000 |
+| Beef | 0.8333 | 0.7667 | 0.0509 |
+
+Four of five are identical and the one difference is two test rows out of thirty, against a
+seed-to-seed sd of 0.0509 on that same dataset — so this subset cannot tell the two backbones
+apart. Do not read the mean against the paper's 0.900: that is 92 datasets over 30 resamples,
+this is one split of five. Full detail and caveats in [reference/RESULTS.md](reference/RESULTS.md).
 
 All timings are local Windows numbers on a contended box and belong in no table — PLAN.md
 requires reported figures to come from a pod.

@@ -1,0 +1,31 @@
+{
+  "dataset": "SyntheticControl",
+  "model": "tabicl-v2",
+  "config": {
+    "num_kernels": 1000,
+    "n_groups": 4,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0
+  },
+  "shape": {
+    "dataset": "SyntheticControl",
+    "n_train": 300,
+    "n_test": 300,
+    "n_timepoints": 60,
+    "raw_parquet": "C:/Users/maxde/duckdb-rocket/data/phase5/SyntheticControl/raw.parquet"
+  },
+  "accuracy": 0.9833333333333333,
+  "row_alignment": {
+    "predicted_rows": 300,
+    "distinct_ids": 300,
+    "group_rows": 1200,
+    "min_groups_per_row": 4,
+    "max_groups_per_row": 4
+  },
+  "failures": [],
+  "seconds": 84.8,
+  "comparison": null,
+  "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
+}

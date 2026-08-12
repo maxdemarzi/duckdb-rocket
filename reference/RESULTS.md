@@ -69,6 +69,46 @@ estimator's 500-feature budget — so the experiment as run does not put the pre
 strain. Testing it properly needs the wide-group configuration, which anofox cannot reach at
 e=1.
 
+## The pod run that failed
+
+Worth recording in full, because the next person to reach for a pod will otherwise repeat it.
+
+**Outcome: 140 minutes of RTX 6000 Ada (~$1.75) and zero accuracy results.** What it did produce
+was three findings, all of which change how the next run should be set up.
+
+**1. A GPU buys nothing here.** `tabfm_devices()` on the Linux pod reported only
+`CPUExecutionProvider`, exactly as on Windows — the community `anofox_tabfm` build ships
+CPU-only ONNX Runtime despite the repository advertising CUDA/ROCm. The GPU sat idle for the
+whole run. **A CPU pod is the correct instance type**, and the tooling should support one.
+
+**2. The cross-platform build works, and conformance holds.** The extension built cleanly under
+gcc 11 on an EPYC 7453 and reproduced the golden vectors at **the same 1.776e-15** as the
+Windows/MSVC build, with PPV differences of exactly 0. That is the one durable result of the
+run, and it is not nothing: it says SPEC.md is portable rather than accidentally
+Windows-shaped.
+
+**3. Every sweep run failed at ~818 s, and the likely cause is thread explosion.** The pod
+exposed **112 cores** to the container. DuckDB sizes its thread pool from the visible core
+count, so each of 4 concurrent runs spawned ~112 threads, plus ONNX's own threads per session.
+The runs died at roughly the point a 40-group run should have *finished* — locally the same
+dataset takes ~85 s at 4 groups, so ~850 s at 40 — and died without a clean error, which is
+what resource exhaustion looks like. The same dataset and configuration runs fine locally.
+
+**Before the next pod run:** set `SET threads` explicitly in the generated SQL rather than
+inheriting the host's core count, and cap ONNX's intra-op threads. Do not scale `--jobs` on
+visible cores without doing so first.
+
+Two process mistakes made this worse and are worth naming:
+
+- `pkill -f phase5_pipeline` issued over SSH **matched the SSH command line itself**, killing
+  the remote shell before the rest of the command ran. Cleanups silently did nothing, stale
+  sweeps accumulated, and several sweeps ran concurrently writing the same output files. Use a
+  self-excluding pattern (`[p]hase5_pipeline`).
+- `phase5_pipeline.py` filters ONNX's schema-registration noise out of stderr, which is
+  necessary — but when the real failure produces *no* other stderr, the filter leaves an empty
+  message and the script reports a bare "FAILED after Ns". The harness hid the very thing it
+  was meant to surface.
+
 ## Phase 2 — `anofox_tabfm` probe
 
 Full write-up in [PHASE2_FINDINGS.md](PHASE2_FINDINGS.md). Two results reshaped the design.
@@ -235,8 +275,8 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   groups e=1 already covers every feature, so the interesting comparison is the paper's
   2,000-feature groups at e=8 against this configuration — which is a different experiment than
   the flag performs, and an expensive one.
-- **Anything on a pod.** No RunPod instance was created — that spends money and needs a human.
-  Every number above is local.
+- **Anything measured on a pod.** One was run and it produced **no usable results**; see
+  "The pod run that failed" below. Every number above is local.
 - **Multivariate and variable-length series.** Still unspecified in SPEC.md §7, so
   `BasicMotions` remains skipped rather than silently mishandled.
 - **The 92-dataset / 30-resample protocol.** Phase 5 covers five datasets on a single split.

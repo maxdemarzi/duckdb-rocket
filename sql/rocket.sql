@@ -8,6 +8,14 @@
 -- Everything below is normative in SPEC.md. Where this file and `duckdb_rocket/` disagree, the
 -- Python is right and this is a bug.
 --
+-- **Scope: univariate, fixed-length only.** This implements SPEC.md 1-6. It does NOT implement
+-- section 7 (multivariate channel subsets) or section 8 (an explicit reference length for
+-- ragged data), both of which exist in the oracle and in the extension. That is a deliberate
+-- stopping point rather than an oversight: the measured cost of this path is ~4e5x Python, so
+-- it earns its place as an executable statement of the core spec and a zero-build fallback for
+-- tiny inputs, and extending it to the cases only large or awkward datasets need would be
+-- effort spent on the slowest implementation of the three.
+--
 -- ----------------------------------------------------------------------------------------
 -- Representing u64 in a database with no unsigned wrapping arithmetic
 -- ----------------------------------------------------------------------------------------

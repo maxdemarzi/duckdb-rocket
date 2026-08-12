@@ -30,6 +30,15 @@ docs:
     SELECT rocket_transform(s, 4, 7, 4) = rocket_transform(s, 8, 7, 0)[9:16];
     -- true
 
+    -- Multivariate: outer list channels, inner list timepoints. Still 2 features
+    -- per kernel -- the selected channels are summed inside one convolution.
+    SELECT rocket_transform(channels, 250, 0, 0) FROM multivariate_series;
+
+    -- Variable-length: pass an explicit reference length so every row shares one
+    -- kernel bank. Without it each row draws its own, and column j stops meaning
+    -- the same thing across rows.
+    SELECT rocket_transform(values, 250, 0, 0, 64) FROM ragged_series;
+
   extended_description: |
     `rocket_transform` implements ROCKET (Dempster, Petitjean & Webb, 2020): it convolves a
     series with random kernels of random length, dilation, padding and bias, and reduces each
@@ -49,6 +58,17 @@ docs:
     across threads with no shared generator state. This is what makes it practical to split a
     10,000-kernel bank into groups narrow enough for a downstream classifier's per-estimator
     feature budget.
+
+    Multivariate series go in as `DOUBLE[][]` (channels of timepoints). Each kernel draws a
+    random subset of channels with independent weights per channel and still produces exactly
+    two features, because the selected channels are summed inside a single convolution. A
+    one-channel series produces byte-identical kernels through either overload.
+
+    For variable-length data, pass an explicit reference length as a fifth argument. Kernel
+    weights do not depend on series length but dilation and padding do, so without it each row
+    draws its own kernel bank and the columns stop being comparable across rows. Note also that
+    the max feature is biased upward by series length while PPV is not — if length correlates
+    with the label, half the features carry that correlation.
 
     The pseudo-random stream is specified byte-for-byte in the project's SPEC.md, and the
     extension is validated against golden vectors emitted by an independent Python

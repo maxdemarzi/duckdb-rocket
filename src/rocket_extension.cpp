@@ -21,12 +21,14 @@ namespace duckdb {
 //
 // A series shorter than the reference is rejected rather than padded: padding would fabricate
 // data and change what the features measure.
-static int64_t ReferenceLength(DataChunk &args, idx_t count, idx_t row, int64_t n) {
-	if (args.ColumnCount() < 5) {
+//
+// `format` is flattened once by the caller and passed in. Doing it here would re-flatten the
+// whole vector for every row of the chunk, which is quadratic in the chunk size for no reason.
+static int64_t ReferenceLength(bool has_reference, const UnifiedVectorFormat &format, idx_t row,
+                               int64_t n) {
+	if (!has_reference) {
 		return n;
 	}
-	UnifiedVectorFormat format;
-	args.data[4].ToUnifiedFormat(count, format);
 	const auto idx = format.sel->get_index(row);
 	if (!format.validity.RowIsValid(idx)) {
 		return n;
@@ -78,6 +80,12 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 	const auto kernels_data = UnifiedVectorFormat::GetData<int64_t>(kernels_format);
 	const auto seed_data = UnifiedVectorFormat::GetData<int64_t>(seed_format);
 	const auto first_data = UnifiedVectorFormat::GetData<int64_t>(first_format);
+
+	const bool has_reference = args.ColumnCount() >= 5;
+	UnifiedVectorFormat reference_format;
+	if (has_reference) {
+		args.data[4].ToUnifiedFormat(count, reference_format);
+	}
 
 	// Size the output child up front. Every row produces exactly
 	// kernels_per_group * 2 features (SPEC.md 5), so this is not a guess.
@@ -149,7 +157,7 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 			    static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
 		}
 
-		const auto n_reference = ReferenceLength(args, count, row, n);
+		const auto n_reference = ReferenceLength(has_reference, reference_format, row, n);
 
 		const auto features = duckdb_rocket::Transform(
 		    series.data(), n, n_reference, static_cast<uint64_t>(seed_data[seed_idx]),
@@ -202,6 +210,12 @@ static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState
 	const auto kernels_data = UnifiedVectorFormat::GetData<int64_t>(kernels_format);
 	const auto seed_data = UnifiedVectorFormat::GetData<int64_t>(seed_format);
 	const auto first_data = UnifiedVectorFormat::GetData<int64_t>(first_format);
+
+	const bool has_reference = args.ColumnCount() >= 5;
+	UnifiedVectorFormat reference_format;
+	if (has_reference) {
+		args.data[4].ToUnifiedFormat(count, reference_format);
+	}
 
 	idx_t total_features = 0;
 	for (idx_t row = 0; row < count; row++) {
@@ -290,7 +304,7 @@ static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState
 			    static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
 		}
 
-		const auto n_reference = ReferenceLength(args, count, row, n);
+		const auto n_reference = ReferenceLength(has_reference, reference_format, row, n);
 
 		const auto features = duckdb_rocket::TransformMultivariate(
 		    series.data(), n_channels, n, n_reference,

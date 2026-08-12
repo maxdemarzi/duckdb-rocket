@@ -1,3 +1,9 @@
+[tool.pytest.ini_options]
+# The project is a uv application, not an installed distribution, so the repo root is not on
+# sys.path for the test run. pytest only prepends the test files' own directory.
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [project]
 name = "duckdb-rocket"
 version = "0.1.0"
@@ -12,4 +18,9 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "tabpfn>=8.2.0",
     "torch>=2.13.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
 ]

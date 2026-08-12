@@ -233,20 +233,27 @@ The loadable extension was also verified against the **stock upstream v1.5.5 CLI
 not only the shell built here — the check that the pinned ABI genuinely matches rather than
 being self-consistent.
 
-### Breadth: five datasets, G=40, e=1, `tabicl-v2`
+### Breadth: seven datasets, G=40, e=1, `tabicl-v2`
 
 | Dataset | Test rows | Timepoints | Accuracy | Wall clock |
 |---|---|---|---|---|
 | Coffee | 28 | 286 | 1.0000 | 128 s |
 | Trace | 100 | 275 | 1.0000 | 260 s |
 | GunPoint | 150 | 150 | 0.9933 | 258 s |
+| SyntheticControl | 300 | 60 | 0.9867 | 674 s |
 | FaceFour | 88 | 350 | 0.9773 | 172 s |
+| OSULeaf | 242 | 427 | 0.9711 | 449 s |
 | Beef | 30 | 470 | 0.7667 | 129 s |
 
 Row alignment was total on every one: 40 of 40 groups scored every row, no duplicates, no drops.
 
-**Mean accuracy 0.9475 — and it should not be compared to the paper's 0.900.** That figure is a
-mean over 92 datasets with 30 resamples; this is a single split of five datasets chosen for
+`SyntheticControl` and `OSULeaf` are the two the failed pod run was meant to add; they were run
+locally instead, at full configuration, after the pod was stopped. `SyntheticControl` is
+incidentally the dataset that failed on the pod every time — running clean here is what
+identified that failure as environmental rather than anything to do with the data.
+
+**Mean accuracy 0.9564 — and it should not be compared to the paper's 0.900.** That figure is a
+mean over 92 datasets with 30 resamples; this is a single split of seven datasets chosen for
 *spread* rather than difficulty, using a different backbone (`tabicl-v2`, because `tabpfn-v2-5`
 will not load) at e=1 rather than e=8. The two numbers measure different things and the
 resemblance is not evidence of anything.

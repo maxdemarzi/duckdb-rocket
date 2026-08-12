@@ -39,9 +39,25 @@ Requires [`uv`](https://docs.astral.sh/uv/), CMake, Ninja, and — on Windows �
 
 ```bash
 uv sync
+uv run pytest                              # 94 tests, no model weights needed
+uv run python scripts/doctor.py            # record the environment tuple
+uv run python scripts/emit_golden.py       # regenerate conformance fixtures
 ```
 
 The DuckDB CLI is pinned to v1.5.5 under `tools/` because extension ABI is version-bound.
+
+### TabPFN weights require a third-party licence
+
+Reproducing the accuracy numbers needs TabPFN v2.5 weights, which Prior Labs gates behind an
+accepted licence. Register at <https://ux.priorlabs.ai/account>, accept the licence, and put
+the API key in the environment:
+
+```bash
+export TABPFN_TOKEN=...      # or let the first interactive run cache it
+```
+
+Everything that does not touch model weights — the ROCKET transform, the golden vectors, the
+whole test suite — runs without it.
 
 ## License
 

@@ -152,6 +152,37 @@ this, so correctness here matters more than speed.
 - [ ] Write `SPEC.md` documenting kernel generation (lengths, dilations, padding, biases,
       weight normalization) precisely enough to reimplement from text alone
 
+### BLOCKED: TabPFN v2.5 weights are license-gated
+
+**Nothing in Phase 1 that needs model weights can run until this is cleared, and it needs a
+human.** `tabpfn` 8.2.0 will not download v2.5 weights without an accepted Prior Labs licence.
+The first attempt opens a browser and waits for an interactive login, which fails outright in a
+non-interactive shell (`WinError 10038` — a socket the harness cannot service).
+
+To clear it, once:
+
+1. Register / log in at <https://ux.priorlabs.ai/account>
+2. Accept the licence at <https://ux.priorlabs.ai/account/licenses>
+3. Copy the API key
+
+Then make it available non-interactively. `tabpfn` resolves a token in this order
+(`browser_auth.py:76-95`):
+
+1. the **`TABPFN_TOKEN`** environment variable
+2. `~/.cache/tabpfn/auth_token`
+3. `~/.tabpfn/token` (tabpfn-client's own cache)
+
+**This is not only a local-setup annoyance — it is a pod problem and a reproducibility
+problem.** Every pod needs the token injected, so it belongs in the RunPod launcher's
+environment alongside the rest of the run configuration, and it must never be committed. It is
+also worth stating in the README that reproducing this project's numbers requires accepting a
+third-party licence, since that is a real constraint on anyone else running it.
+
+*Unaffected and already verified:* dataset loading via `aeon` (the smoke run reached the model
+step, so the UCR download path works), and everything in Phases 3–4 that touches DuckDB rather
+than PyTorch. `anofox_tabfm` ships its own ONNX weights via `tabfm_download` and is a separate
+gate — do not assume this token clears that one too.
+
 ### The AMP default, resolved (tabpfn 8.2.0)
 
 Answered by reading the installed package, so the tabicl lesson does not have to be relearned
@@ -441,6 +472,7 @@ step.
 | TabPFN inference dominates runtime, making C++ ROCKET pointless | 3 | Phase 3 measures this *before* any C++ is written |
 | Conclusions drawn from one dataset | 1, 5 | 10-dataset subset; noise floor measured first |
 | Local Windows timings mislead (WDDM spills instead of OOM) | all | Numbers come from pods, not the 3060 |
+| **TabPFN v2.5 weights need an accepted Prior Labs licence** | 1, 5 | One-time browser acceptance, then `TABPFN_TOKEN` in the environment; inject into every pod, never commit it |
 | A forgotten pod bills silently | all | `check` before and after every session; shared account |
 | DuckDB extension ABI churn | 0, 6 | Pinned to v1.5.5; C++ template CI matrix. **Keep the `duckdb` submodule and `tools/duckdb.exe` on the same version** — swan pins v1.5.4, we use v1.5.5 |
 | `anofox_tabfm` moves under us mid-measurement | 2, 3 | Pin a tag; it is pre-1.0 and tags near-daily (see below) |

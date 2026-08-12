@@ -87,16 +87,38 @@ Windows/MSVC build, with PPV differences of exactly 0. That is the one durable r
 run, and it is not nothing: it says SPEC.md is portable rather than accidentally
 Windows-shaped.
 
-**3. Every sweep run failed at ~818 s, and the likely cause is thread explosion.** The pod
-exposed **112 cores** to the container. DuckDB sizes its thread pool from the visible core
-count, so each of 4 concurrent runs spawned ~112 threads, plus ONNX's own threads per session.
-The runs died at roughly the point a 40-group run should have *finished* — locally the same
-dataset takes ~85 s at 4 groups, so ~850 s at 40 — and died without a clean error, which is
-what resource exhaustion looks like. The same dataset and configuration runs fine locally.
+**3. Every sweep run was killed by the OOM killer. The pods needed more RAM, not more cores.**
 
-**Before the next pod run:** set `SET threads` explicitly in the generated SQL rather than
-inheriting the host's core count, and cap ONNX's intra-op threads. Do not scale `--jobs` on
-visible cores without doing so first.
+The exit status is `-9` — SIGKILL. Establishing that took a second pod and three wrong
+hypotheses, all recorded here because each one *sounded* right:
+
+| Hypothesis | Killed by |
+|---|---|
+| Thread explosion from 112 visible cores | The CPU pod had **16** cores and failed identically |
+| Concurrency — 4 runs at once | A single sequential run failed too |
+| Feature width, 500 columns | `probe_anofox.py` ran 500 columns on the same pod in 4.0 s |
+| Dataset or configuration | The same dataset and config run clean locally |
+
+What actually distinguishes the failures is **context rows**. `tabfm_classify`'s memory scales
+with training rows × features, and the CPU pod's container limit was 32 GB:
+
+| Dataset | Train rows | On the pod |
+|---|---|---|
+| Coffee | 28 | works |
+| SyntheticControl | 300 | **OOM-killed** |
+| OSULeaf | 200 | **OOM-killed** |
+| ItalyPowerDemand | 67 (but 1,029 test) | **OOM-killed** |
+
+The local box has more memory than either pod's container limit, which is the entire reason
+every one of these runs fine here.
+
+**Before the next pod run:** size the instance on **RAM**, not vCPU or GPU. 32 GB is not enough
+for 300 context rows at 500 features, and `--jobs N` multiplies the requirement by N.
+
+Note that `exit -9` was only visible *because* of the stderr fallback added after the first pod
+run. Before that, the ONNX-noise filter swallowed the whole message and the failure reported
+itself as a bare "FAILED after Ns" — which is what sent the first three hypotheses down the
+wrong path.
 
 Two process mistakes made this worse and are worth naming:
 

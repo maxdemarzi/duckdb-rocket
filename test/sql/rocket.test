@@ -82,3 +82,40 @@ statement error
 SELECT rocket_transform([1.0,NULL,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[], 4, 0, 0);
 ----
 contains NULL values
+
+# --- multivariate (SPEC.md 7) -----------------------------------------------------------
+
+# Still two features per kernel however many channels it reads: a kernel sums its selected
+# channels inside one convolution rather than producing a feature per channel.
+query I
+SELECT len(rocket_transform([[1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],[2.0,1,4,3,6,5,8,7,10,9,12,11,14,13,16,15],[0.5,0.25,1.5,2.5,0.75,3.5,1.25,4.5,2.25,5.5,3.25,6.5,4.25,7.5,5.25,8.5]]::DOUBLE[][], 5, 0, 0));
+----
+10
+
+# SPEC.md 7.1, the guarantee every committed golden vector rests on: at one channel no channel
+# draw is made, so both overloads produce exactly the same kernels.
+query I
+SELECT rocket_transform([s]::DOUBLE[][], 8, 3, 0) = rocket_transform(s, 8, 3, 0)
+FROM (SELECT [1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]::DOUBLE[] AS s);
+----
+true
+
+# More channels must actually change the kernels, or the channel draws are not happening.
+query I
+SELECT rocket_transform([s, s]::DOUBLE[][], 8, 3, 0) = rocket_transform([s]::DOUBLE[][], 8, 3, 0)
+FROM (SELECT [1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]::DOUBLE[] AS s);
+----
+false
+
+# Group addressing works the same way in the multivariate case.
+query I
+SELECT rocket_transform(m, 4, 7, 4) = rocket_transform(m, 8, 7, 0)[9:16]
+FROM (SELECT [[1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
+              [2.0,1,4,3,6,5,8,7,10,9,12,11,14,13,16,15]]::DOUBLE[][] AS m);
+----
+true
+
+statement error
+SELECT rocket_transform([[1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],[1.0,2,3]]::DOUBLE[][], 4, 0, 0);
+----
+every channel must be the same length

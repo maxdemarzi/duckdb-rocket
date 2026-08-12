@@ -25,6 +25,7 @@ import statistics
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -45,6 +46,15 @@ def main() -> int:
     parser.add_argument("--n-groups", type=int, default=40)
     parser.add_argument("--out", type=Path, default=ROOT / "reference" / "pod_sweep.json")
     parser.add_argument("--timeout", type=int, default=7200, help="seconds per run")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="(dataset, seed) runs to execute concurrently. Each one is largely serial -- the "
+             "40 classify calls in a run happen one after another -- so on a many-core machine "
+             "the sweep otherwise leaves most of the box idle. Wall clock is what a pod is "
+             "billed by, so this is the difference between a $2 run and a $10 one.",
+    )
     args = parser.parse_args()
 
     if args.datasets:
@@ -65,50 +75,59 @@ def main() -> int:
     runs: list[dict] = []
     started_all = time.perf_counter()
 
-    for spec in specs:
-        print(f"\n=== {describe(spec)}", flush=True)
-        for seed in range(args.seeds):
-            out = ROOT / "reference" / "pod" / f"{spec.name}_seed{seed}.json"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            cmd = [
-                sys.executable, str(ROOT / "scripts" / "phase5_pipeline.py"),
-                "--dataset", spec.name,
-                "--num-kernels", str(args.num_kernels),
-                "--n-groups", str(args.n_groups),
-                "--seed", str(seed),
-                "--out", str(out),
-            ]
-            started = time.perf_counter()
-            try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=args.timeout)
-            except subprocess.TimeoutExpired:
-                print(f"  seed={seed}  TIMEOUT after {args.timeout}s", flush=True)
-                runs.append({"dataset": spec.name, "seed": seed, "error": "timeout"})
-                continue
-            elapsed = time.perf_counter() - started
+    def one_run(spec, seed: int) -> dict:
+        out = ROOT / "reference" / "pod" / f"{spec.name}_seed{seed}.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            sys.executable, str(ROOT / "scripts" / "phase5_pipeline.py"),
+            "--dataset", spec.name,
+            "--num-kernels", str(args.num_kernels),
+            "--n-groups", str(args.n_groups),
+            "--seed", str(seed),
+            "--out", str(out),
+        ]
+        started = time.perf_counter()
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=args.timeout)
+        except subprocess.TimeoutExpired:
+            return {"dataset": spec.name, "seed": seed, "error": "timeout"}
+        elapsed = time.perf_counter() - started
 
-            if proc.returncode != 0 or not out.exists():
-                tail = (proc.stderr or proc.stdout or "")[-400:]
-                print(f"  seed={seed}  FAILED ({elapsed:.0f}s): {tail}", flush=True)
-                runs.append({"dataset": spec.name, "seed": seed, "error": tail})
-                continue
+        if proc.returncode != 0 or not out.exists():
+            tail = (proc.stderr or proc.stdout or "")[-400:]
+            return {"dataset": spec.name, "seed": seed, "error": tail, "seconds": elapsed}
 
-            report = json.loads(out.read_text(encoding="utf-8"))
-            runs.append(
-                {
-                    "dataset": spec.name,
-                    "seed": seed,
-                    "accuracy": report["accuracy"],
-                    "seconds": report["seconds"],
-                    "n_test": report["shape"]["n_test"],
-                    "row_alignment_ok": not report["failures"],
-                }
-            )
-            print(
-                f"  seed={seed}  acc={report['accuracy']:.4f}  {report['seconds']:.0f}s"
-                + ("" if not report["failures"] else f"  ALIGNMENT FAILURES: {report['failures']}"),
-                flush=True,
-            )
+        report = json.loads(out.read_text(encoding="utf-8"))
+        return {
+            "dataset": spec.name,
+            "seed": seed,
+            "accuracy": report["accuracy"],
+            "seconds": report["seconds"],
+            "n_test": report["shape"]["n_test"],
+            "row_alignment_ok": not report["failures"],
+            "failures": report["failures"],
+        }
+
+    jobs = [(spec, seed) for spec in specs for seed in range(args.seeds)]
+
+    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+        # Threads, not processes: each one only waits on a subprocess, so the GIL is irrelevant
+        # and the real parallelism is in the child DuckDB processes.
+        futures = {pool.submit(one_run, spec, seed): (spec, seed) for spec, seed in jobs}
+        for future in as_completed(futures):
+            spec, seed = futures[future]
+            result = future.result()
+            runs.append(result)
+
+            if "accuracy" in result:
+                note = ""
+                if result.get("failures"):
+                    note = f"  ALIGNMENT FAILURES: {result['failures']}"
+                print(f"  {spec.name} seed={seed}  acc={result['accuracy']:.4f}  "
+                      f"{result['seconds']:.0f}s{note}", flush=True)
+            else:
+                print(f"  {spec.name} seed={seed}  FAILED: "
+                      f"{str(result.get('error'))[:200]}", flush=True)
 
             # Written after every run, not at the end: a pod that dies late should not take the
             # results it already earned with it.

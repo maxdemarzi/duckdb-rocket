@@ -1,0 +1,49 @@
+{
+  "duckdb": "C:\\Users\\maxde\\duckdb-rocket\\build\\release\\duckdb.exe",
+  "seed": 20260812,
+  "kernels": 32,
+  "tolerance": 1e-09,
+  "passed": true,
+  "results": [
+    {
+      "channels": 1,
+      "ok": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "max_ppv_diff": 0.0,
+      "values_outside_tolerance": 0,
+      "matches_univariate_path": true
+    },
+    {
+      "channels": 2,
+      "ok": true,
+      "max_abs_diff": 5.329070518200751e-15,
+      "max_ppv_diff": 0.0,
+      "values_outside_tolerance": 0,
+      "matches_univariate_path": null
+    },
+    {
+      "channels": 3,
+      "ok": true,
+      "max_abs_diff": 3.552713678800501e-15,
+      "max_ppv_diff": 0.0,
+      "values_outside_tolerance": 0,
+      "matches_univariate_path": null
+    },
+    {
+      "channels": 6,
+      "ok": true,
+      "max_abs_diff": 7.105427357601002e-15,
+      "max_ppv_diff": 0.0,
+      "values_outside_tolerance": 0,
+      "matches_univariate_path": null
+    },
+    {
+      "channels": 12,
+      "ok": true,
+      "max_abs_diff": 7.105427357601002e-15,
+      "max_ppv_diff": 0.0,
+      "values_outside_tolerance": 0,
+      "matches_univariate_path": null
+    }
+  ]
+}

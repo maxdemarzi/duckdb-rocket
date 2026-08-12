@@ -129,12 +129,158 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 	}
 }
 
+// rocket_transform(series DOUBLE[][], kernels_per_group, seed, first_kernel) -> DOUBLE[]
+//
+// The multivariate overload (SPEC.md 7). The outer list is channels, the inner one timepoints,
+// and every channel must be the same length -- a ragged series has no single `n` to draw
+// dilations against.
+//
+// Still two features per kernel: a kernel sums its selected channels inside one convolution
+// rather than producing a feature per channel.
+static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState &state,
+                                                Vector &result) {
+	const auto count = args.size();
+
+	UnifiedVectorFormat outer_format;
+	args.data[0].ToUnifiedFormat(count, outer_format);
+	const auto outer_entries = UnifiedVectorFormat::GetData<list_entry_t>(outer_format);
+
+	auto &channel_vector = ListVector::GetEntry(args.data[0]);
+	const auto channel_count = ListVector::GetListSize(args.data[0]);
+	UnifiedVectorFormat channel_format;
+	channel_vector.ToUnifiedFormat(channel_count, channel_format);
+	const auto channel_entries = UnifiedVectorFormat::GetData<list_entry_t>(channel_format);
+
+	auto &sample_vector = ListVector::GetEntry(channel_vector);
+	const auto sample_count = ListVector::GetListSize(channel_vector);
+	UnifiedVectorFormat sample_format;
+	sample_vector.ToUnifiedFormat(sample_count, sample_format);
+	const auto sample_data = UnifiedVectorFormat::GetData<double>(sample_format);
+
+	UnifiedVectorFormat kernels_format, seed_format, first_format;
+	args.data[1].ToUnifiedFormat(count, kernels_format);
+	args.data[2].ToUnifiedFormat(count, seed_format);
+	args.data[3].ToUnifiedFormat(count, first_format);
+	const auto kernels_data = UnifiedVectorFormat::GetData<int64_t>(kernels_format);
+	const auto seed_data = UnifiedVectorFormat::GetData<int64_t>(seed_format);
+	const auto first_data = UnifiedVectorFormat::GetData<int64_t>(first_format);
+
+	idx_t total_features = 0;
+	for (idx_t row = 0; row < count; row++) {
+		const auto k_idx = kernels_format.sel->get_index(row);
+		if (!kernels_format.validity.RowIsValid(k_idx)) {
+			continue;
+		}
+		total_features +=
+		    static_cast<idx_t>(kernels_data[k_idx] * duckdb_rocket::FEATURES_PER_KERNEL);
+	}
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	ListVector::Reserve(result, total_features);
+	ListVector::SetListSize(result, total_features);
+	const auto result_entries = FlatVector::GetData<list_entry_t>(result);
+	auto &result_child = ListVector::GetEntry(result);
+	const auto result_data = FlatVector::GetData<double>(result_child);
+	auto &result_validity = FlatVector::Validity(result);
+
+	std::vector<double> series; // channel-major, contiguous
+	idx_t offset = 0;
+
+	for (idx_t row = 0; row < count; row++) {
+		const auto o_idx = outer_format.sel->get_index(row);
+		const auto k_idx = kernels_format.sel->get_index(row);
+		const auto seed_idx = seed_format.sel->get_index(row);
+		const auto f_idx = first_format.sel->get_index(row);
+
+		if (!outer_format.validity.RowIsValid(o_idx) ||
+		    !kernels_format.validity.RowIsValid(k_idx) ||
+		    !seed_format.validity.RowIsValid(seed_idx) ||
+		    !first_format.validity.RowIsValid(f_idx)) {
+			result_validity.SetInvalid(row);
+			result_entries[row] = list_entry_t(offset, 0);
+			continue;
+		}
+
+		const auto kernels_per_group = kernels_data[k_idx];
+		const auto first_kernel = first_data[f_idx];
+		if (kernels_per_group <= 0) {
+			throw InvalidInputException("rocket_transform: kernels_per_group must be positive");
+		}
+		if (first_kernel < 0) {
+			throw InvalidInputException("rocket_transform: first_kernel must be non-negative");
+		}
+
+		const auto outer = outer_entries[o_idx];
+		const auto n_channels = static_cast<int64_t>(outer.length);
+		if (n_channels < 1) {
+			throw InvalidInputException("rocket_transform: series has no channels");
+		}
+
+		int64_t n = -1;
+		series.clear();
+		for (idx_t c = 0; c < outer.length; c++) {
+			const auto c_idx = channel_format.sel->get_index(outer.offset + c);
+			if (!channel_format.validity.RowIsValid(c_idx)) {
+				throw InvalidInputException("rocket_transform: series contains a NULL channel");
+			}
+			const auto channel = channel_entries[c_idx];
+			const auto this_n = static_cast<int64_t>(channel.length);
+			if (n < 0) {
+				n = this_n;
+			} else if (this_n != n) {
+				// Dilations are drawn against one series length; a ragged series has no single
+				// length to draw against, so the kernels would not be well defined.
+				throw InvalidInputException(
+				    "rocket_transform: channel %llu has %lld timepoints but channel 0 has "
+				    "%lld; every channel must be the same length",
+				    static_cast<unsigned long long>(c), static_cast<long long>(this_n),
+				    static_cast<long long>(n));
+			}
+			for (idx_t j = 0; j < channel.length; j++) {
+				const auto s_idx = sample_format.sel->get_index(channel.offset + j);
+				if (!sample_format.validity.RowIsValid(s_idx)) {
+					throw InvalidInputException(
+					    "rocket_transform: series contains NULL values");
+				}
+				series.push_back(sample_data[s_idx]);
+			}
+		}
+
+		if (n < duckdb_rocket::KERNEL_LENGTHS[2]) {
+			throw InvalidInputException(
+			    "rocket_transform: series length %lld is shorter than the longest kernel (%d)",
+			    static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
+		}
+
+		const auto features = duckdb_rocket::TransformMultivariate(
+		    series.data(), n_channels, n, static_cast<uint64_t>(seed_data[seed_idx]),
+		    kernels_per_group, first_kernel);
+
+		for (size_t j = 0; j < features.size(); j++) {
+			result_data[offset + j] = features[j];
+		}
+		result_entries[row] = list_entry_t(offset, features.size());
+		offset += features.size();
+	}
+
+	if (count == 1) {
+		result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	}
+}
+
 static void LoadInternal(ExtensionLoader &loader) {
-	ScalarFunction rocket_transform(
-	    "rocket_transform",
+	// Two overloads on one name. Overload resolution is by argument type, so a DOUBLE[] series
+	// takes the univariate path and DOUBLE[][] the multivariate one -- and SPEC.md 7.1
+	// guarantees a single-channel DOUBLE[][] produces exactly what the DOUBLE[] form does.
+	ScalarFunctionSet rocket_transform("rocket_transform");
+	rocket_transform.AddFunction(ScalarFunction(
 	    {LogicalType::LIST(LogicalType::DOUBLE), LogicalType::BIGINT, LogicalType::BIGINT,
 	     LogicalType::BIGINT},
-	    LogicalType::LIST(LogicalType::DOUBLE), RocketTransformFunction);
+	    LogicalType::LIST(LogicalType::DOUBLE), RocketTransformFunction));
+	rocket_transform.AddFunction(ScalarFunction(
+	    {LogicalType::LIST(LogicalType::LIST(LogicalType::DOUBLE)), LogicalType::BIGINT,
+	     LogicalType::BIGINT, LogicalType::BIGINT},
+	    LogicalType::LIST(LogicalType::DOUBLE), RocketTransformMultivariateFunction));
 	loader.RegisterFunction(rocket_transform);
 }
 

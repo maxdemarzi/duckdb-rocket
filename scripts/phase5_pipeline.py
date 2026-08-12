@@ -169,7 +169,7 @@ def default_memory_limit() -> str:
 
 
 def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
-              memory_limit: str, temp_dir: Path) -> str:
+              memory_limit: str, temp_dir: Path, test_chunk: int | None) -> str:
     n_features = config.features_per_group
     names = [f"f{j}" for j in range(n_features)]
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
@@ -196,6 +196,16 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         f"SELECT * FROM read_parquet('{meta['raw_parquet']}');",
     ]
 
+    # Test ids are contiguous and start at n_train: write_raw_parquet lays the table out as
+    # arange(n_train + n_test) with the train rows first.
+    first_test_id = meta["n_train"]
+    n_test = meta["n_test"]
+    size = test_chunk or n_test
+    bounds = [
+        (first_test_id + lo, first_test_id + min(lo + size, n_test))
+        for lo in range(0, n_test, size)
+    ]
+
     for g in range(config.n_groups):
         first_kernel = g * config.kernels_per_group
         parts.append(f"""
@@ -209,19 +219,45 @@ FROM raw;
 
 CREATE OR REPLACE VIEW train_g{g} AS
     SELECT label AS y, {projection} FROM feat_g{g} WHERE split = 'train';
+""")
+        # One classify call per chunk of test rows. This is not an approximation: an in-context
+        # learner treats each test row as an independent query against the train context, so a
+        # row's prediction cannot depend on which other rows shared its call. What it does change
+        # is peak memory, which is set by the widest call rather than by the dataset -- the
+        # 500 feature columns for 1029 rows are 4 MB, while the call holding all of them reached
+        # 29.8 GB and was OOM-killed. Proven identical on GunPoint before being relied on.
+        scored_parts = []
+        for c, (lo, hi) in enumerate(bounds):
+            window = f"split = 'test' AND id >= {lo} AND id < {hi}"
+            scored_parts.append(f"SELECT id, proba FROM scored_g{g}_c{c}")
+            parts.append(f"""
 -- The test view omits the target: tabfm_classify unions train and test BY NAME, and a target
 -- present in both is a duplicate-name binder error naming neither cause (Phase 2).
-CREATE OR REPLACE VIEW test_g{g} AS
-    SELECT {projection} FROM feat_g{g} WHERE split = 'test';
-CREATE OR REPLACE VIEW test_src_g{g} AS
-    SELECT id, {projection} FROM feat_g{g} WHERE split = 'test';
+CREATE OR REPLACE VIEW test_g{g}_c{c} AS
+    SELECT {projection} FROM feat_g{g} WHERE {window};
+-- Only the two columns the join below actually reads. This view used to project all
+-- {n_features} features, of which 498 were computed, hashed into the join and discarded
+-- (swan's PERFORMANCE_TUNING.md 1, "don't compute what the consumer never reads"). Small
+-- next to the classify call -- 4 MB against gigabytes -- so this is tidiness, not the fix.
+CREATE OR REPLACE VIEW test_src_g{g}_c{c} AS
+    SELECT id, f[1] AS f0 FROM feat_g{g} WHERE {window};
 
-CREATE OR REPLACE TABLE scored_g{g} AS
-SELECT s.id, {g} AS grp, c.proba
-FROM tabfm_classify('train_g{g}', 'y', test := 'test_g{g}',
+CREATE OR REPLACE TABLE scored_g{g}_c{c} AS
+SELECT s.id, c.proba
+FROM tabfm_classify('train_g{g}', 'y', test := 'test_g{g}_c{c}',
                     model := '{MODEL}', features := {feature_list}) c
-JOIN test_src_g{g} s ON s.f0 = c.f0;
+JOIN test_src_g{g}_c{c} s ON s.f0 = c.f0;
+""")
 
+        union_chunks = "\n  UNION ALL\n  ".join(scored_parts)
+        drops = "\n".join(f"DROP TABLE scored_g{g}_c{c};" for c in range(len(bounds)))
+        parts.append(f"""
+CREATE OR REPLACE TABLE scored_g{g} AS
+SELECT id, {g} AS grp, proba FROM (
+  {union_chunks}
+);
+
+{drops}
 DROP TABLE feat_g{g};
 """)
 
@@ -283,6 +319,15 @@ def main() -> int:
              "is one, and of visible RAM otherwise -- inside a container those differ, and it is "
              "the cgroup that kills you.",
     )
+    parser.add_argument(
+        "--test-chunk",
+        type=int,
+        default=None,
+        help="classify this many test rows per tabfm_classify call instead of all of them. "
+             "Peak memory is set by the widest call, so this bounds it by a number you choose "
+             "rather than by the dataset. Verify identity against an unchunked run before "
+             "trusting it on a dataset that has never fitted.",
+    )
     parser.add_argument("--keep-sql", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
@@ -312,7 +357,7 @@ def main() -> int:
     print(f"      memory_limit {memory_limit} (from {budget_source}), "
           f"spilling to {workdir}", flush=True)
 
-    sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir)
+    sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir, args.test_chunk)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")
@@ -440,6 +485,7 @@ def main() -> int:
             # against another run that was given a different budget, or none.
             "memory_limit": memory_limit,
             "memory_budget_source": budget_source,
+            "test_chunk": args.test_chunk,
         },
         "shape": meta,
         "accuracy": accuracy,

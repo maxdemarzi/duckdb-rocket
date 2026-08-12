@@ -48,7 +48,8 @@ across `STATUS.md` / `DESIGN.md` / `PERFORMANCE.md`. Four findings bear directly
    confident and expensive where it is not* — exactly backwards from where you want
    precision. **Check TabPFN v2.5's AMP default before recording a single accuracy number.**
    This is the highest-value thing carried over, and it cost that project a re-measurement of
-   every GPU result in its file.
+   every GPU result in its file. — **Done:** see "The AMP default, resolved" in Phase 1. The
+   default is device-dependent and on by default on any CUDA device.
 2. **Pair everything; know your noise floor.** Pairing (same seed, same data, one setting
    changed) tightened their estimate ~8×, from a ±5-point resolution to ±0.6. We need our own
    floor for UCR accuracy before any comparison is meaningful.
@@ -97,9 +98,11 @@ than an error, and local timings are not trustworthy even directionally.
 - [x] DuckDB CLI v1.5.5 → `tools/duckdb.exe` (pinned; extension ABI is version-bound)
 - [x] Confirmed: VS Build Tools 2022 17.14 present (needs a vcvars64 shell for `cl`)
 - [x] Local GPU: RTX 3060 12 GB — smoke tests only
-- [ ] `uv` project + light deps: `numpy`, `scikit-learn`, `pyarrow`, `duckdb`, `aeon`
-- [ ] `torch` + `tabpfn` (large; local install is for smoke tests only)
-- [ ] `git init`; MIT license (matches anofox_tabfm, keeps the door open for upstreaming)
+- [x] `uv` project + light deps: `numpy`, `scikit-learn`, `pyarrow`, `duckdb`, `aeon`
+- [x] `torch` 2.13.0+**cpu** and `tabpfn` 8.2.0 (local install is for smoke tests only, so the
+      CPU wheel is deliberate — it also sidesteps the WDDM spill trap below)
+- [x] `git init`; MIT license (matches anofox_tabfm, keeps the door open for upstreaming);
+      public repo at https://github.com/maxdemarzi/duckdb-rocket
 - [ ] Port the RunPod launcher pattern from `black_swan/scripts/cloud/runpod_launch.py`
 - [ ] A `doctor.py` equivalent recording the environment tuple for every run
 
@@ -118,9 +121,9 @@ this, so correctness here matters more than speed.
       identical kernels from the same seed, and replicating NumPy's stream in C++ is painful.
       Define the stream ourselves, in a written spec, from day one.
 - [ ] Implement the G-group split and probability averaging over TabPFN v2.5
-- [ ] **Find and disable TabPFN's AMP/autocast setting for all accuracy runs.** Record what
-      the default was. Verify CPU and GPU agree to within float noise on one dataset *before*
-      trusting any GPU number — this is the tabicl lesson, applied preemptively.
+- [ ] **Pass `inference_precision=torch.float32` to every `TabPFNClassifier` used for an
+      accuracy run.** Never rely on the default. See "The AMP default, resolved" below for why
+      the obvious CPU-vs-GPU sanity check does *not* catch this.
 - [ ] Run on a **10-dataset UCR subset** (mix of short/long series, 2-class and multi-class,
       one multivariate)
 - [ ] **Establish the noise floor**: same config, N seeds, report sd of paired gaps and of
@@ -130,6 +133,35 @@ this, so correctness here matters more than speed.
       `reference/golden/*.parquet`. This is the C++ conformance test.
 - [ ] Write `SPEC.md` documenting kernel generation (lengths, dilations, padding, biases,
       weight normalization) precisely enough to reimplement from text alone
+
+### The AMP default, resolved (tabpfn 8.2.0)
+
+Answered by reading the installed package, so the tabicl lesson does not have to be relearned
+at the cost of re-measuring every result.
+
+`TabPFNClassifier(inference_precision=...)` defaults to `"auto"`, which resolves **per device**:
+
+| Device | `auto` resolves to | Precision |
+|---|---|---|
+| CUDA | autocast **on** — `is_autocast_available` is true for any CUDA device | **fp16** |
+| CPU | autocast on **iff** `_cpu_supports_fast_bf16()` — Intel AMX / AVX512-BF16, AMD Zen 4+ | bf16 |
+
+Two consequences:
+
+1. **GPU autocast is fp16, not bf16.** Narrower range than the bf16 that cost tabicl 7.3 AUC,
+   so treat that figure as a floor on the risk rather than an estimate of it.
+2. **The CPU baseline is not automatically trustworthy.** This plan previously proposed
+   verifying that CPU and GPU agree before trusting GPU numbers. That check is void on a
+   Zen 4 / Sapphire Rapids pod, where the *CPU* run is bf16 autocast too — both sides are
+   then reduced precision and can be wrong together, in agreement. **CPU≡GPU agreement is
+   evidence only when both sides are pinned to fp32.**
+
+Passing a `torch.dtype` takes a different branch entirely (`base.py:267`), setting
+`use_autocast_ = False` and forcing the dtype regardless of device. That is the lever.
+
+Local dev box is incidentally safe: Comet Lake (Family 6 Model 165) has no AVX512-BF16, so
+`_cpu_supports_fast_bf16()` is `False` and CPU runs here are genuine fp32. **Do not generalize
+that to pods** — record `_cpu_supports_fast_bf16()` in `doctor.py`'s environment tuple.
 
 **Exit:** accuracy in the neighborhood of the paper's per-dataset numbers, a measured noise
 floor, and golden vectors on disk.
@@ -243,7 +275,7 @@ a working precedent.
 | Risk | Phase | Mitigation |
 |---|---|---|
 | `tabfm_classify` won't return probabilities | 2 | Gate the project on it; majority-vote fallback, quantified in Python first |
-| **AMP silently corrupts accuracy numbers** | 1 | Find the default, force it off, verify CPU≡GPU before trusting anything |
+| **AMP silently corrupts accuracy numbers** | 1 | Resolved: default is `"auto"` → fp16 on any CUDA device. Force `inference_precision=torch.float32` everywhere; CPU≡GPU checks count only with both pinned to fp32 |
 | Kernel-generation spec mismatch Python↔C++ | 1→4 | Portable PRNG spec + golden vectors, decided in Phase 1 |
 | 2,000-column SQL calling convention unusable | 2 | Upstream list-valued features PR |
 | TabPFN inference dominates runtime, making C++ ROCKET pointless | 3 | Phase 3 measures this *before* any C++ is written |

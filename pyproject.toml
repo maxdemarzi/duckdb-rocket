@@ -10,4 +10,6 @@ dependencies = [
     "numpy>=2.3.5",
     "pyarrow>=25.0.1",
     "scikit-learn>=1.8.0",
+    "tabpfn>=8.2.0",
+    "torch>=2.13.0",
 ]

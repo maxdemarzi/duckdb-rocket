@@ -27,12 +27,13 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from duckdb_rocket.rocket import generate_kernels, transform  # noqa: E402
+from duckdb_rocket.shells import pinned_shell  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
-DUCKDB = ROOT / "tools" / "duckdb.exe"
+DUCKDB = pinned_shell()
 ROCKET_SQL = (ROOT / "sql" / "rocket.sql").as_posix()
 
 

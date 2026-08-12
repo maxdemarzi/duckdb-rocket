@@ -36,7 +36,10 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
-DUCKDB = ROOT / "tools" / "duckdb.exe"
+sys.path.insert(0, str(ROOT))
+
+from duckdb_rocket.shells import pinned_shell  # noqa: E402
+DUCKDB = pinned_shell()
 
 # anofox-tabfm is pre-1.0 and tags near-daily; an accuracy number without the extension version
 # beside it is not reproducible next week.

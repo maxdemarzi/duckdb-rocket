@@ -42,6 +42,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from duckdb_rocket.datasets import load  # noqa: E402
+from duckdb_rocket.shells import pinned_shell  # noqa: E402
 from duckdb_rocket.pipeline import RocketPFNConfig  # noqa: E402
 from duckdb_rocket.rocket import generate_kernels, normalize_series, transform  # noqa: E402
 
@@ -49,7 +50,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
-DUCKDB = ROOT / "tools" / "duckdb.exe"
+DUCKDB = pinned_shell()
 
 # Phase 2: tabpfn-v2-5 does not load in bc6d8af; tabicl-v2 is the working backbone.
 MODEL = "tabicl-v2"

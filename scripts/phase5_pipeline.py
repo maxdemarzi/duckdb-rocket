@@ -39,6 +39,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from duckdb_rocket.datasets import load  # noqa: E402
+from duckdb_rocket.shells import built_shell  # noqa: E402
 from duckdb_rocket.pipeline import RocketPFNConfig  # noqa: E402
 from duckdb_rocket.rocket import normalize_series  # noqa: E402
 
@@ -46,7 +47,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
-SHELL = ROOT / "build" / "release" / "duckdb.exe"
+SHELL = built_shell()
 MODEL = "tabicl-v2"
 
 

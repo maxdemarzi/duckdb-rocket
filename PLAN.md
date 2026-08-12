@@ -182,6 +182,14 @@ highest information value. **Run it concurrently with Phase 1.**
 - [ ] Confirm the train/test convention — TabPFN is in-context, so how are labeled context
       rows vs. query rows expressed in the SQL API?
 
+**Pin the version.** `INSTALL ... FROM community` is fine for the initial probe, but swan's
+`scripts/vendor_anofox_tabfm.sh` records the reason not to leave it there: `anofox-tabfm` is
+**pre-1.0 and tags near-daily**, so an unpinned dependency means Phase 3's accuracy numbers are
+not reproducible next week. swan builds it from a pinned tag (`ANOFOX_TABFM_TAG`, at
+`v2026.07.17`) as an *independent* artifact rather than a CMake source-level dependency —
+deliberately decoupled from its own vendored DuckDB version. Record whatever tag we probe
+against alongside the findings note, and reuse that script rather than writing a second one.
+
 **Exit:** a written findings note, plus GitHub issues filed on `anofox-tabfm` for any gaps.
 
 **Branch on the outcome:**
@@ -234,7 +242,7 @@ the prior measurements to interpret the result against. Cheap — one argument, 
 - [ ] **First: a pure-SQL macro** over DuckDB `LIST` operations. Expect it to be too slow —
       but it establishes the semantics in-database and gives a zero-build fallback. If it is
       merely 5–10× slow rather than 1000×, seriously consider stopping here.
-- [ ] Otherwise scaffold from `duckdb/extension-template`
+- [ ] Otherwise scaffold from a template — **which one is a real decision; see below**
 - [ ] Implement `rocket_transform(series, kernels, seed, group)` → `FLOAT[]`
 - [ ] **Conformance test against Phase 1 golden vectors** (tight float tolerance)
 - [ ] Multivariate support (random channel subsets per kernel)
@@ -245,6 +253,52 @@ the prior measurements to interpret the result against. Cheap — one argument, 
 **Build note:** MSVC Build Tools required on Windows; see `tabicl/scaling/build_native.py` for
 a working precedent.
 
+### Template: the C++ one, following `maxdemarzi/swan`
+
+DuckDB ships three official templates — C++
+([`extension-template`](https://github.com/duckdb/extension-template)), C API
+([`extension-template-c`](https://github.com/duckdb/extension-template-c), experimental, needs
+no DuckDB build), and Rust
+([`extension-template-rs`](https://github.com/duckdb/extension-template-rs), experimental).
+
+**Use the C++ template**, because [`maxdemarzi/swan`](https://github.com/maxdemarzi/swan)
+already does and it is a working DuckDB extension on this exact Windows/MSVC toolchain. A
+proven local build path outweighs the C API's theoretical advantages here: on paper the C API
+looks attractive for a one-scalar-function extension (no engine build, stable ABI), but that
+argument is worth less than a repo on this machine that already compiles.
+
+Copy swan's layout:
+
+```
+duckdb/                  submodule, pinned to a release branch
+extension-ci-tools/      submodule, branch main
+extension_config.cmake   duckdb_extension_load(rocket SOURCE_DIR ...)
+vcpkg.json               dependency manifest
+Makefile                 include extension-ci-tools/makefiles/duckdb_extension.Makefile
+src/  test/sql/  cmake/
+```
+
+```bash
+# "Use this template" on GitHub, then:
+git clone --recurse-submodules https://github.com/maxdemarzi/<repo>.git
+python3 ./scripts/bootstrap-template.py rocket
+```
+
+Two places we should **diverge** from swan:
+
+- **Pin `duckdb` to v1.5.5, not v1.5.4.** swan's `.gitmodules` tracks `branch = v1.5.4`; our
+  `tools/duckdb.exe` is v1.5.5. Extension ABI is version-bound, so a mismatch here produces a
+  load failure, not a warning. Pick one and make both match.
+- **`vcpkg.json` should be near-empty.** swan pulls `openssl` and `highs`, and its
+  `extension_config.cmake` carries a lot of hard-won ONNX Runtime and Emscripten
+  platform-detection logic. **None of that applies to us** — `rocket_transform` is pure
+  arithmetic with no external dependencies. Copy the skeleton, not the payload; every vcpkg
+  dependency we don't take is a Windows build failure we don't get.
+
+Also worth reading before Phase 4 starts: `scripts/windows_path_repro.ps1` and
+`scripts/windows_simd_repro.ps1` in swan are Windows-specific reproductions of problems already
+hit once, and `scripts/sql_only_feature_probe.py` is prior art for this phase's pure-SQL-macro
+step.
 **Exit:** `rocket_transform()` matches golden vectors and beats Python on throughput.
 
 ---
@@ -282,7 +336,8 @@ a working precedent.
 | Conclusions drawn from one dataset | 1, 5 | 10-dataset subset; noise floor measured first |
 | Local Windows timings mislead (WDDM spills instead of OOM) | all | Numbers come from pods, not the 3060 |
 | A forgotten pod bills silently | all | `check` before and after every session; shared account |
-| DuckDB extension ABI churn | 0, 6 | Pinned to v1.5.5; official template CI matrix |
+| DuckDB extension ABI churn | 0, 6 | Pinned to v1.5.5; C++ template CI matrix. **Keep the `duckdb` submodule and `tools/duckdb.exe` on the same version** — swan pins v1.5.4, we use v1.5.5 |
+| `anofox_tabfm` moves under us mid-measurement | 2, 3 | Pin a tag; it is pre-1.0 and tags near-daily (see below) |
 
 ## Guiding principle
 

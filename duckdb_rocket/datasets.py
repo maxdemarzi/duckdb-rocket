@@ -34,16 +34,15 @@ class DatasetSpec:
 
     @property
     def runnable(self) -> bool:
-        """False for anything the end-to-end pipeline cannot handle yet.
+        """False for anything the end-to-end pipeline cannot handle.
 
-        Multivariate *kernels* exist now (SPEC.md 7, in both the Python oracle and the
-        extension's `DOUBLE[][]` overload), so this is no longer a statement about the
-        transform. What is still missing is the pipeline around it: `phase5_pipeline.py` writes
-        one `DOUBLE[]` per row and `load()` squeezes a single channel, so a 6-channel dataset
-        has nowhere to go between the loader and `tabfm_classify`. Kept as a marked skip with a
-        reason rather than quietly dropped.
+        Nothing in the subset is unrunnable now: multivariate goes all the way through, from
+        `load()` returning 3-D, through `normalize_series` centring per channel, into the
+        `DOUBLE[][]` overload of `rocket_transform` (SPEC.md 7). Kept as a property rather than
+        deleted because variable-length series are still unspecified (SPEC.md 8) and will need
+        exactly this marker when a dataset with them is added.
         """
-        return not self.multivariate
+        return True
 
 
 # Sizes are the standard UCR/UEA train splits, recorded so a load can be sanity-checked
@@ -74,9 +73,10 @@ RUNNABLE_SUBSET = tuple(d for d in UCR_SUBSET if d.runnable)
 def load(name: str, split: str):
     """Load one UCR/UEA dataset via `aeon`, returning `(x, y)`.
 
-    `x` comes back as `(n_series, n_timepoints)` for univariate data. aeon returns a 3-D
-    `(n_series, n_channels, n_timepoints)` array, and the single channel is squeezed here so
-    callers do not each rediscover that.
+    aeon always returns a 3-D `(n_series, n_channels, n_timepoints)` array. A single channel is
+    squeezed to `(n_series, n_timepoints)` so univariate callers do not each rediscover that;
+    **multivariate data is returned 3-D**, which is what `transform` and `rocket_transform`'s
+    `DOUBLE[][]` overload expect (SPEC.md 7).
     """
     from aeon.datasets import load_classification
 

@@ -405,11 +405,18 @@ def normalize_series(x: np.ndarray) -> np.ndarray:
     from pure rounding error and the series would look like strong signal to the classifier.
     """
     x = np.asarray(x, dtype=np.float64)
-    mean = x.mean(axis=1, keepdims=True)
-    std = x.std(axis=1, keepdims=True)
+
+    # Always the time axis, which is the last one either way: (n_series, n_timepoints) for
+    # univariate and (n_series, n_channels, n_timepoints) for multivariate. Normalising a
+    # multivariate series **per channel** is the only defensible reading -- channels are
+    # different physical quantities in different units, and pooling them would let a
+    # large-amplitude channel set the scale for a small one.
+    axis = x.ndim - 1
+    mean = x.mean(axis=axis, keepdims=True)
+    std = x.std(axis=axis, keepdims=True)
 
     # Below roughly this, `std` is indistinguishable from the error of having computed it.
-    scale = np.maximum(np.abs(mean), np.abs(x).max(axis=1, keepdims=True))
+    scale = np.maximum(np.abs(mean), np.abs(x).max(axis=axis, keepdims=True))
     noise_floor = 8.0 * np.finfo(np.float64).eps * np.where(scale > 0.0, scale, 1.0)
 
     return (x - mean) / np.where(std > noise_floor, std, 1.0)

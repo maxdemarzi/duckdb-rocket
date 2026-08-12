@@ -70,7 +70,17 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
     ids = np.arange(n_train + n_test)
     splits = ["train"] * n_train + ["test"] * n_test
     labels = [str(v) for v in y_train] + [str(v) for v in y_test]
-    values = list(x_train) + list(x_test)
+
+    # Univariate stays DOUBLE[]; multivariate becomes DOUBLE[][] (channels of timepoints),
+    # which is the shape rocket_transform's second overload takes.
+    multivariate = x_train.ndim == 3
+    if multivariate:
+        value_type = pa.list_(pa.list_(pa.float64()))
+        values = [[list(channel) for channel in series] for series in x_train]
+        values += [[list(channel) for channel in series] for series in x_test]
+    else:
+        value_type = pa.list_(pa.float64())
+        values = list(x_train) + list(x_test)
 
     outdir.mkdir(parents=True, exist_ok=True)
     path = outdir / "raw.parquet"
@@ -80,7 +90,7 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
                 "id": pa.array(ids, type=pa.int64()),
                 "split": pa.array(splits),
                 "label": pa.array(labels),
-                "values": pa.array(values, type=pa.list_(pa.float64())),
+                "values": pa.array(values, type=value_type),
             }
         ),
         path,
@@ -90,7 +100,9 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
             "dataset": dataset,
             "n_train": int(n_train),
             "n_test": int(n_test),
-            "n_timepoints": int(x_train.shape[1]),
+            "n_channels": int(x_train.shape[1]) if multivariate else 1,
+            "n_timepoints": int(x_train.shape[-1]),
+            "multivariate": multivariate,
             "raw_parquet": path.as_posix(),
         },
         np.asarray([str(v) for v in y_test]),

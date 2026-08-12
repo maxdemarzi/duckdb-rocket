@@ -47,6 +47,48 @@ class TestUnivariateIsUnchanged:
         assert uni[:5] != multi[:5]
 
 
+class TestNormalisation:
+    """`normalize_series` has to work on both shapes, and per channel on the 3-D one."""
+
+    def test_univariate_is_unchanged(self):
+        from duckdb_rocket.rocket import normalize_series
+
+        x = np.random.RandomState(0).randn(6, N) * 3.0 + 7.0
+        got = normalize_series(x)
+        np.testing.assert_allclose(got.mean(axis=1), 0.0, atol=1e-12)
+        np.testing.assert_allclose(got.std(axis=1), 1.0, atol=1e-12)
+
+    def test_multivariate_normalises_each_channel_separately(self):
+        """Channels are different physical quantities in different units. Pooling them would
+        let a large-amplitude channel set the scale for a small one."""
+        from duckdb_rocket.rocket import normalize_series
+
+        rng = np.random.RandomState(1)
+        x = np.stack(
+            [rng.randn(4, N) * 1000.0 + 500.0, rng.randn(4, N) * 0.001], axis=1
+        )  # (4, 2, N), wildly different scales
+        got = normalize_series(x)
+        np.testing.assert_allclose(got.mean(axis=2), 0.0, atol=1e-10)
+        np.testing.assert_allclose(got.std(axis=2), 1.0, atol=1e-10)
+
+    def test_a_single_channel_matches_the_two_dimensional_result(self):
+        from duckdb_rocket.rocket import normalize_series
+
+        x = np.random.RandomState(2).randn(5, N)
+        np.testing.assert_allclose(
+            normalize_series(x), normalize_series(x[:, None, :])[:, 0, :], rtol=0, atol=0
+        )
+
+    def test_a_constant_channel_is_centred_not_amplified(self):
+        """The noise-floor guard has to survive the extra dimension. Without it a constant
+        channel becomes a series of exactly +/-1.0 fabricated from rounding error."""
+        from duckdb_rocket.rocket import normalize_series
+
+        x = np.stack([np.full((3, N), 4.2), np.random.RandomState(3).randn(3, N)], axis=1)
+        got = normalize_series(x)
+        np.testing.assert_allclose(got[:, 0, :], 0.0, atol=1e-9)
+
+
 class TestChannelSelection:
     def test_returns_the_requested_count_without_duplicates(self):
         rng = SplitMix64(1)

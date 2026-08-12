@@ -7,7 +7,32 @@ Created 2026-08-12 after the restart, for the ItalyPowerDemand / ECG5000 runs.
     python scripts/pod/runpod_cpu.py check
     python scripts/pod/runpod_cpu.py terminate hwkx2c4ceogn71 --yes-destroy-the-volume
 
-`duckdb-rocket-cpu-sweep`, 16 vCPU, **32 GB RAM**, ~$0.56/hr. **Terminate it when done.**
+`duckdb-rocket-cpu-sweep`, 16 vCPU, **32 GB RAM** (29 GB cgroup ceiling), ~$0.56/hr.
+**Terminate it when done.** ssh: `python scripts/pod/runpod_cpu.py ssh hwkx2c4ceogn71`.
+
+### Before terminating — nothing on this pod survives it (`volumeInGb: 0`)
+
+1. **Fetch the reports.** They are the only copy of the pod runs:
+   `scp -P <port> root@<ip>:/workspace/duckdb-rocket/reference/phase5_*.json reference/`
+   Ten files. `data/` is gitignored, so `predictions.json` is not archived and does not need
+   fetching; the reports carry accuracy, timing, row alignment and the environment block.
+2. **Archive the environment tuple.** `bootstrap.sh` runs `scripts/doctor.py` without `--json`,
+   so the pod's tuple only ever went to `/root/bootstrap.log` and dies with the box. Run
+   `uv run python scripts/doctor.py --json reference/pod_doctor.json` on the pod and fetch it.
+   PLAN.md: "a number without it is not attributable".
+3. **Update `reference/RESULTS.md`.** Its Phase 5 section still says "Breadth: eight datasets"
+   with local timings and the old environment header. Ten datasets now, from the pod.
+4. **Update PLAN.md's Phase 5 results table** — provenance column and ECG5000's row.
+5. `python scripts/pod/runpod_cpu.py terminate hwkx2c4ceogn71 --yes-destroy-the-volume`
+6. `python scripts/pod/runpod_cpu.py check` — confirm nothing of ours is still billing. The
+   three `pattern-arm-*` GPU pods are **not ours**; leave them.
+
+### Scripts left running on the pod
+
+`/root/finish.sh` -> `/root/finish.log`. Waits for `/root/regen.log` to say `REGEN COMPLETE`,
+re-runs any report carrying a failure entry (see below), then retries ECG5000. Ends with
+`ALL COMPLETE`. Per-dataset logs are `/root/run_*.log`, `/root/regen_*.log`,
+`/root/recheck_*.log`, `/root/ecg.log`.
 
 Two facts about it that were not what the recipe asked for:
 

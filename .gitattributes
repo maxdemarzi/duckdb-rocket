@@ -1,0 +1,12 @@
+# Shell scripts must check out with LF even on Windows. A CRLF shebang line fails on Linux with
+# "bad interpreter: /usr/bin/env bash^M", which names neither line endings nor the real problem.
+*.sh text eol=lf
+
+# SQL is read by DuckDB on both platforms; keep it stable so a checkout does not show as dirty.
+*.sql text eol=lf
+
+# The Windows build script is the one file that genuinely wants CRLF.
+*.bat text eol=crlf
+
+# Conformance fixtures are binary and must never be line-ending translated.
+*.parquet binary

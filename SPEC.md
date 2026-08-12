@@ -238,13 +238,99 @@ Each group is classified independently and the resulting class probabilities are
 
 ---
 
-## 7. What is not yet specified
+## 7. Multivariate series
 
-Deliberately open; these are later phases and will be added here before being implemented.
+A kernel over a `C`-channel series draws a random subset of channels, gets independent weights
+for each selected channel, and still produces exactly 2 features — the max and PPV of a single
+convolution that sums across the selected channels.
 
-- **Multivariate series.** The paper assigns each kernel a random subset of `K` channels with
-  independent weights per channel, still producing 2 features per kernel. The draw order for
-  channel selection is not yet fixed.
+### 7.1 The compatibility rule — normative
+
+**When `C == 1`, no channel-related draw is made at all**, and the stream is exactly §3's. A
+univariate series therefore produces byte-identical kernels whether it is passed as a 1-channel
+multivariate series or as a plain univariate one, and every golden vector in `reference/golden/`
+remains valid.
+
+This is a deliberate special case rather than an accident of the arithmetic. With one channel
+the subset is forced — there is exactly one non-empty subset of a 1-element set — so a draw
+there would consume randomness to decide something already decided. Spending a draw on a
+foregone conclusion would shift every subsequent value in the stream and invalidate every
+committed fixture, in exchange for nothing.
+
+### 7.2 Draw order — normative
+
+Given `master_seed`, global kernel index `i`, series length `n`, and channel count `C`:
+
+```
+rng = SplitMix64(kernel_seed(master_seed, i))
+
+length      = LENGTHS[rng.next_below(3)]
+
+if C > 1:
+    n_ch    = floor(2 ^ rng.next_uniform(0, log2(C + 1)))       # 1 <= n_ch <= C
+    n_ch    = min(n_ch, C)
+    channels = select_without_replacement(rng, C, n_ch)          # see 7.3
+else:
+    n_ch     = 1
+    channels = [0]                                               # no draws consumed
+
+raw[c][j]   = rng.next_normal()      for c = 0..n_ch-1, for j = 0..length-1
+weights[c]  = raw[c] - mean(raw[c])                              # per channel, see 7.4
+
+bias        = rng.next_uniform(-1, 1)
+dilation    = floor(2 ^ rng.next_uniform(0, log2((n - 1) / (length - 1))))
+padding     = ((length - 1) * dilation) / 2  if rng.next_below(2) == 1 else 0
+```
+
+Weights are drawn **channel-major**: all of channel 0's `length` values, then channel 1's, and
+so on. The upper bound `log2(C + 1)` biases toward few channels, which is what makes a kernel a
+detector of structure in a handful of channels rather than a smear across all of them.
+
+### 7.3 Channel selection — normative
+
+`n_ch` distinct channels from `[0, C)`, by partial Fisher–Yates on an identity permutation:
+
+```
+perm = [0, 1, ..., C-1]
+for k = 0 .. n_ch-1:
+    j = k + rng.next_below(C - k)
+    swap perm[k], perm[j]
+channels = sort(perm[0 .. n_ch-1])
+```
+
+Exactly `n_ch` draws are consumed, regardless of `C` or of which channels come up — no
+rejection, no data-dependent draw count, for the same reason `next_below` does not use rejection
+sampling (§1.4).
+
+The result is **sorted**. Selection order carries no meaning, and sorting means the weight block
+for channel `c` is found by position in a stable order rather than by remembering the order the
+swaps happened to produce.
+
+### 7.4 Mean-centring is per channel — normative
+
+Each channel's `length` weights are centred against **that channel's own mean**, not against the
+mean of all `n_ch * length` weights. Centring exists to make a kernel's response invariant to a
+constant offset in the series (§3), and in the multivariate case each channel can carry its own
+offset — a single global mean would only remove the average of them.
+
+### 7.5 The transform
+
+`output_length` is as in §4, computed from `n`, `padding`, `length` and `dilation` — it does not
+depend on the channel count. The convolution sums over channels **and** taps:
+
+```
+conv[k] = bias + SUM over c = 0..n_ch-1 of
+                 SUM over j = 0..length-1 of
+                     weights[c][j] * xpad[channels[c]][k + j * dilation]
+```
+
+Accumulation order is channel-major, and within a channel one tap at a time across all output
+positions, matching §4's ordering rule one level down. Features are still `max` and `PPV` of
+`conv`, still 2 per kernel, still interleaved as in §5.
+
+## 8. What is not yet specified
+
+Deliberately open; these will be added here before being implemented.
 - **Variable-length series.** Dilations are drawn against a specific `n`. The reference
   implementation rejects a length mismatch rather than silently producing incomparable
   features.

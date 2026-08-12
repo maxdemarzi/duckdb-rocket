@@ -5,7 +5,7 @@ explicitly-specified stream plus fixed golden vectors is what turns "the C++ por
 into something that can actually fail.
 
     uv run python scripts/conformance.py
-    uv run python scripts/conformance.py --duckdb build/release/duckdb.exe
+    uv run python scripts/conformance.py --duckdb build/release/duckdb
 
 Two fixtures are checked, and the second is the interesting one. `features_offset` starts at
 global kernel index 9,000, exercising the property the entire group design rests on: kernel `i`
@@ -41,6 +41,8 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
+
+from duckdb_rocket.shells import built_shell  # noqa: E402
 
 
 def run_extension(duckdb_path: Path, series: np.ndarray, num_kernels: int, seed: int,
@@ -121,7 +123,7 @@ def main() -> int:
     parser.add_argument(
         "--duckdb",
         type=Path,
-        default=ROOT / "build" / "release" / "duckdb.exe",
+        default=built_shell(),
         help="shell with the rocket extension linked in",
     )
     parser.add_argument("--tolerance", type=float, default=1e-9)

@@ -44,11 +44,23 @@ class Kernels:
     """Series length the dilations were drawn against. See `transform`'s length check."""
 
     lengths: np.ndarray  # int64, shape (num_kernels,)
-    weights: np.ndarray  # float64, shape (sum(lengths),)
+    weights: np.ndarray  # float64, shape (sum(lengths * channels_used),)
     offsets: np.ndarray  # int64, shape (num_kernels + 1,) -- weights[offsets[i]:offsets[i+1]]
     biases: np.ndarray  # float64, shape (num_kernels,)
     dilations: np.ndarray  # int64, shape (num_kernels,)
     paddings: np.ndarray  # int64, shape (num_kernels,)
+
+    n_channels: int = 1
+    """Channels in the series these kernels were drawn against. 1 means univariate."""
+
+    channels: np.ndarray | None = None
+    """int64, flat, the channel indices each kernel reads. `None` for univariate.
+
+    Kernel `i` uses `channels[channel_offsets[i]:channel_offsets[i+1]]`, sorted ascending, and
+    its weights are laid out channel-major in the same order.
+    """
+
+    channel_offsets: np.ndarray | None = None  # int64, shape (num_kernels + 1,)
 
     @property
     def num_kernels(self) -> int:
@@ -56,44 +68,94 @@ class Kernels:
 
     @property
     def num_features(self) -> int:
+        # Two per kernel regardless of how many channels it reads: the channels are summed
+        # inside one convolution rather than producing features of their own.
         return self.num_kernels * FEATURES_PER_KERNEL
 
+    @property
+    def is_multivariate(self) -> bool:
+        return self.n_channels > 1
 
-def generate_kernel(seed: int, index: int, n_timepoints: int) -> tuple:
+    def channels_for(self, index: int) -> np.ndarray:
+        """The channel indices kernel `index` reads."""
+        if self.channels is None or self.channel_offsets is None:
+            return np.zeros(1, dtype=np.int64)
+        start, stop = self.channel_offsets[index], self.channel_offsets[index + 1]
+        return self.channels[start:stop]
+
+
+def select_channels(rng: SplitMix64, n_channels: int, n_selected: int) -> list[int]:
+    """`n_selected` distinct channels from `[0, n_channels)`, by partial Fisher-Yates.
+
+    Exactly `n_selected` draws, whatever comes up -- no rejection and no data-dependent draw
+    count, for the same reason `next_below` does not reject (SPEC.md 1.4): a port that consumes
+    a different number of draws desynchronises the whole stream from that point on.
+
+    The result is **sorted**. Selection order carries no meaning, and sorting means a channel's
+    weight block is located by position in a stable order rather than by remembering whichever
+    order the swaps happened to produce.
+    """
+    perm = list(range(n_channels))
+    for k in range(n_selected):
+        j = k + rng.next_below(n_channels - k)
+        perm[k], perm[j] = perm[j], perm[k]
+    return sorted(perm[:n_selected])
+
+
+def generate_kernel(seed: int, index: int, n_timepoints: int, n_channels: int = 1) -> tuple:
     """Generate kernel `index` in isolation.
 
     **The order of draws below is part of the specification.** Reordering them, or inserting a
     draw, silently changes every kernel and invalidates every golden vector. See SPEC.md.
 
-    Returns `(length, weights, bias, dilation, padding)` with `weights` a plain list.
+    Returns `(length, weights, bias, dilation, padding, channels)`, `weights` a plain list laid
+    out channel-major -- all of the first selected channel's `length` values, then the next.
     """
     rng = SplitMix64(kernel_seed(seed, index))
 
     # 1. Length, uniform over {7, 9, 11}.
     length = KERNEL_LENGTHS[rng.next_below(len(KERNEL_LENGTHS))]
 
-    # 2. Weights, standard normal, then mean-centred. The centring is not cosmetic: it makes
-    #    each kernel's response invariant to a constant offset in the series, so PPV measures
-    #    shape rather than level.
-    raw = [rng.next_normal() for _ in range(length)]
-    mean = sum(raw) / length
-    weights = [w - mean for w in raw]
+    # 2. Channels -- but only when there is a choice to make. At n_channels == 1 the subset is
+    #    forced, so spending a draw on it would shift every later value in the stream and
+    #    invalidate every committed golden vector in exchange for deciding nothing. See
+    #    SPEC.md 7.1: the univariate stream is exactly as it was before multivariate existed.
+    if n_channels > 1:
+        upper_channels = math.log2(n_channels + 1)
+        n_selected = int(math.floor(2.0 ** rng.next_uniform(0.0, upper_channels)))
+        # The bound already gives 1 <= n_selected <= n_channels; clamped because a silently
+        # out-of-range subset would be far harder to notice than a redundant min().
+        n_selected = max(1, min(n_selected, n_channels))
+        channels = select_channels(rng, n_channels, n_selected)
+    else:
+        n_selected = 1
+        channels = [0]
 
-    # 3. Bias, uniform on [-1, 1). Shifts the threshold PPV counts against.
+    # 3. Weights, standard normal, then mean-centred **per channel**. The centring is not
+    #    cosmetic: it makes each kernel's response invariant to a constant offset in the series,
+    #    so PPV measures shape rather than level. Per channel rather than globally because each
+    #    channel carries its own offset, and one global mean would only remove their average.
+    weights: list[float] = []
+    for _ in range(n_selected):
+        raw = [rng.next_normal() for _ in range(length)]
+        mean = sum(raw) / length
+        weights.extend(w - mean for w in raw)
+
+    # 4. Bias, uniform on [-1, 1). Shifts the threshold PPV counts against.
     bias = rng.next_uniform(-1.0, 1.0)
 
-    # 4. Dilation, log-uniform. The upper bound is the largest dilation for which the kernel's
+    # 5. Dilation, log-uniform. The upper bound is the largest dilation for which the kernel's
     #    full span still fits inside the series, so `output_length` below stays >= 1 by
     #    construction rather than by a runtime guard.
     upper = math.log2((n_timepoints - 1) / (length - 1))
     dilation = int(math.floor(2.0 ** rng.next_uniform(0.0, upper)))
 
-    # 5. Padding, present or absent with equal probability. When present it is exactly enough
+    # 6. Padding, present or absent with equal probability. When present it is exactly enough
     #    to centre the kernel, so the series' first and last points get the same coverage as
     #    its middle.
     padding = ((length - 1) * dilation) // 2 if rng.next_below(2) == 1 else 0
 
-    return length, weights, bias, dilation, padding
+    return length, weights, bias, dilation, padding, channels
 
 
 def generate_kernels(
@@ -102,6 +164,7 @@ def generate_kernels(
     num_kernels: int = 10_000,
     *,
     first_kernel: int = 0,
+    n_channels: int = 1,
 ) -> Kernels:
     """Generate `num_kernels` kernels starting at global index `first_kernel`.
 
@@ -119,24 +182,36 @@ def generate_kernels(
             f"({max(KERNEL_LENGTHS)}); ROCKET has no meaningful output here"
         )
 
+    if n_channels < 1:
+        raise ValueError(f"n_channels must be positive, got {n_channels}")
+
     lengths = np.empty(num_kernels, dtype=np.int64)
     biases = np.empty(num_kernels, dtype=np.float64)
     dilations = np.empty(num_kernels, dtype=np.int64)
     paddings = np.empty(num_kernels, dtype=np.int64)
     weight_blocks = []
+    channel_blocks = []
+    channel_counts = np.empty(num_kernels, dtype=np.int64)
 
     for i in range(num_kernels):
-        length, weights, bias, dilation, padding = generate_kernel(
-            seed, first_kernel + i, n_timepoints
+        length, weights, bias, dilation, padding, channels = generate_kernel(
+            seed, first_kernel + i, n_timepoints, n_channels
         )
         lengths[i] = length
         biases[i] = bias
         dilations[i] = dilation
         paddings[i] = padding
+        channel_counts[i] = len(channels)
         weight_blocks.append(np.asarray(weights, dtype=np.float64))
+        channel_blocks.append(np.asarray(channels, dtype=np.int64))
 
+    # Weight blocks are `length * channels_used` long, which reduces to `length` when
+    # univariate -- so the layout is unchanged for the existing golden vectors.
     offsets = np.zeros(num_kernels + 1, dtype=np.int64)
-    np.cumsum(lengths, out=offsets[1:])
+    np.cumsum(lengths * channel_counts, out=offsets[1:])
+
+    channel_offsets = np.zeros(num_kernels + 1, dtype=np.int64)
+    np.cumsum(channel_counts, out=channel_offsets[1:])
 
     return Kernels(
         n_timepoints=n_timepoints,
@@ -146,6 +221,9 @@ def generate_kernels(
         biases=biases,
         dilations=dilations,
         paddings=paddings,
+        n_channels=n_channels,
+        channels=np.concatenate(channel_blocks) if n_channels > 1 else None,
+        channel_offsets=channel_offsets if n_channels > 1 else None,
     )
 
 
@@ -182,14 +260,60 @@ def apply_kernel(x: np.ndarray, weights, length, bias, dilation, padding):
     return out.max(axis=1), (out > 0).sum(axis=1) / output_length
 
 
+def apply_kernel_multivariate(x, weights, length, bias, dilation, padding, channels):
+    """The multivariate convolution: one output, summed across the kernel's channels.
+
+    `x` is 3-D, `(n_series, n_channels, n_timepoints)`. The channels are summed *inside* one
+    convolution rather than producing separate outputs, which is why a kernel still yields
+    exactly 2 features however many channels it reads (SPEC.md 7.5).
+    """
+    n_series, _, n = x.shape
+    output_length = n + 2 * padding - (length - 1) * dilation
+    if output_length <= 0:
+        raise ValueError(
+            f"kernel spans {(length - 1) * dilation + 1} points but the series has {n} "
+            f"(padding={padding}); this kernel was generated against a longer series"
+        )
+
+    out = np.full((n_series, output_length), bias, dtype=np.float64)
+    # Channel-major, and within a channel one tap at a time -- SPEC.md 7.5 fixes this order
+    # because floating-point addition is not associative and the golden vectors are compared
+    # at a tight tolerance.
+    for ci, channel in enumerate(channels):
+        xc = x[:, channel, :]
+        if padding:
+            padded = np.zeros((n_series, n + 2 * padding), dtype=np.float64)
+            padded[:, padding : padding + n] = xc
+        else:
+            padded = xc
+        block = weights[ci * length : (ci + 1) * length]
+        for j in range(length):
+            start = j * dilation
+            out += block[j] * padded[:, start : start + output_length]
+
+    return out.max(axis=1), (out > 0).sum(axis=1) / output_length
+
+
 def transform(x: np.ndarray, kernels: Kernels) -> np.ndarray:
-    """Apply a kernel bank to `(n_series, n_timepoints)`, returning `(n_series, 2 * K)`.
+    """Apply a kernel bank, returning `(n_series, 2 * K)`.
+
+    Accepts `(n_series, n_timepoints)` for univariate and
+    `(n_series, n_channels, n_timepoints)` for multivariate; the bank decides which is expected,
+    since kernels drawn against one channel count cannot be applied to another.
 
     **Feature layout:** kernel `i` occupies columns `2i` (global max) and `2i + 1` (PPV). Kept
     interleaved rather than blocked -- all maxima then all PPVs -- so that slicing a contiguous
     column range yields whole kernels, which is what group extraction needs.
     """
     x = np.asarray(x, dtype=np.float64)
+
+    if kernels.is_multivariate:
+        return _transform_multivariate(x, kernels)
+
+    # A 3-D array with a single channel is accepted and squeezed: SPEC.md 7.1 guarantees the
+    # kernels are identical either way, so rejecting it would be pedantry rather than safety.
+    if x.ndim == 3 and x.shape[1] == 1:
+        x = x[:, 0, :]
     if x.ndim != 2:
         raise ValueError(f"expected 2-D (n_series, n_timepoints), got shape {x.shape}")
 
@@ -215,6 +339,45 @@ def transform(x: np.ndarray, kernels: Kernels) -> np.ndarray:
             float(kernels.biases[i]),
             int(kernels.dilations[i]),
             int(kernels.paddings[i]),
+        )
+        features[:, 2 * i] = maxima
+        features[:, 2 * i + 1] = ppv
+
+    return features
+
+
+def _transform_multivariate(x: np.ndarray, kernels: Kernels) -> np.ndarray:
+    if x.ndim != 3:
+        raise ValueError(
+            f"these kernels were drawn for {kernels.n_channels} channels, so a 3-D "
+            f"(n_series, n_channels, n_timepoints) array is expected; got shape {x.shape}"
+        )
+    n_series, n_channels, n = x.shape
+    if n_channels != kernels.n_channels:
+        # Channel indices were drawn against a specific count, so a different one here does not
+        # merely reshape the problem -- kernel 7 would be reading a different physical signal
+        # than the one it selected.
+        raise ValueError(
+            f"series has {n_channels} channels but these kernels were drawn for "
+            f"{kernels.n_channels}; regenerate the bank"
+        )
+    if n != kernels.n_timepoints:
+        raise ValueError(
+            f"series length {n} does not match the {kernels.n_timepoints} these kernels were "
+            f"generated for; regenerate the bank or resample the series"
+        )
+
+    features = np.empty((n_series, kernels.num_features), dtype=np.float64)
+    for i in range(kernels.num_kernels):
+        lo, hi = kernels.offsets[i], kernels.offsets[i + 1]
+        maxima, ppv = apply_kernel_multivariate(
+            x,
+            kernels.weights[lo:hi],
+            int(kernels.lengths[i]),
+            float(kernels.biases[i]),
+            int(kernels.dilations[i]),
+            int(kernels.paddings[i]),
+            kernels.channels_for(i),
         )
         features[:, 2 * i] = maxima
         features[:, 2 * i + 1] = ppv

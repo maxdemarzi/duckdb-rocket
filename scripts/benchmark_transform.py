@@ -43,6 +43,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 ROOT = Path(__file__).resolve().parent.parent
 
+from duckdb_rocket.shells import built_shell  # noqa: E402
+
 
 def time_python(series: np.ndarray, kernels_per_group: int, seed: int, first_kernel: int,
                 repeats: int) -> tuple[float, np.ndarray]:
@@ -139,7 +141,7 @@ SELECT series_id, features FROM bench_0 ORDER BY series_id;
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--duckdb", type=Path, default=ROOT / "build" / "release" / "duckdb.exe")
+    parser.add_argument("--duckdb", type=Path, default=built_shell())
     parser.add_argument("--kernels", type=int, default=250,
                         help="kernels per group; 250 is this project's group size")
     parser.add_argument("--series", type=int, default=200)

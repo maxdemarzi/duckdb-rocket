@@ -53,29 +53,29 @@ class TestGenerateKernel:
 
     def test_weights_are_mean_centred(self):
         for i in range(50):
-            _, weights, _, _, _ = generate_kernel(3, i, N)
+            _, weights, _, _, _, _ = generate_kernel(3, i, N)
             assert abs(sum(weights)) < 1e-12
 
     def test_weight_count_matches_length(self):
         for i in range(50):
-            length, weights, _, _, _ = generate_kernel(3, i, N)
+            length, weights, _, _, _, _ = generate_kernel(3, i, N)
             assert len(weights) == length
 
     def test_bias_is_within_its_range(self):
         for i in range(200):
-            _, _, bias, _, _ = generate_kernel(5, i, N)
+            _, _, bias, _, _, _ = generate_kernel(5, i, N)
             assert -1.0 <= bias < 1.0
 
     def test_dilation_keeps_the_kernel_inside_the_series(self):
         """The property that makes `output_length >= 1` structural rather than checked."""
         for i in range(500):
-            length, _, _, dilation, _ = generate_kernel(9, i, N)
+            length, _, _, dilation, _, _ = generate_kernel(9, i, N)
             assert dilation >= 1
             assert (length - 1) * dilation <= N - 1
 
     def test_padding_is_absent_or_exactly_centring(self):
         for i in range(300):
-            length, _, _, dilation, padding = generate_kernel(11, i, N)
+            length, _, _, dilation, padding, _ = generate_kernel(11, i, N)
             assert padding in (0, ((length - 1) * dilation) // 2)
 
     def test_both_padding_choices_occur(self):
@@ -130,7 +130,7 @@ class TestApplyKernel:
         """Vectorised zero-pad-and-slice vs. the obvious skip-taps loop."""
         rng = np.random.default_rng(index)
         x = rng.standard_normal((3, N))
-        length, weights, bias, dilation, padding = generate_kernel(77, index, N)
+        length, weights, bias, dilation, padding, _ = generate_kernel(77, index, N)
 
         maxima, ppv = apply_kernel(x, weights, length, bias, dilation, padding)
         for s in range(x.shape[0]):
@@ -144,7 +144,7 @@ class TestApplyKernel:
         rng = np.random.default_rng(0)
         x = rng.standard_normal((8, N))
         for i in range(30):
-            length, weights, bias, dilation, padding = generate_kernel(1, i, N)
+            length, weights, bias, dilation, padding, _ = generate_kernel(1, i, N)
             _, ppv = apply_kernel(x, weights, length, bias, dilation, padding)
             assert np.all((ppv >= 0.0) & (ppv <= 1.0))
 
@@ -152,7 +152,7 @@ class TestApplyKernel:
         """A mean-centred kernel annihilates a constant, so every output equals the bias."""
         x = np.full((1, N), 3.7)
         for i in range(30):
-            length, weights, bias, dilation, padding = generate_kernel(2, i, N)
+            length, weights, bias, dilation, padding, _ = generate_kernel(2, i, N)
             if padding:
                 continue  # padded edges see a step, not a constant
             maxima, ppv = apply_kernel(x, weights, length, bias, dilation, padding)

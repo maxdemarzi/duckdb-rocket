@@ -1,3 +1,9 @@
+# Everything text is LF in the working tree, not just in the index. `core.autocrlf=true` on a
+# Windows checkout already stores LF, so this changes no committed content -- it stops the
+# working copy from drifting to CRLF and reporting "LF will be replaced by CRLF" on every diff.
+# The rules below are more specific and still win.
+* text=auto eol=lf
+
 # Shell scripts must check out with LF even on Windows. A CRLF shebang line fails on Linux with
 # "bad interpreter: /usr/bin/env bash^M", which names neither line endings nor the real problem.
 *.sh text eol=lf

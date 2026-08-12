@@ -1,0 +1,40 @@
+{
+  "platform": {
+    "system": "Linux",
+    "release": "6.8.0-51-generic",
+    "version": "#52~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Dec  9 15:00:52 UTC 2",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "python": "3.12.13",
+    "libc": "glibc-2.35"
+  },
+  "torch": {
+    "torch": "2.13.0+cu130",
+    "cuda_build": "13.0",
+    "cuda_available": false,
+    "devices": []
+  },
+  "precision": {
+    "cpu_supports_fast_bf16": true,
+    "autocast_default_cpu": true,
+    "autocast_default_cuda": null,
+    "project_forces": "inference_precision=torch.float32"
+  },
+  "versions": {
+    "numpy": "2.3.5",
+    "scikit-learn": "1.8.0",
+    "pyarrow": "25.0.1",
+    "duckdb": "1.5.5",
+    "aeon": "1.5.0",
+    "tabpfn": "8.2.0",
+    "torch": "2.13.0"
+  },
+  "duckdb_cli": {
+    "path": "/workspace/duckdb-rocket/tools/duckdb",
+    "version": "v1.5.5 (Variegata) d8cdaa33fd"
+  },
+  "git": {
+    "commit": "025fafc207638ed9539492e827264b6047930a1c",
+    "dirty": true
+  }
+}

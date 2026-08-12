@@ -7,14 +7,20 @@
     "kernels_per_group": 250,
     "features_per_group": 500,
     "n_estimators": 1,
-    "seed": 0
+    "seed": 0,
+    "threads": 4,
+    "memory_limit": "20GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128
   },
   "shape": {
     "dataset": "SyntheticControl",
     "n_train": 300,
     "n_test": 300,
+    "n_channels": 1,
     "n_timepoints": 60,
-    "raw_parquet": "C:/Users/maxde/duckdb-rocket/data/phase5/SyntheticControl/raw.parquet"
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/SyntheticControl/raw.parquet"
   },
   "accuracy": 0.9866666666666667,
   "row_alignment": {
@@ -22,10 +28,19 @@
     "distinct_ids": 300,
     "group_rows": 12000,
     "min_groups_per_row": 40,
-    "max_groups_per_row": 40
+    "max_groups_per_row": 40,
+    "f0_collisions": 0
   },
   "failures": [],
-  "seconds": 674.2,
+  "seconds": 653.1,
   "comparison": null,
-  "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-51-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 32,
+    "containerised": true
+  },
+  "caveat": null
 }

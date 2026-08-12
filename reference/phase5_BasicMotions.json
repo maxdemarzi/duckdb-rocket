@@ -7,7 +7,11 @@
     "kernels_per_group": 250,
     "features_per_group": 500,
     "n_estimators": 1,
-    "seed": 0
+    "seed": 0,
+    "threads": 4,
+    "memory_limit": "20GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128
   },
   "shape": {
     "dataset": "BasicMotions",
@@ -16,7 +20,7 @@
     "n_channels": 6,
     "n_timepoints": 100,
     "multivariate": true,
-    "raw_parquet": "C:/Users/maxde/duckdb-rocket/data/phase5/BasicMotions/raw.parquet"
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/BasicMotions/raw.parquet"
   },
   "accuracy": 1.0,
   "row_alignment": {
@@ -24,10 +28,19 @@
     "distinct_ids": 40,
     "group_rows": 1600,
     "min_groups_per_row": 40,
-    "max_groups_per_row": 40
+    "max_groups_per_row": 40,
+    "f0_collisions": 0
   },
   "failures": [],
-  "seconds": 131.5,
+  "seconds": 78.7,
   "comparison": null,
-  "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-51-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 32,
+    "containerised": true
+  },
+  "caveat": null
 }

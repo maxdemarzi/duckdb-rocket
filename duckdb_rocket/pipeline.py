@@ -25,6 +25,15 @@ from .rocket import generate_kernels, normalize_series, transform
 # exactly on it, which is why the group count is not a free parameter in disguise.
 TABPFN_V2_5_MAX_FEATURES = 2_000
 
+TABPFN_MAX_FEATURES_PER_ESTIMATOR = 500
+"""How many features a *single* TabPFN estimator ever sees (`preprocessing/configs.py:115`).
+
+Distinct from `TABPFN_V2_5_MAX_FEATURES`, and the distinction is the whole of Phase 2's
+surprise. 2,000 is the widest input the model accepts; 500 is the widest view one estimator
+gets. Between the two, features are subsampled per estimator, so full coverage of a 2,000-wide
+group takes at least four of them -- which `anofox_tabfm`, capped at one, cannot supply.
+"""
+
 
 @dataclass(frozen=True)
 class RocketPFNConfig:
@@ -44,7 +53,32 @@ class RocketPFNConfig:
     default -- but **anofox_tabfm hard-throws on n_estimators > 1**, so the DuckDB pipeline
     cannot reach this setting (see PLAN.md Phase 2, finding 3). Run both e=8 and e=1 and report
     them side by side: the difference is precisely what the SQL path costs us, and measuring it
-    is cheaper than arguing about it."""
+    is cheaper than arguing about it.
+
+    **This is a request, not a guarantee** -- see `auto_scale_n_estimators`."""
+
+    auto_scale_n_estimators: bool = False
+    """Whether to let TabPFN silently raise `n_estimators` to cover all the features.
+
+    Off here, against the library default of True, and the reason rewrites the plan's premise.
+    Each TabPFN estimator sees at most `max_features_per_estimator = 500` features
+    (`preprocessing/configs.py:115`); anything wider is *subsampled*. So a 2,000-feature group
+    needs ceil(2000/500) = 4 estimators before every feature is looked at even once, and
+    `scale_n_estimators_for_feature_coverage` quietly bumps a requested e=1 to e=4 to get there.
+
+    2,000 is therefore TabPFN v2.5's *input* ceiling, not the width one estimator can see. The
+    plan's "each group is 2,000 features -- exactly TabPFN v2.5's cap" reads that number as a
+    single-estimator budget, and it is not one.
+
+    That default makes the measurement wrong in the one direction that matters: `anofox_tabfm`
+    caps `n_estimators` at 1 and has no such auto-scaling, so a local run labelled "e=1" would
+    really be e=4, compared against a DuckDB path that really is e=1. Leaving this False means
+    the requested e is the e that runs, and a group too wide to be covered at that e becomes a
+    fact the config must face rather than a warning buried in stderr.
+
+    The honest way to run e=1 is thus not to widen the estimator count but to narrow the group:
+    at `features_per_group <= 500` a single estimator sees everything, and the local oracle and
+    the DuckDB pipeline are finally measuring the same thing."""
 
     model_version: str = "v2.5"
     """The paper uses TabPFN v2.5. **tabpfn 8.2.0 defaults to v3**, so leaving this unset would
@@ -66,6 +100,34 @@ class RocketPFNConfig:
     @property
     def features_per_group(self) -> int:
         return self.kernels_per_group * 2
+
+    @property
+    def estimators_for_full_coverage(self) -> int:
+        """Smallest `n_estimators` at which every feature in a group is seen at least once."""
+        return -(-self.features_per_group // TABPFN_MAX_FEATURES_PER_ESTIMATOR)
+
+    @property
+    def covers_all_features(self) -> bool:
+        """True when the configured `n_estimators` actually looks at every feature.
+
+        False is not automatically wrong -- the paper's own e=8 over 2,000-feature groups is
+        fine, and a deliberately under-covered run is a legitimate experiment. It is only worth
+        knowing about, and worth recording next to an accuracy number, because an
+        under-covered config quietly measures a random subset of the features it appears to use.
+        """
+        return self.n_estimators >= self.estimators_for_full_coverage
+
+    @property
+    def anofox_reachable(self) -> bool:
+        """True when the DuckDB path could reproduce this configuration.
+
+        `anofox_tabfm` hard-throws above `n_estimators = 1`, so only a config whose groups fit
+        inside one estimator's 500-feature budget is reproducible in SQL. Any local number from
+        a config where this is False describes something the extension cannot do.
+        """
+        return self.n_estimators == 1 and self.features_per_group <= (
+            TABPFN_MAX_FEATURES_PER_ESTIMATOR
+        )
 
     def validate(self) -> None:
         if self.num_kernels <= 0 or self.n_groups <= 0:
@@ -114,9 +176,13 @@ def build_classifier(config: RocketPFNConfig):
     model_paths, *_ = resolve_model_path(None, "classifier", version=config.model_version)
     model_path = model_paths[0] if isinstance(model_paths, list) else model_paths
 
+    # --- Override 3: estimator auto-scaling ---------------------------------------------------
+    # Defaults to True in the library, which silently raises n_estimators until every feature is
+    # covered at 500 features per estimator. See RocketPFNConfig.auto_scale_n_estimators.
     return TabPFNClassifier(
         model_path=model_path,
         n_estimators=config.n_estimators,
+        auto_scale_n_estimators=config.auto_scale_n_estimators,
         inference_precision=precision,
         device=config.device,
         random_state=config.seed,

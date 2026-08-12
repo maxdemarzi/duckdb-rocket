@@ -16,6 +16,13 @@ Per the paper: 10,000 kernels split into **G=10 groups of 1,000**. Each kernel y
 features (global max + PPV), so each group is 2,000 features — exactly TabPFN v2.5's cap.
 Each group is classified independently and the **class probabilities are averaged**.
 
+> **Phase 2 corrected this.** 2,000 is TabPFN v2.5's *input* ceiling, not the width a single
+> estimator sees — that is **500** (`max_features_per_estimator`). A 2,000-feature group is
+> only fully covered at e≥4, and `anofox_tabfm` caps estimators at 1. **This project therefore
+> runs G=40 groups of 250 kernels (500 features each)**, which keeps the paper's 10,000 kernels
+> and its average-across-groups ensembling while making e=1 honest and the SQL path
+> reproducible. See `reference/PHASE2_FINDINGS.md`.
+
 **Design consequence:** the pipeline needs probability output, not labels. Verifying that
 `anofox_tabfm` can provide it is Phase 2, and it gates everything after it.
 
@@ -152,7 +159,13 @@ this, so correctness here matters more than speed.
 - [ ] Write `SPEC.md` documenting kernel generation (lengths, dilations, padding, biases,
       weight normalization) precisely enough to reimplement from text alone
 
-### BLOCKED: TabPFN v2.5 weights are license-gated
+### ~~BLOCKED~~ CLEARED: TabPFN v2.5 weights are license-gated
+
+> **Cleared 2026-08-11.** The licence was accepted and an API key saved to `token.txt`
+> (gitignored). `tabpfn` cached it to `~/.cache/tabpfn/auth_token`, so local runs no longer
+> need `TABPFN_TOKEN` in the environment — **but pods still do**, and the key must never be
+> committed. Note `anofox_tabfm` is a *separate* gate with its own licence flag
+> (`SET anofox_tabfm_accept_hf_license = true`), as predicted.
 
 **Nothing in Phase 1 that needs model weights can run until this is cleared, and it needs a
 human.** `tabpfn` 8.2.0 will not download v2.5 weights without an accepted Prior Labs licence.
@@ -229,22 +242,38 @@ highest information value. **Run it concurrently with Phase 1.**
 > bugs were found empirically against live weights, not by reading — several are invisible to
 > static inspection and expensive to rediscover.
 
-- [ ] `INSTALL anofox_tabfm FROM community; LOAD anofox_tabfm;` then `tabfm_download('tabpfn-v2-5')`
+> **Phase 2 is done.** Findings, with reproduction, in **`reference/PHASE2_FINDINGS.md`**;
+> raw probe output in `reference/anofox_probe_*.json`; the harness is
+> `scripts/probe_anofox.py`. Probed against **`anofox_tabfm bc6d8af`** / DuckDB v1.5.5. The
+> headline: the composition works, `tabpfn-v2-5` does not load at all in this build, and the
+> 500-feature-per-estimator ceiling forces G=40 rather than G=10.
+
+- [x] `INSTALL anofox_tabfm FROM community; LOAD anofox_tabfm;` then `tabfm_download(...)` —
+      note the real signature is `tabfm_download('classification', model := '...')`, and
+      non-commercial weights need `SET anofox_tabfm_accept_hf_license = true`
+- [x] **`tabpfn-v2-5` is unusable in `bc6d8af`** — its published checkpoint no longer matches
+      anofox's bundled ONNX graph, and re-downloading (which the error advises) cannot fix it.
+      `tabicl-v2` works, which promotes optional Phase 3b to the default path
 - [x] ~~Does `tabfm_classify()` return class probabilities or only a label?~~ **Yes — `proba`,
       a per-class map.** Confirm it holds for `tabpfn-v2-5` as well as swan's `tabicl-v2`
 - [x] ~~Confirm the train/test convention~~ **Explicit `test := <view>`; single-table mode is
       unsafe.** See finding 4
-- [ ] Can it accept 2,000 feature columns? Is `features := [...]` with 2,000 names workable?
-      (swan's largest observed usage is far smaller — this remains genuinely open)
-- [ ] Does it accept a `LIST`/`ARRAY`-valued column instead of N scalar columns? (Evidence
-      points to no — finding 6)
-- [ ] Does it expose an AMP / precision setting? (See Phase 1. Note anofox runs **ONNX**, not
-      PyTorch, so TabPFN's `inference_precision` lever may not exist here at all — find out what
-      precision the exported graph actually uses, and treat "unknown" as a result worth writing
-      down)
-- [ ] **Settle the `e=8` question** (finding 3) — accept `e=1`, or build our own ensembling
-- [ ] Row identity across G groups: try deterministic ordering first, swan's rowid as fallback
-- [ ] Measure: latency for one 2,000-feature classify call at realistic UCR row counts
+- [x] ~~Can it accept 2,000 feature columns?~~ **Yes.** The advertised 500 limit is a
+      configurable guard: `SET anofox_tabfm_max_features = 4000`. The contemplated upstream PR
+      is unnecessary
+- [x] ~~Does it accept a `LIST`/`ARRAY`-valued column?~~ **No, and it crashes** —
+      `INTERNAL Error: Run() called with null input buffers`. An upstream bug report
+- [x] ~~Does it expose an AMP / precision setting?~~ **No.** Valid options are exactly
+      `task, n_estimators, seed, output_mode, context_rows, softmax_temperature, model`. The
+      exported graph's precision is unknown *and unsettable* — recorded as a result
+- [x] **The `e=8` question is settled by arithmetic, not preference** — one estimator sees 500
+      features, so at 500-feature groups e=1 is not a compromise but the correct setting. G=40
+      replaces G=10; no custom ensembling layer needed
+- [x] ~~Row identity across G groups~~ **Deterministic ordering works** — output contains only
+      test rows, in the test view's own order, stably across calls. swan's rowid hack is not
+      needed. **Phase 3 must assert this rather than assume it** (verified at 40 rows only)
+- [ ] Measure: latency at realistic UCR row counts (40 s for one 2,000-column call on 100 rows
+      is already a Phase 5 warning; the curve is worse than linear in width)
 
 ### What swan already established
 
@@ -463,8 +492,11 @@ step.
 | Risk | Phase | Mitigation |
 |---|---|---|
 | ~~`tabfm_classify` won't return probabilities~~ | 2 | **Retired** — swan confirms `proba` exists |
-| `e=8` unreachable, so we can't match the paper's config | 2, 5 | Decide `e=1` vs. own ensembling *before* measuring; record the choice beside every accuracy number |
-| Row identity lost across the G classify calls | 2, 3 | No passthrough-id column exists; deterministic ordering, else swan's `ROW_NUMBER() OVER (ORDER BY hash(pk))` rowid-as-feature |
+| ~~`e=8` unreachable~~ | 2, 5 | **Retired** — at 500-feature groups one estimator sees everything, so e=1 is correct rather than a compromise. G=40 |
+| ~~Row identity lost across the G classify calls~~ | 2, 3 | **Retired, with a caveat** — output is test-rows-only in test-view order, stable across calls. Verified at 40 rows; Phase 3 asserts it |
+| **`tabpfn-v2-5` does not load in `anofox_tabfm bc6d8af`** | 2, 3, 5 | Checkpoint/graph mismatch upstream. Use `tabicl-v2`; Phase 3b becomes the default path, not an experiment |
+| **A requested `n_estimators` is silently raised** | 1, 3 | TabPFN auto-scales e to cover 500-feature-wide estimators. `auto_scale_n_estimators=False` is pinned; harness records `covers_all_features` and `anofox_reachable` |
+| No precision control on the ONNX path | 2, 5 | No such option exists; the graph's precision is unknown and unsettable. Local fp32 TabPFN and DuckDB `tabicl-v2` are **not** precision-comparable |
 | Averaging `yhat_score` instead of `proba` | 3 | Silently produces accuracy 1.0 with sub-chance AUROC; swan hit this for real |
 | **AMP silently corrupts accuracy numbers** | 1 | Resolved: default is `"auto"` → fp16 on any CUDA device. Force `inference_precision=torch.float32` everywhere; CPU≡GPU checks count only with both pinned to fp32 |
 | Kernel-generation spec mismatch Python↔C++ | 1→4 | Portable PRNG spec + golden vectors, decided in Phase 1 |

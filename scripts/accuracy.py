@@ -147,15 +147,41 @@ def main() -> int:
             device=args.device,
         )
 
+    # Coverage facts belong beside the accuracy, not in a commit message. A group wider than one
+    # estimator's 500-feature budget is only fully seen at e >= ceil(width/500); below that the
+    # run silently scores a random subset of its own features. `anofox_reachable` records
+    # whether the DuckDB path could even reproduce the configuration being measured.
+    probe = make_config(0, estimator_values[0])
+    coverage = {
+        f"e={e}": {
+            "features_per_group": make_config(0, e).features_per_group,
+            "estimators_for_full_coverage": make_config(0, e).estimators_for_full_coverage,
+            "covers_all_features": make_config(0, e).covers_all_features,
+            "anofox_reachable": make_config(0, e).anofox_reachable,
+        }
+        for e in estimator_values
+    }
+    for label, facts in coverage.items():
+        if not facts["covers_all_features"]:
+            print(
+                f"WARNING: at {label} with {facts['features_per_group']} features per group, "
+                f"TabPFN sees only a random subset -- full coverage needs "
+                f"e >= {facts['estimators_for_full_coverage']}.",
+                file=sys.stderr,
+            )
+
     report = {
         "config": {
             "num_kernels": args.num_kernels,
             "n_groups": args.n_groups,
             "n_estimators": estimator_values,
+            "features_per_group": probe.features_per_group,
             "device": args.device,
             "seeds": args.seeds,
             "smoke": args.smoke,
+            "auto_scale_n_estimators": probe.auto_scale_n_estimators,
         },
+        "coverage": coverage,
         "environment": doctor(),
         "skipped": [asdict(d) for d in skipped],
         "runs": [],

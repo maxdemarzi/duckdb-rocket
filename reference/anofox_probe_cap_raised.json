@@ -1,0 +1,34 @@
+{
+  "extension_version": "bc6d8af",
+  "model": "tabicl-v2",
+  "duckdb": "v1.5.5 (Variegata) d8cdaa33fd",
+  "probes": [
+    {
+      "probe": "feature_cap_512",
+      "question": "Does a 512-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": true,
+      "seconds": 7.0,
+      "stdout": "\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 n_rows \u2502      accuracy      \u2502\n\u2502 int64  \u2502       double       \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502     44 \u2502 0.9090909090909091 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+      "stderr": ""
+    },
+    {
+      "probe": "feature_cap_1000",
+      "question": "Does a 1000-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": true,
+      "seconds": 17.2,
+      "stdout": "\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 n_rows \u2502      accuracy      \u2502\n\u2502 int64  \u2502       double       \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502     44 \u2502 0.5454545454545454 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+      "stderr": ""
+    },
+    {
+      "probe": "feature_cap_2000",
+      "question": "Does a 2000-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": true,
+      "seconds": 41.4,
+      "stdout": "\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 n_rows \u2502      accuracy      \u2502\n\u2502 int64  \u2502       double       \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502     44 \u2502 0.6590909090909091 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+      "stderr": ""
+    }
+  ]
+}

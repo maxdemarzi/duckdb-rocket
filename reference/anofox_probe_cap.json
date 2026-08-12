@@ -1,0 +1,52 @@
+{
+  "extension_version": "bc6d8af",
+  "model": "tabicl-v2",
+  "duckdb": "v1.5.5 (Variegata) d8cdaa33fd",
+  "probes": [
+    {
+      "probe": "feature_cap_500",
+      "question": "Does a 500-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": true,
+      "seconds": 6.8,
+      "stdout": "\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 n_rows \u2502      accuracy      \u2502\n\u2502 int64  \u2502       double       \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502     44 \u2502 0.9090909090909091 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+      "stderr": ""
+    },
+    {
+      "probe": "feature_cap_512",
+      "question": "Does a 512-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": false,
+      "seconds": 0.5,
+      "stdout": "",
+      "stderr": "Binder Error: tabfm_predict_agg: 512 feature columns exceed anofox_tabfm_max_features (500). Raise it with SET anofox_tabfm_max_features = 512; or pass a feature list\nLINE 3: FROM tabfm_classify('train_v', 'y', test := 'test_v',\n             ^"
+    },
+    {
+      "probe": "feature_cap_513",
+      "question": "Does a 513-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": false,
+      "seconds": 0.5,
+      "stdout": "",
+      "stderr": "Binder Error: tabfm_predict_agg: 513 feature columns exceed anofox_tabfm_max_features (500). Raise it with SET anofox_tabfm_max_features = 513; or pass a feature list\nLINE 3: FROM tabfm_classify('train_v', 'y', test := 'test_v',\n             ^"
+    },
+    {
+      "probe": "feature_cap_1000",
+      "question": "Does a 1000-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": false,
+      "seconds": 0.8,
+      "stdout": "",
+      "stderr": "Binder Error: tabfm_predict_agg: 1000 feature columns exceed anofox_tabfm_max_features (500). Raise it with SET anofox_tabfm_max_features = 1000; or pass a feature list\nLINE 3: FROM tabfm_classify('train_v', 'y', test := 'test_v',\n             ^"
+    },
+    {
+      "probe": "feature_cap_2000",
+      "question": "Does a 2000-column classify call succeed?",
+      "expectation": "tabfm_list_models() advertises max_features=512 for tabicl-v2, 500 for tabpfn-v2-5",
+      "ok": false,
+      "seconds": 2.3,
+      "stdout": "",
+      "stderr": "Binder Error: tabfm_predict_agg: 2000 feature columns exceed anofox_tabfm_max_features (500). Raise it with SET anofox_tabfm_max_features = 2000; or pass a feature list\nLINE 3: FROM tabfm_classify('train_v', 'y', test := 'test_v',\n             ^"
+    }
+  ]
+}

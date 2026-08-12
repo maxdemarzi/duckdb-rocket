@@ -187,6 +187,9 @@ engine — so a 40-group run is ~1.1 MB of SQL.
 - **Upstream reports.** Two are worth filing against `DataZooDE/anofox-tabfm` — the
   checkpoint/graph mismatch and the `LIST`-column internal error — but filing on a third-party
   repo is the maintainer's call to invite, so they are written up here rather than submitted.
-- **`test/sql/rocket.test` through the official runner.** Its assertions were verified
-  query-by-query against the built shell, but `BUILD_UNITTESTS` was off;
-  `scripts/build_extension.bat tests` builds the runner and executes the file.
+*(Resolved during the session: `test/sql/rocket.test` now runs through DuckDB's own
+sqllogictest runner — **12 assertions, all passing** — via `scripts/build_extension.bat tests`.
+Two traps were worth fixing on the way: the runner registers tests under a canonical
+forward-slash path, so a native Windows path matches nothing, and it then exits 0 having run
+nothing, which reads exactly like success. The script now checks for the pass line rather than
+trusting the exit code.)*

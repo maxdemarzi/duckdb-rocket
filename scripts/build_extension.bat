@@ -21,7 +21,9 @@ call "%VCVARS%" >nul || exit /b 1
 REM cmake and ninja are installed but not on the default PATH in a non-interactive shell.
 set "PATH=C:\Program Files\CMake\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
 
-set "ROOT=%~dp0.."
+REM Resolved to a canonical absolute path, not "...\scripts\..": the test runner registers
+REM tests under the canonical path, and an unnormalised one matches nothing.
+for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 set "BUILD=%ROOT%\build\release"
 
 if "%1"=="clean" (
@@ -52,6 +54,17 @@ echo   extension: %BUILD%\extension\rocket\rocket.duckdb_extension
 
 if "%UNITTESTS%"=="1" (
     echo.
-    echo Running test\sql\rocket.test
-    "%BUILD%\test\unittest.exe" "%ROOT%\test\sql\rocket.test" || exit /b 1
+    echo Running test/sql/rocket.test
+
+    REM The runner registers tests under a FORWARD-slash absolute path, so a native Windows
+    REM path matches nothing. It then exits 0 having run nothing, which reads as success --
+    REM so the result is checked for the pass line rather than trusted to the exit code.
+    set "TESTPATH=%ROOT%\test\sql\rocket.test"
+    call set "TESTPATH=%%TESTPATH:\=/%%"
+    call "%BUILD%\test\unittest.exe" "%%TESTPATH%%" > "%BUILD%\rocket_test.log" 2>&1
+    type "%BUILD%\rocket_test.log"
+    findstr /c:"All tests passed" "%BUILD%\rocket_test.log" >nul || (
+        echo TESTS DID NOT PASS ^(or matched nothing^)
+        exit /b 1
+    )
 )

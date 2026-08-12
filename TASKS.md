@@ -1,19 +1,44 @@
 # Open tasks — handoff at 2026-08-12 11:50 (machine restart)
 
-## ⚠ LIVE POD — `7lewu2k1gpbrj5` is billing right now
+## ⚠ LIVE POD — `khv4iojz2zbphj` is billing right now
 
     python scripts/pod/runpod_cpu.py check
-    python scripts/pod/runpod_cpu.py ssh 7lewu2k1gpbrj5
-    python scripts/pod/runpod_cpu.py terminate 7lewu2k1gpbrj5 --yes-destroy-the-volume
+    python scripts/pod/runpod_cpu.py ssh khv4iojz2zbphj
+    python scripts/pod/runpod_cpu.py terminate khv4iojz2zbphj --yes-destroy-the-volume
 
-`duckdb-rocket-cpu-64g`, 32 vCPU, **64 GB**, ~$1.12/hr. **Terminate it when done.**
-`volumeInGb: 0` again, so nothing on it survives termination — fetch before terminating.
+`duckdb-rocket-cpu-128g`, 64 vCPU, **119 GB** cgroup, ~$2.24/hr, host `38.80.152.147`.
+**Terminate it when done.** `volumeInGb: 0`, so nothing on it survives — fetch before terminating.
 
-Exists only for ECG5000, which needs ~29 GB and could not fit the previous pod's 29.8 GB
-ceiling. The nine other datasets are already fetched and committed.
+Exists only for ECG5000, which needs ~29 GB and did not fit the first pod's 29.8 GB ceiling.
+The nine other datasets are fetched and committed already.
 
-**Predecessor `hwkx2c4ceogn71` (16 vCPU / 29 GB) was terminated 2026-08-12** after its nine
-results were fetched. Do not go looking for it.
+### Gate every pod on download speed before bootstrapping it
+
+Learned expensively today, and it is already in PLAN.md as black_swan's rule (a host with healthy
+specs and 270 kB/s cost them a whole session). Four pods were created before one passed:
+
+| vCPU | host | download | outcome |
+|---|---|---|---|
+| 32 | 157.157.221.177 | 0.09 MB/s | 29 min stuck cloning DuckDB, terminated |
+| 32 | 157.157.221.177 | 0.09 MB/s | gate fail |
+| 32 | 157.157.221.177 | 0.08 MB/s | gate fail |
+| 32 | 157.157.221.177 | 0.08 MB/s | gate fail |
+| **64** | **38.80.152.147** | **34.24 MB/s** | **gate pass** |
+
+Every 32-vCPU request landed on the same slow host; 64 placed elsewhere. The gate is one curl:
+
+    curl -sL -o /dev/null -w "%{speed_download}" --max-time 60 \
+      https://github.com/duckdb/duckdb/releases/download/v1.5.5/duckdb_cli-linux-amd64.zip
+
+**Use `-L`.** That URL 302-redirects, and without `-L` curl reports 0 B/s on a *healthy* host —
+which looks identical to the failure it is meant to detect.
+
+`vcpuCount` must be a power of 2. 24 and 20 are rejected with HTTP 500, so the sizes are
+16 (~29 GB), 32 (~60 GB), 64 (~119 GB).
+
+**Terminated today, do not look for them:** `hwkx2c4ceogn71` (16 vCPU, after its nine results
+were fetched), `7lewu2k1gpbrj5`, `nu6613z93o7brh`, `wzf9y402jbjz1g`, `t5qlpktoa1bmjh`,
+`vv13qnibro08l3`.
 
 ### Before terminating — nothing on this pod survives it (`volumeInGb: 0`)
 

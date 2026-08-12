@@ -138,10 +138,17 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         f"SET temp_directory = '{temp_dir.as_posix()}';",
         f"CREATE OR REPLACE TABLE raw AS "
         f"SELECT * FROM read_parquet('{meta['raw_parquet']}');",
-        # One row per group, filled as each group's features are built and before they are
-        # dropped. Per group because f0 is a different kernel's output in each one, so a
-        # collision in group 17 is invisible to a check that only looks at group 0.
-        "CREATE OR REPLACE TABLE f0_checks (grp BIGINT, collisions BIGINT);",
+        # One row per group, filled as each group's features are built. Per group because f0 is
+        # a different kernel's output in each one, so a collision in group 17 is invisible to a
+        # check that only looks at group 0.
+        #
+        # `fingerprint` guards the refill architecture below. Every group writes into the same
+        # feat_cur/train_cur tables, so a missing or misordered refill would score one group's
+        # features while labelling them as another's -- and every other assertion here still
+        # passes in that case: 40 groups per row, no collisions, an accuracy that looks fine.
+        # Distinct fingerprints are what says the 40 groups really were 40 different kernel
+        # banks. Cheap enough to be unconditional.
+        "CREATE OR REPLACE TABLE f0_checks (grp BIGINT, collisions BIGINT, fingerprint DOUBLE);",
     ]
 
     # Test ids are contiguous and start at n_train: write_raw_parquet lays the table out as
@@ -213,7 +220,7 @@ PREPARE score AS
 DELETE FROM feat_cur;
 EXECUTE fill_feat({first_kernel});
 INSERT INTO f0_checks
-SELECT {g}, count(*) - count(DISTINCT f[1]) FROM feat_cur WHERE split = 'test';
+SELECT {g}, count(*) - count(DISTINCT f[1]), sum(f[1]) FROM feat_cur WHERE split = 'test';
 DELETE FROM train_cur;
 EXECUTE fill_train;
 """)
@@ -265,7 +272,9 @@ SELECT (SELECT count(*) FROM predictions)          AS predicted_rows,
        -- *string* to avoid precision loss. "0" is truthy in Python, so the guard below fired on
        -- every run while reporting zero collisions.
        (SELECT CAST(coalesce(sum(collisions), 0) AS BIGINT)
-          FROM f0_checks)                         AS f0_collisions;
+          FROM f0_checks)                         AS f0_collisions,
+       (SELECT CAST(count(DISTINCT fingerprint) AS BIGINT)
+          FROM f0_checks)                         AS distinct_group_banks;
 """)
     return "\n".join(parts)
 
@@ -384,6 +393,13 @@ def main() -> int:
     # int() rather than a bare truth test: DuckDB hands some aggregates back as strings, and
     # every non-empty string is truthy. Belt and braces with the CAST in the SQL above -- this
     # guard exists to catch a wrong answer, so it must not itself become one.
+    banks = int(float(facts.get("distinct_group_banks") or 0))
+    if banks != config.n_groups:
+        failures.append(
+            f"{banks} distinct kernel banks across {config.n_groups} groups: the per-group "
+            f"feature tables were not all refilled, so some groups were scored against another "
+            f"group's features under their own label"
+        )
     if int(float(facts.get("f0_collisions") or 0)):
         failures.append(
             f"{facts['f0_collisions']} test rows share an f0 with another row across the "

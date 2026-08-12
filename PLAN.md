@@ -26,7 +26,7 @@ Each group is classified independently and the **class probabilities are average
 | Feature extractor | Rocket (primary); MiniRocket / MultiRocket also evaluated |
 | Kernels | 10,000 total = G=10 groups × 1,000 |
 | Features | 2 per kernel (global max, PPV) → 2,000 per group |
-| Classifier | TabPFN v2.5, e=8 internal estimators |
+| Classifier | TabPFN v2.5, e=8 internal estimators — **not reachable via anofox-tabfm**, see Phase 2 finding 3 |
 | TabPFN v2.5 limits | 50,000 samples, 2,000 features, ≤10 classes |
 | Ensembling | Average probability estimates across the G groups |
 | Multivariate | Each kernel gets a random subset of K channels, independent weights per channel; still 2 features per kernel |
@@ -65,6 +65,24 @@ across `STATUS.md` / `DESIGN.md` / `PERFORMANCE.md`. Four findings bear directly
 Also relevant: `python -m tabicl.scaling.build_native` builds a C++17 pybind11 extension on
 Windows, and its notes record that **MSVC Build Tools are required — clang alone cannot link
 a CPython extension** (no Windows SDK). Precedent for our Phase 4 build.
+
+### `C:\Users\maxde\Repositories\swan` — a shipped DuckDB extension that already uses `anofox_tabfm`
+
+The single most relevant repo in the workspace, and the reason Phase 2 is mostly confirmation
+rather than discovery. swan is a semantic-modeling/query-optimization DuckDB extension whose
+predictive reasoner drives `tabicl-v2` through `anofox_tabfm` in production. It supplies:
+
+- **The template decision** for Phase 4 — it is built from the C++ `extension-template`.
+- **Phase 2's answers**, including the probability gate. See "What swan already established".
+- `scripts/vendor_anofox_tabfm.sh` — pinned-tag vendoring, reusable as-is.
+- `scripts/sql_only_feature_probe.py` — prior art for Phase 4's pure-SQL macro step.
+- `scripts/windows_path_repro.ps1` / `windows_simd_repro.ps1` — Windows problems already hit once.
+- `docs/dev/TABICL_LIMITATIONS_ROADMAP.md` — maps the TabICLv2 paper's stated limitations onto
+  a real integration. Relevant to Phase 3b, and a good model for how to write up our own.
+
+Its documentation is unusually candid about bugs that were **only** found by running against
+live weights — collapse-to-mean, target leakage through a rowid, an unsorted quantile head.
+Treat that as a standing warning: this SQL surface does not fail loudly.
 
 ### `C:\Users\maxde\black_swan` — the RunPod lane
 
@@ -168,19 +186,105 @@ floor, and golden vectors on disk.
 
 ---
 
-## Phase 2 — Probe `anofox_tabfm` (GO / NO-GO GATE)
+## Phase 2 — Probe `anofox_tabfm` (GATE — largely pre-answered by swan)
 
 **Goal:** find out whether the intended composition is possible at all. Cheapest phase,
 highest information value. **Run it concurrently with Phase 1.**
 
+> **The gate is already open.** `maxdemarzi/swan` ships a production `anofox_tabfm` integration
+> (`docs/dev/PREDICTIVE_TABICL.md`, `python/pyrel_duckdb/reasoners/predictive/predictive_tabicl.py`).
+> Its findings are recorded in "What swan already established" below and turn most of this
+> phase from discovery into confirmation. **Read that section before running anything.** Its
+> bugs were found empirically against live weights, not by reading — several are invisible to
+> static inspection and expensive to rediscover.
+
 - [ ] `INSTALL anofox_tabfm FROM community; LOAD anofox_tabfm;` then `tabfm_download('tabpfn-v2-5')`
-- [ ] **Does `tabfm_classify()` return class probabilities or only a label?** ← the gate
+- [x] ~~Does `tabfm_classify()` return class probabilities or only a label?~~ **Yes — `proba`,
+      a per-class map.** Confirm it holds for `tabpfn-v2-5` as well as swan's `tabicl-v2`
+- [x] ~~Confirm the train/test convention~~ **Explicit `test := <view>`; single-table mode is
+      unsafe.** See finding 4
 - [ ] Can it accept 2,000 feature columns? Is `features := [...]` with 2,000 names workable?
-- [ ] Does it accept a `LIST`/`ARRAY`-valued column instead of N scalar columns?
-- [ ] Does it expose an AMP / precision setting? (See Phase 1.)
+      (swan's largest observed usage is far smaller — this remains genuinely open)
+- [ ] Does it accept a `LIST`/`ARRAY`-valued column instead of N scalar columns? (Evidence
+      points to no — finding 6)
+- [ ] Does it expose an AMP / precision setting? (See Phase 1. Note anofox runs **ONNX**, not
+      PyTorch, so TabPFN's `inference_precision` lever may not exist here at all — find out what
+      precision the exported graph actually uses, and treat "unknown" as a result worth writing
+      down)
+- [ ] **Settle the `e=8` question** (finding 3) — accept `e=1`, or build our own ensembling
+- [ ] Row identity across G groups: try deterministic ordering first, swan's rowid as fallback
 - [ ] Measure: latency for one 2,000-feature classify call at realistic UCR row counts
-- [ ] Confirm the train/test convention — TabPFN is in-context, so how are labeled context
-      rows vs. query rows expressed in the SQL API?
+
+### What swan already established
+
+Sourced from `docs/dev/PREDICTIVE_TABICL.md` and the call site at
+`predictive_tabicl.py:388-400`. swan drives `tabicl-v2`; we drive `tabpfn-v2-5` through the
+same SQL surface, so confirm each of these still holds for our model rather than assuming.
+
+**1. `tabfm_classify` returns `proba`. The gate is GO.** The literal shape:
+
+```sql
+SELECT "__tabicl_rowid", yhat, yhat_score, proba
+FROM tabfm_classify('<train_view>', '<target>', test := '<test_view>',
+                    model := '<model>', features := [...], opts := {...})
+```
+
+`proba` arrives as a **map keyed by class label** (consumed as a Python dict,
+`predictive_tabicl.py:729`). That is better than a bare array for us — averaging across the G
+groups can key on the class rather than trusting positional alignment.
+
+**2. Never average `yhat_score`.** It is confidence in *whichever* class was predicted, not
+P(class). swan hit a real bug where accuracy measured 1.0 while AUROC came out **below chance**,
+because a confidently-negative row carries a high `yhat_score`. Average `proba`, always.
+
+**3. `opts['n_estimators'] > 1` hard-throws `NotImplementedException`** — gated on anofox's own
+roadmap milestone M3, no ETA. **This directly contradicts our reference constraints table**,
+which specifies TabPFN v2.5 with `e=8` internal estimators. We cannot reproduce the paper's
+configuration through anofox-tabfm today. Options: accept `e=1` and expect to land below the
+paper's 0.900, or rebuild ensembling as our own orchestration layer the way swan's
+`predict_ensemble()` does. **Decide this explicitly and record it next to any accuracy number** —
+an unexplained gap against the paper is otherwise attributable to our ROCKET implementation
+when the real cause is a missing classifier setting.
+
+**4. Use explicit `test := <view>`, never the single-table `target IS NULL` convention.**
+swan confirmed empirically that `tabfm_regress`'s single-table mode **silently collapses to
+predicting the training mean for every row**. Classification measured correctly in isolation,
+but swan routes both through the explicit-view path rather than trusting one to behave
+differently. This answers the plan's train/test-convention question.
+
+**5. There is no passthrough/id column.** `tabfm_classify` echoes back the target plus exactly
+what is named in `features := [...]`; a PK not listed there is **silently dropped**. This is a
+hard problem for us specifically: averaging across G=10 groups means joining rows across ten
+separate classify calls, so we need stable row identity. swan's workaround is to inject a rowid
+*as a model feature*, and it took two empirically-found bugs to get right:
+
+| Attempt | Failure |
+|---|---|
+| `hash(pk)` | High-entropy feature; model collapsed to predicting the training mean. A 60-row perfectly-linear signal went from ~0.3 error to ~50 |
+| `ROW_NUMBER() OVER (ORDER BY pk)` | Smooth and bounded, but leaks target-correlated signal whenever PK assignment correlates with the target |
+| **`ROW_NUMBER() OVER (ORDER BY hash(pk))`** | **Shipped.** Smooth value, hash-scrambled ordering |
+
+Compute it **once**, in the base view that train/test views derive from — never recomputed
+inside the derived views, or the same PK maps to different rowids across them.
+
+*Our exposure is lower but not zero:* swan notes the collapse-to-mean bug was invisible in its
+own flatten-compiler tests because many real features dilute one noisy one, and we will have
+2,000. But we also have an alternative swan lacked — the group index is already a
+`rocket_transform()` argument, so a deterministic row ordering may be reconstructable without
+injecting anything. **Prefer that if it works; fall back to swan's rowid if it doesn't.**
+
+**6. Expect 2,000 scalar columns, not one `LIST` column.** swan always passes N scalar names in
+`features := [...]`. Separately, its own flatten compiler *prunes* `DOUBLE[]`/`FLOAT[]` columns
+entirely rather than feeding them to the model. That is swan's layer, not anofox's, so it is not
+proof — but it is the only evidence available, and it points away from the list-valued
+convenience this plan hoped for. **Keep the plan's original question live and test it directly.**
+
+**7. ONNX Runtime ABI hazard.** Any process that resolves one ONNX Runtime build is permanently
+bound to it (`Ort::InitApi()` is process-global). Loading anofox-tabfm's debug build afterward
+fails with a raw dynamic-linker symbol-version error, after which every entry point reports
+"extension not available." Vendoring anofox in **release** mode (statically-linked ONNX Runtime)
+is the real fix. We have no ONNX Runtime of our own, so this bites us only if we load swan and
+anofox in one process — but the failure mode is opaque enough to be worth recognizing on sight.
 
 **Pin the version.** `INSTALL ... FROM community` is fine for the initial probe, but swan's
 `scripts/vendor_anofox_tabfm.sh` records the reason not to leave it there: `anofox-tabfm` is
@@ -192,13 +296,12 @@ against alongside the findings note, and reuse that script rather than writing a
 
 **Exit:** a written findings note, plus GitHub issues filed on `anofox-tabfm` for any gaps.
 
-**Branch on the outcome:**
-- *Probabilities available* → proceed to Phase 3 as designed.
-- *Labels only* → majority-vote across G groups is the fallback (some accuracy loss vs.
-  probability averaging; quantify it in Phase 1's harness before committing). Open an upstream
-  issue requesting probability output — small, in-scope, generically useful.
-- *No list-valued features and 2,000 columns is unworkable* → that upstream PR moves from
-  "nice to have" to a prerequisite. Consider offering to write it.
+**Branch on the outcome:** the probability branch is settled — `proba` exists, so proceed to
+Phase 3 as designed and drop the majority-vote fallback. The live branch is now the column
+convention: *if 2,000 names in `features := [...]` proves unworkable and no list-valued form
+exists*, the upstream PR moves from "nice to have" to a prerequisite. Consider offering to write
+it. A second upstream candidate is `n_estimators` (their milestone M3) — but that is their
+roadmap already, so ask before building.
 
 ---
 
@@ -328,7 +431,10 @@ step.
 
 | Risk | Phase | Mitigation |
 |---|---|---|
-| `tabfm_classify` won't return probabilities | 2 | Gate the project on it; majority-vote fallback, quantified in Python first |
+| ~~`tabfm_classify` won't return probabilities~~ | 2 | **Retired** — swan confirms `proba` exists |
+| `e=8` unreachable, so we can't match the paper's config | 2, 5 | Decide `e=1` vs. own ensembling *before* measuring; record the choice beside every accuracy number |
+| Row identity lost across the G classify calls | 2, 3 | No passthrough-id column exists; deterministic ordering, else swan's `ROW_NUMBER() OVER (ORDER BY hash(pk))` rowid-as-feature |
+| Averaging `yhat_score` instead of `proba` | 3 | Silently produces accuracy 1.0 with sub-chance AUROC; swan hit this for real |
 | **AMP silently corrupts accuracy numbers** | 1 | Resolved: default is `"auto"` → fp16 on any CUDA device. Force `inference_precision=torch.float32` everywhere; CPU≡GPU checks count only with both pinned to fp32 |
 | Kernel-generation spec mismatch Python↔C++ | 1→4 | Portable PRNG spec + golden vectors, decided in Phase 1 |
 | 2,000-column SQL calling convention unusable | 2 | Upstream list-valued features PR |

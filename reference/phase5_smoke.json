@@ -1,0 +1,31 @@
+{
+  "dataset": "Coffee",
+  "model": "tabicl-v2",
+  "config": {
+    "num_kernels": 1000,
+    "n_groups": 4,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0
+  },
+  "shape": {
+    "dataset": "Coffee",
+    "n_train": 28,
+    "n_test": 28,
+    "n_timepoints": 286,
+    "raw_parquet": "C:/Users/maxde/duckdb-rocket/data/phase5/Coffee/raw.parquet"
+  },
+  "accuracy": 1.0,
+  "row_alignment": {
+    "predicted_rows": 28,
+    "distinct_ids": 28,
+    "group_rows": 112,
+    "min_groups_per_row": 4,
+    "max_groups_per_row": 4
+  },
+  "failures": [],
+  "seconds": 13.3,
+  "comparison": null,
+  "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
+}

@@ -25,7 +25,16 @@
     "max_groups_per_row": 4
   },
   "failures": [],
-  "seconds": 13.3,
-  "comparison": null,
+  "seconds": 14.0,
+  "comparison": {
+    "phase3_report": "reference\\phase3_smoke.json",
+    "phase3_accuracy": 1.0,
+    "phase5_accuracy": 1.0,
+    "delta": 0.0,
+    "identical_accuracy": true,
+    "rows_compared": 28,
+    "rows_agreeing": 28,
+    "identical_predictions": true
+  },
   "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
 }

@@ -257,10 +257,12 @@ def main() -> int:
     print(f"  row alignment: {facts['distinct_ids']}/{n_test} ids, "
           f"{facts['group_rows']} group-rows, "
           f"{facts['min_groups_per_row']}-{facts['max_groups_per_row']} groups per row")
-    for failure in failures:
-        print(f"  FAIL: {failure}", file=sys.stderr)
-
     # The end-to-end statement: C++ features must be interchangeable with the oracle's.
+    #
+    # Compared per row, not by accuracy. Two runs can reach identical accuracy while disagreeing
+    # about which rows they got right, so equal accuracy is consistent with the C++ transform
+    # being subtly wrong -- it is the weaker claim, and the weaker claim is not the one worth
+    # making here.
     comparison = None
     if args.compare and args.compare.exists():
         phase3 = json.loads(args.compare.read_text(encoding="utf-8"))
@@ -275,6 +277,34 @@ def main() -> int:
         print(f"\n  Phase 3 (python features): {phase3['accuracy']:.4f}")
         print(f"  Phase 5 (C++ features):    {accuracy:.4f}")
         print(f"  delta:                     {delta:+.4f}")
+
+        # Phase 3's test table is test-rows-only, so its ids start at 0; Phase 5 keeps train and
+        # test in one table, so its test ids start at n_train. Align by that offset rather than
+        # by position.
+        phase3_predictions = ROOT / "data" / "phase3" / args.dataset / "predictions.json"
+        if phase3_predictions.exists():
+            other = {
+                int(r["id"]): r["yhat"]
+                for r in json.loads(phase3_predictions.read_text(encoding="utf-8"))
+            }
+            if len(other) == len(by_id):
+                offset = min(by_id) - min(other)
+                agree = sum(1 for k, v in other.items() if by_id.get(k + offset) == v)
+                comparison["rows_compared"] = len(other)
+                comparison["rows_agreeing"] = agree
+                comparison["identical_predictions"] = agree == len(other)
+                print(f"  per-row agreement:         {agree}/{len(other)}")
+                if agree != len(other):
+                    failures.append(
+                        f"C++ and Python features disagree on {len(other) - agree} rows"
+                    )
+            else:
+                comparison["rows_compared"] = None
+                print("  per-row agreement:         skipped (row counts differ)")
+
+    # Printed last so that failures found during the comparison are reported too.
+    for failure in failures:
+        print(f"  FAIL: {failure}", file=sys.stderr)
 
     report = {
         "dataset": args.dataset,

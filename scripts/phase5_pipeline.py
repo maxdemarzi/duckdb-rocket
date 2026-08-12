@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -434,6 +435,29 @@ def main() -> int:
     for failure in failures:
         print(f"  FAIL: {failure}", file=sys.stderr)
 
+    # Where this number came from, recorded rather than assumed. PLAN.md's rule is that every
+    # number in a table comes from a pod; a report that cannot say which it is cannot be checked
+    # against that rule. A cgroup limit is the observable that distinguishes a container from
+    # the bare box -- it is what the budget lookup already found.
+    containerised = budget_source.startswith("cgroup")
+    environment = {
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "python": platform.python_version(),
+        "cpu_count": os.cpu_count(),
+        "containerised": containerised,
+    }
+    if platform.system() == "Windows":
+        caveat = ("local Windows timing on a contended box. WDDM spills to host RAM instead of "
+                  "raising OOM, so local timings are not trustworthy even directionally "
+                  "(PLAN.md); PLAN.md requires reported numbers to come from a pod")
+    elif not containerised:
+        caveat = ("no cgroup limit found, so this is a bare box rather than a pod; PLAN.md "
+                  "requires reported numbers to come from a pod")
+    else:
+        caveat = None
+
     report = {
         "dataset": args.dataset,
         "model": MODEL,
@@ -457,8 +481,11 @@ def main() -> int:
         "failures": failures,
         "seconds": round(seconds, 1),
         "comparison": comparison,
-        "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers "
-                  "to come from a pod",
+        "environment": environment,
+        # Observed, not hardcoded. This string used to say "local Windows timing on a contended
+        # box" unconditionally, so every pod run -- the whole point of which is to produce
+        # reportable numbers -- archived itself as unreportable.
+        "caveat": caveat,
     }
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")

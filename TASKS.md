@@ -1,14 +1,19 @@
 # Open tasks — handoff at 2026-08-12 11:50 (machine restart)
 
-## ⚠ LIVE POD — `hwkx2c4ceogn71` is billing right now
-
-Created 2026-08-12 after the restart, for the ItalyPowerDemand / ECG5000 runs.
+## ⚠ LIVE POD — `7lewu2k1gpbrj5` is billing right now
 
     python scripts/pod/runpod_cpu.py check
-    python scripts/pod/runpod_cpu.py terminate hwkx2c4ceogn71 --yes-destroy-the-volume
+    python scripts/pod/runpod_cpu.py ssh 7lewu2k1gpbrj5
+    python scripts/pod/runpod_cpu.py terminate 7lewu2k1gpbrj5 --yes-destroy-the-volume
 
-`duckdb-rocket-cpu-sweep`, 16 vCPU, **32 GB RAM** (29 GB cgroup ceiling), ~$0.56/hr.
-**Terminate it when done.** ssh: `python scripts/pod/runpod_cpu.py ssh hwkx2c4ceogn71`.
+`duckdb-rocket-cpu-64g`, 32 vCPU, **64 GB**, ~$1.12/hr. **Terminate it when done.**
+`volumeInGb: 0` again, so nothing on it survives termination — fetch before terminating.
+
+Exists only for ECG5000, which needs ~29 GB and could not fit the previous pod's 29.8 GB
+ceiling. The nine other datasets are already fetched and committed.
+
+**Predecessor `hwkx2c4ceogn71` (16 vCPU / 29 GB) was terminated 2026-08-12** after its nine
+results were fetched. Do not go looking for it.
 
 ### Before terminating — nothing on this pod survives it (`volumeInGb: 0`)
 

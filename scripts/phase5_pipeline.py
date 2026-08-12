@@ -154,79 +154,82 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         for lo in range(0, n_test, size)
     ]
 
+    # Every relation the classify statement names is created ONCE and refilled in place, so that
+    # statement's text never varies and DuckDB plans it once instead of once per chunk.
+    #
+    # The alternative -- a distinctly-named view per (group, chunk) -- makes every call a
+    # separate statement to parse, bind and optimise, and drags the {n_features}-name
+    # `features := [...]` argument along with it. On ECG5000 that was 1440 statements and 7.6 MB
+    # of SQL, of which 74% was that one argument repeated; an earlier form reached 18.7 MB and
+    # was OOM-killed at 18.3s. Here the argument appears once, in the PREPARE.
+    #
+    # PREPARE over a statement containing tabfm_classify, and EXECUTE re-reading the refilled
+    # contents, were both verified against the real extension before this was written.
+    schema_cols = ", ".join(f"{n} DOUBLE" for n in names)
+    parts.append(f"""
+CREATE OR REPLACE TABLE feat_cur (id BIGINT, split VARCHAR, label VARCHAR, f DOUBLE[]);
+CREATE OR REPLACE TABLE train_cur (y VARCHAR, {schema_cols});
+CREATE OR REPLACE TABLE test_cur ({schema_cols});
+-- Only the two columns the join reads (swan PERFORMANCE_TUNING.md 1).
+CREATE OR REPLACE TABLE test_src_cur (id BIGINT, f0 DOUBLE);
+-- MAP(VARCHAR, DOUBLE) is what anofox_tabfm bc6d8af returns, checked rather than assumed. A
+-- version that changes it fails loudly on the first INSERT rather than silently coercing.
+CREATE OR REPLACE TABLE all_groups (grp BIGINT, id BIGINT, proba MAP(VARCHAR, DOUBLE));
+
+PREPARE fill_feat AS
+  INSERT INTO feat_cur
+  SELECT id, split, label,
+         rocket_transform(values, {config.kernels_per_group}, {config.seed},
+                          CAST($1 AS BIGINT))
+  FROM raw;
+
+PREPARE fill_train AS
+  INSERT INTO train_cur SELECT label, {projection} FROM feat_cur WHERE split = 'train';
+
+PREPARE fill_test AS
+  INSERT INTO test_cur SELECT {projection} FROM feat_cur
+   WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
+
+PREPARE fill_src AS
+  INSERT INTO test_src_cur SELECT id, f[1] FROM feat_cur
+   WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
+
+-- test_cur omits the target: tabfm_classify unions train and test BY NAME, and a target present
+-- in both is a duplicate-name binder error naming neither cause (Phase 2).
+PREPARE score AS
+  INSERT INTO all_groups
+  SELECT CAST($1 AS BIGINT), s.id, c.proba
+  FROM tabfm_classify('train_cur', 'y', test := 'test_cur',
+                      model := '{MODEL}', features := {feature_list}) c
+  JOIN test_src_cur s ON s.f0 = c.f0;
+""")
+
     for g in range(config.n_groups):
         first_kernel = g * config.kernels_per_group
+        # DELETE rather than CREATE OR REPLACE: replacing the table swaps the catalog entry the
+        # prepared statements are bound to. Refilling keeps the entry, which is the whole point.
         parts.append(f"""
 -- Group {g}: global kernel indices [{first_kernel}, {first_kernel + config.kernels_per_group}).
--- Materialised as a TABLE, not a VIEW: the train and test projections below each reference it,
--- and a view would recompute the whole transform per reference.
-CREATE OR REPLACE TABLE feat_g{g} AS
-SELECT id, split, label,
-       rocket_transform(values, {config.kernels_per_group}, {config.seed}, {first_kernel}) AS f
-FROM raw;
-
-CREATE OR REPLACE VIEW train_g{g} AS
-    SELECT label AS y, {projection} FROM feat_g{g} WHERE split = 'train';
-
+DELETE FROM feat_cur;
+EXECUTE fill_feat({first_kernel});
 INSERT INTO f0_checks
-SELECT {g}, count(*) - count(DISTINCT f[1]) FROM feat_g{g} WHERE split = 'test';
-
--- The {n_features}-column projection is spelled out ONCE per group here; the chunk views below
--- select from it by row window instead of repeating it. Written the other way, the SQL text
--- grows as groups x chunks x features: ECG5000 at 40 x 36 x 500 produced an 18.7 MB script that
--- was OOM-killed in the planner at 18.3s, before a single classify call ran. Chunking had fixed
--- the model's memory and moved the problem into the query text.
-CREATE OR REPLACE VIEW test_all_g{g} AS
-    SELECT id, {projection} FROM feat_g{g} WHERE split = 'test';
+SELECT {g}, count(*) - count(DISTINCT f[1]) FROM feat_cur WHERE split = 'test';
+DELETE FROM train_cur;
+EXECUTE fill_train;
 """)
-        # One classify call per chunk of test rows. This is not an approximation: an in-context
-        # learner treats each test row as an independent query against the train context, so a
-        # row's prediction cannot depend on which other rows shared its call. What it does change
-        # is peak memory, which is set by the widest call rather than by the dataset -- the
-        # 500 feature columns for 1029 rows are 4 MB, while the call holding all of them reached
-        # 29.8 GB and was OOM-killed. Proven identical on GunPoint before being relied on.
-        scored_parts = []
-        for c, (lo, hi) in enumerate(bounds):
-            # No split predicate: test_all_g{g} is already test-only, and it does not carry a
-            # `split` column for one to reference.
-            window = f"id >= {lo} AND id < {hi}"
-            scored_parts.append(f"SELECT id, proba FROM scored_g{g}_c{c}")
-            parts.append(f"""
--- The test view omits the target: tabfm_classify unions train and test BY NAME, and a target
--- present in both is a duplicate-name binder error naming neither cause (Phase 2). EXCLUDE
--- drops the id without naming the {n_features} columns that stay.
-CREATE OR REPLACE VIEW test_g{g}_c{c} AS
-    SELECT * EXCLUDE (id) FROM test_all_g{g} WHERE {window};
--- Only the two columns the join below actually reads, rather than all {n_features}
--- (swan's PERFORMANCE_TUNING.md 1, "don't compute what the consumer never reads").
-CREATE OR REPLACE VIEW test_src_g{g}_c{c} AS
-    SELECT id, f0 FROM test_all_g{g} WHERE {window};
+        # One classify call per chunk of test rows. Not an approximation: an in-context learner
+        # treats each test row as an independent query against the train context, so a row's
+        # prediction cannot depend on which other rows shared its call. What it changes is peak
+        # memory, which is set by the widest call rather than by the dataset. Verified identical
+        # on GunPoint -- 150/150 rows, 0 disagreements -- before being relied on.
+        for lo, hi in bounds:
+            parts.append(
+                f"DELETE FROM test_cur; DELETE FROM test_src_cur;\n"
+                f"EXECUTE fill_test({lo}, {hi}); EXECUTE fill_src({lo}, {hi});\n"
+                f"EXECUTE score({g});"
+            )
 
-CREATE OR REPLACE TABLE scored_g{g}_c{c} AS
-SELECT s.id, c.proba
-FROM tabfm_classify('train_g{g}', 'y', test := 'test_g{g}_c{c}',
-                    model := '{MODEL}', features := {feature_list}) c
-JOIN test_src_g{g}_c{c} s ON s.f0 = c.f0;
-""")
-
-        union_chunks = "\n  UNION ALL\n  ".join(scored_parts)
-        drops = "\n".join(f"DROP TABLE scored_g{g}_c{c};" for c in range(len(bounds)))
-        parts.append(f"""
-CREATE OR REPLACE TABLE scored_g{g} AS
-SELECT id, {g} AS grp, proba FROM (
-  {union_chunks}
-);
-
-{drops}
-DROP TABLE feat_g{g};
-""")
-
-    union = "\n  UNION ALL\n".join(
-        f"  SELECT id, grp, proba FROM scored_g{g}" for g in range(config.n_groups)
-    )
     parts.append(f"""
-CREATE OR REPLACE TABLE all_groups AS
-{union};
 
 -- Average `proba`, keyed on the class label from the map. Never `yhat_score`: it is confidence
 -- in whichever class was predicted, not P(class), and swan measured it yielding accuracy 1.0

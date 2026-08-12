@@ -54,12 +54,38 @@ Why this is a wall and not bad luck:
 | ECG5000 | 4500 | 500 | not attempted |
 
 Every completed dataset is ≤300 test rows. ItalyPowerDemand is the first past that line and it
-blew up 3.4× beyond the largest one that worked. ECG5000 is 4.4× ItalyPowerDemand's rows again,
-with a 500-row context. **Do not attempt ECG5000 locally.**
+blew up 3.4× beyond the largest one that worked.
 
-The memory goes to the 40 per-group feature tables: 4500 rows x 500 features x 40 groups is
-~2.9 GB of doubles before any join or intermediate. The generated SQL for ItalyPowerDemand alone
-was 1,133,701 characters.
+**Where the memory actually goes — corrected.** The first guess written here was "the 40
+per-group feature tables". That was wrong by three orders of magnitude: 500 features x 1029 rows
+is ~4 MB. The memory is inside the single `tabfm_classify` call, in ONNX allocations DuckDB's
+buffer manager never sees — which is why `SET memory_limit` and `--threads 1` changed nothing.
+The 6 GB limit run died *faster* (10.2s) than the 20 GB one (25.9s).
+
+## RESOLVED — chunk the classify call
+
+`--test-chunk N` issues one `tabfm_classify` per N test rows instead of one for the whole split.
+Peak memory becomes a function of N rather than of the dataset.
+
+**It is identity-preserving, and that was verified rather than argued.** An in-context learner
+treats each test row as an independent query against the train context, so a row's prediction
+cannot depend on which other rows shared its call. The control: GunPoint at `--test-chunk 50`
+against its own unchunked run, same pod, same commit — **150/150 ids, 0 rows disagreeing**.
+Accuracy alone would not have settled it; two runs can match on accuracy and disagree on which
+rows they got right.
+
+**It is nearly free.** Chunked GunPoint 248.7s vs 258s unchunked. 3x the classify calls, no
+measurable cost — the model load amortises across calls.
+
+**This supersedes the "no pod size fixes ECG5000" claim made earlier in this session.** That
+extrapolated ~120 GB for ECG5000 from a two-point linear fit. With the peak bounded by chunk
+size instead, ECG5000's 4500 rows are ~36 calls per group at the same ~12 GB ceiling, and the
+29 GB pod is sufficient. Runtime, not memory, is now the open question for it.
+
+Note the axis. swan's `predict_ensemble()` caps `context_rows` — the *train* side — which does
+change predictions and is why they call it an ensemble. This chunks the *test* side, which does
+not. Our train contexts are 50-67 rows across these datasets while test rows go 150 -> 4500, so
+the test axis was the one that mattered here; swan's lever would not have helped.
 
 ### DECIDED: pod only. Do not run ItalyPowerDemand or ECG5000 locally again.
 

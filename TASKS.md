@@ -40,16 +40,43 @@ The memory goes to the 40 per-group feature tables: 4500 rows x 500 features x 4
 ~2.9 GB of doubles before any join or intermediate. The generated SQL for ItalyPowerDemand alone
 was 1,133,701 characters.
 
-### Next step — pick one
+### DECIDED: pod only. Do not run ItalyPowerDemand or ECG5000 locally again.
 
-1. **Run both on a pod.** PLAN.md line 496 already specifies a pod for this
-   (`Run the 10-dataset subset on a pod`), and the standing risk table says reported numbers come
-   from pods, not the 3060. This is the path PLAN.md already chose. Needs `TABPFN_TOKEN` injected
-   (see `token.txt`, gitignored) and a `check` before and after — a forgotten pod bills silently.
-2. **Make the pipeline stream groups instead of materializing all 40**, then retry locally. This
-   is real work in `scripts/phase5_pipeline.py`, and it changes what is being measured.
+Owner's instruction, 2026-08-12. This matches PLAN.md line 496 (`Run the 10-dataset subset on a
+pod`) and the standing rule that every number in a table comes from a pod, not the 3060.
 
-Option 1 is what the plan says. Option 2 is only worth it if the pod lane stays blocked.
+Use `scripts/pod/runpod_cpu.py` — a CPU pod is correct here, not GPU: `anofox_tabfm`'s ONNX
+Runtime is CPU-only, and the project already paid 140 minutes for an idle GPU card learning that.
+
+    python scripts/pod/runpod_cpu.py check                    # read-only, run before AND after
+    python scripts/pod/runpod_cpu.py plan                     # read-only
+    python scripts/pod/runpod_cpu.py create --yes-i-will-pay  # billable
+    python scripts/pod/runpod_cpu.py ssh POD_ID               # prints the bootstrap line
+    python scripts/pod/runpod_cpu.py terminate POD_ID --yes-destroy-the-volume
+
+Defaults: 16 vCPU, ~$0.56/hr, 60 GB container + 40 GB volume. Credentials are present
+(`~/.runpod/token.txt`, ssh pubkey). `TABPFN_TOKEN` must be injected into the pod — local runs
+read a cached token that pods do not have.
+
+**Open question for the pod run:** ItalyPowerDemand needed 25.7 GB. Confirm the chosen CPU flavor
+has headroom before starting ECG5000, which is 4.4x larger. Check RAM on the pod first rather
+than discovering it the way this machine did.
+
+**Not chosen:** making the pipeline stream groups rather than materialize all 40
+(`scripts/phase5_pipeline.py`). Only revisit if the pod lane turns out to be blocked — it is real
+work and it changes what is being measured.
+
+### `check` output at handoff time
+
+    vii1yh4zx07q6d   pattern-arm-D          RUNNING   GPU   $0.44/hr
+    4f1zckwdzemdfy   pattern-arm-h15        RUNNING   GPU   $0.44/hr
+    k8uts5vfewfn98   pattern-arm-7B         RUNNING   GPU   $0.44/hr
+    8nfeg9gejlwqbz   duckdb-rocket-sweep    EXITED    GPU   $0.74/hr
+
+Three pods are RUNNING and billing $1.32/hr combined. **The `pattern-arm-*` pods were not
+touched** — the account is shared and they are not this project's. Confirm ownership before
+acting on them. `duckdb-rocket-sweep` is this project's old GPU pod, EXITED; worth checking
+whether its volume is still billing.
 
 ## Not done: PLAN.md is stale
 

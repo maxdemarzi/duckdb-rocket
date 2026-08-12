@@ -1,0 +1,9 @@
+﻿.venv/
+__pycache__/
+tools/
+data/
+*.duckdb
+*.parquet
+
+# Golden vectors are conformance fixtures for the C++ extension — they ship with the repo.
+!reference/golden/*.parquet

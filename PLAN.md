@@ -414,8 +414,13 @@ the prior measurements to interpret the result against. Cheap — one argument, 
       fixtures pass at 1e-9, max abs diff 1.8e-15, PPV differences exactly 0. The offset
       fixture (global kernel index 9,000) is the one that matters: it proves `first_kernel`
       addresses into one bank rather than reseeding
-- [ ] Multivariate support (random channel subsets per kernel) — still unspecified in SPEC.md 7
-- [ ] Variable-length series handling — still unspecified in SPEC.md 7
+- [x] Multivariate support (random channel subsets per kernel) — **specified** in SPEC.md 7 and
+      implemented in both the oracle and the extension's `DOUBLE[][]` overload. PPV differences
+      exactly 0 against the oracle at 1/2/3/6/12 channels. The load-bearing rule is 7.1: at one
+      channel *no channel draw is made*, so the univariate stream — and every committed golden
+      vector — is untouched. **The pipeline still cannot run a multivariate dataset**:
+      `phase5_pipeline.py` writes one `DOUBLE[]` per row, so `BasicMotions` remains skipped
+- [ ] Variable-length series handling — still unspecified in SPEC.md 8
 - [x] Parallelize across rows using DuckDB's execution model — comes free from the scalar
       function; visible as speedup that grows with row count (1.7× at 200 rows, 7.1× at 4,000)
 - [x] Benchmark vs. the Python implementation — `scripts/benchmark_transform.py`

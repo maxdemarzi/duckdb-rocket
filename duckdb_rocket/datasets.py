@@ -34,7 +34,15 @@ class DatasetSpec:
 
     @property
     def runnable(self) -> bool:
-        """False for anything the current transform cannot handle."""
+        """False for anything the end-to-end pipeline cannot handle yet.
+
+        Multivariate *kernels* exist now (SPEC.md 7, in both the Python oracle and the
+        extension's `DOUBLE[][]` overload), so this is no longer a statement about the
+        transform. What is still missing is the pipeline around it: `phase5_pipeline.py` writes
+        one `DOUBLE[]` per row and `load()` squeezes a single channel, so a 6-channel dataset
+        has nowhere to go between the loader and `tabfm_classify`. Kept as a marked skip with a
+        reason rather than quietly dropped.
+        """
         return not self.multivariate
 
 
@@ -56,7 +64,7 @@ UCR_SUBSET: tuple[DatasetSpec, ...] = (
         4,
         40,
         multivariate=True,
-        note="6 channels; requires multivariate kernel support (not yet implemented)",
+        note="6 channels; kernels handle this (SPEC.md 7) but the pipeline does not yet",
     ),
 )
 

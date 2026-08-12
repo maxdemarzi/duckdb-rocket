@@ -170,6 +170,14 @@ CREATE OR REPLACE VIEW train_g{g} AS
 
 INSERT INTO f0_checks
 SELECT {g}, count(*) - count(DISTINCT f[1]) FROM feat_g{g} WHERE split = 'test';
+
+-- The {n_features}-column projection is spelled out ONCE per group here; the chunk views below
+-- select from it by row window instead of repeating it. Written the other way, the SQL text
+-- grows as groups x chunks x features: ECG5000 at 40 x 36 x 500 produced an 18.7 MB script that
+-- was OOM-killed in the planner at 18.3s, before a single classify call ran. Chunking had fixed
+-- the model's memory and moved the problem into the query text.
+CREATE OR REPLACE VIEW test_all_g{g} AS
+    SELECT id, {projection} FROM feat_g{g} WHERE split = 'test';
 """)
         # One classify call per chunk of test rows. This is not an approximation: an in-context
         # learner treats each test row as an independent query against the train context, so a
@@ -179,19 +187,20 @@ SELECT {g}, count(*) - count(DISTINCT f[1]) FROM feat_g{g} WHERE split = 'test';
         # 29.8 GB and was OOM-killed. Proven identical on GunPoint before being relied on.
         scored_parts = []
         for c, (lo, hi) in enumerate(bounds):
-            window = f"split = 'test' AND id >= {lo} AND id < {hi}"
+            # No split predicate: test_all_g{g} is already test-only, and it does not carry a
+            # `split` column for one to reference.
+            window = f"id >= {lo} AND id < {hi}"
             scored_parts.append(f"SELECT id, proba FROM scored_g{g}_c{c}")
             parts.append(f"""
 -- The test view omits the target: tabfm_classify unions train and test BY NAME, and a target
--- present in both is a duplicate-name binder error naming neither cause (Phase 2).
+-- present in both is a duplicate-name binder error naming neither cause (Phase 2). EXCLUDE
+-- drops the id without naming the {n_features} columns that stay.
 CREATE OR REPLACE VIEW test_g{g}_c{c} AS
-    SELECT {projection} FROM feat_g{g} WHERE {window};
--- Only the two columns the join below actually reads. This view used to project all
--- {n_features} features, of which 498 were computed, hashed into the join and discarded
--- (swan's PERFORMANCE_TUNING.md 1, "don't compute what the consumer never reads"). Small
--- next to the classify call -- 4 MB against gigabytes -- so this is tidiness, not the fix.
+    SELECT * EXCLUDE (id) FROM test_all_g{g} WHERE {window};
+-- Only the two columns the join below actually reads, rather than all {n_features}
+-- (swan's PERFORMANCE_TUNING.md 1, "don't compute what the consumer never reads").
 CREATE OR REPLACE VIEW test_src_g{g}_c{c} AS
-    SELECT id, f[1] AS f0 FROM feat_g{g} WHERE {window};
+    SELECT id, f0 FROM test_all_g{g} WHERE {window};
 
 CREATE OR REPLACE TABLE scored_g{g}_c{c} AS
 SELECT s.id, c.proba

@@ -243,9 +243,11 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   That is enough to rule out a one-dataset fluke and nowhere near enough to compare against the
   paper. The multivariate case is excluded by construction, and the larger datasets
   (`ECG5000`, `ItalyPowerDemand`, `OSULeaf`, `SyntheticControl`) were skipped for runtime.
-- **Upstream reports.** Two are worth filing against `DataZooDE/anofox-tabfm` — the
-  checkpoint/graph mismatch and the `LIST`-column internal error — but filing on a third-party
-  repo is the maintainer's call to invite, so they are written up here rather than submitted.
+- **Re-measuring on the correct backbone.** Every accuracy number here uses `tabicl-v2`, because
+  `tabpfn-v2-5` would not load. That is fixed in `anofox_tabfm v2026.08.11`, which the community
+  repository does not serve yet. Once it lands, the whole subset is worth re-running on the
+  paper's actual model — and `tabpfn-v3` becomes available too. **Anything measured before then
+  is measured on a substitute.**
 *(Resolved during the session: `test/sql/rocket.test` now runs through DuckDB's own
 sqllogictest runner — **12 assertions, all passing** — via `scripts/build_extension.bat tests`.
 Two traps were worth fixing on the way: the runner registers tests under a canonical

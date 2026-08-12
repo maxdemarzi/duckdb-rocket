@@ -41,9 +41,10 @@ estimators at 1. So this project uses **G=40 groups of 250 kernels** (500 featur
 keeps the paper's 10,000-kernel budget and its averaging structure while letting a single
 estimator see a whole group.
 
-**`tabpfn-v2-5` does not currently load through `anofox_tabfm`** (version `bc6d8af`): the
-published checkpoint no longer matches anofox's bundled ONNX graph. `tabicl-v2` works and is
-what the pipeline uses by default. Details and reproduction in
+**`tabpfn-v2-5` does not load through the `anofox_tabfm` build the community repository serves**
+(`bc6d8af` / `v2026.08.07`), so `tabicl-v2` is the pipeline's default backbone. This is **fixed
+upstream in `v2026.08.11`** — the fix has simply not reached the community build yet, and the
+checkpoint also needs running through their `convert_weights.py`. Details in
 [reference/PHASE2_FINDINGS.md](reference/PHASE2_FINDINGS.md).
 
 ### What has been measured

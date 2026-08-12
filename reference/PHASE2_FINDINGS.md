@@ -22,7 +22,28 @@ Together these mean the intended composition works, but **the group width must c
 
 ---
 
-## 1. `tabpfn-v2-5` is broken in this build — BLOCKING for the intended backbone
+## 1. `tabpfn-v2-5` is broken in this build — **fixed upstream in `v2026.08.11`**
+
+> **Update (2026-08-12).** This is fixed, and it was fixed the day before we hit it. Release
+> [`v2026.08.11`](https://github.com/DataZooDE/anofox-tabfm/releases/tag/v2026.08.11) — *"Fixed:
+> three models could not load real weights"* — reports that `tabpfn-v2`, `tabpfn-v2-5` and
+> `orion-bix` all failed against real weights while passing their fixture tests: the converter
+> writes `model.safetensors` but the manifests declare the downloadable `model.ckpt`, and
+> nothing pointed at the converter's output. The engine now prefers a sibling
+> `model.safetensors`, and the misleading *"corrupted — re-download it"* message below has been
+> replaced by one that names `convert_weights.py`. No issue was filed, because there was nothing
+> left to report.
+>
+> **We do not have the fix yet.** The community repository still serves `bc6d8af`
+> (`v2026.08.07`), so `FORCE INSTALL ... FROM community` is a no-op. Getting `tabpfn-v2-5`
+> requires either waiting for the community rebuild or vendoring the tag from source, and the
+> checkpoint additionally has to be run through `convert_weights.py`.
+>
+> **The same release adds `tabpfn-v3`** as a seventh built-in model, with a stated export parity
+> of 2.4e-07 for classification.
+>
+> Everything below stands as the record of what `bc6d8af` does, which is still what an
+> installing user gets today.
 
 `tabfm_download('classification', model := 'tabpfn-v2-5')` succeeds (42,935,499 bytes from
 `Prior-Labs/tabpfn_2_5@main`), but any `tabfm_classify` against it fails:
@@ -151,14 +172,15 @@ Undocumented but useful: **`is_training`** distinguishes context rows from score
 
 ## For upstream
 
-Not filed — these are third-party repositories and filing is the maintainer's call to invite.
-Two are worth reporting to `DataZooDE/anofox-tabfm`:
-
-1. **`tabpfn-v2-5` checkpoint/graph mismatch** (finding 1). The error advises re-downloading,
-   which cannot help, since the pin is `@main` and upstream has moved. High value: the model is
-   simply unusable, and the message points away from the cause.
-2. **`Run() called with null input buffers`** on a `LIST`-valued feature column (finding 5).
-   An internal assertion where a binder error belongs.
+1. ~~**`tabpfn-v2-5` checkpoint/graph mismatch**~~ — **already fixed** in `v2026.08.11`, along
+   with the misleading error message. Not filed; there was nothing left to report. Checking the
+   release notes before writing the issue is what caught this.
+2. **`Run() called with null input buffers`** on a `LIST`-valued feature column (finding 5) —
+   **filed as [anofox-tabfm#17](https://github.com/DataZooDE/anofox-tabfm/issues/17)**.
+   Confirmed still open before filing: `src/tabfm_preprocess.cpp` and `src/tabfm_ort_engine.cpp`
+   are byte-identical between `bc6d8af` and `v2026.08.11`. The cause is `GetFeatureKind`'s
+   categorical fallback, which is correct for scalar unknowns like `BLOB` but swallows nested
+   types, so the failure only surfaces in the ONNX engine long after the type is gone.
 
 The two upstream PRs PLAN.md anticipated are both moot: list-valued features are a bug report
 rather than a feature request, and probability output already exists. `n_estimators` is

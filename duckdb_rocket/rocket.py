@@ -317,18 +317,25 @@ def transform(x: np.ndarray, kernels: Kernels) -> np.ndarray:
     if x.ndim != 2:
         raise ValueError(f"expected 2-D (n_series, n_timepoints), got shape {x.shape}")
 
-    n_series, n = x.shape
+    n = x.shape[1]
     if n != kernels.n_timepoints:
         # Not a soft warning. Dilations were drawn against a specific series length, so a
         # different length here silently produces features that are not comparable with the
         # ones the classifier was given as context -- the kind of mistake that shows up as a
-        # mediocre accuracy number rather than as an error. Variable-length support is a
-        # deliberate later step, not something to allow by accident.
+        # mediocre accuracy number rather than as an error. For genuinely ragged data use
+        # `transform_variable`, which makes the reference length explicit (SPEC.md 8).
         raise ValueError(
             f"series length {n} does not match the {kernels.n_timepoints} these kernels were "
-            f"generated for; regenerate the bank or resample the series"
+            f"generated for; regenerate the bank, resample the series, or use "
+            f"transform_variable for ragged input"
         )
 
+    return _transform_fixed(x, kernels)
+
+
+def _transform_fixed(x: np.ndarray, kernels: Kernels) -> np.ndarray:
+    """The univariate transform proper, with the length check already done."""
+    n_series = x.shape[0]
     features = np.empty((n_series, kernels.num_features), dtype=np.float64)
     for i in range(kernels.num_kernels):
         lo, hi = kernels.offsets[i], kernels.offsets[i + 1]
@@ -383,6 +390,87 @@ def _transform_multivariate(x: np.ndarray, kernels: Kernels) -> np.ndarray:
         features[:, 2 * i + 1] = ppv
 
     return features
+
+
+def transform_variable(series: list, kernels: Kernels) -> np.ndarray:
+    """Apply one bank to series of **differing lengths** (SPEC.md 8).
+
+    `series` is a list of 1-D arrays (univariate) or 2-D `(n_channels, n_timepoints)` arrays
+    (multivariate). The bank is used unchanged for every one of them, which is the whole point:
+    a classifier compares feature `j` across rows, so column `j` has to come from the same
+    kernel every time. Generating a bank per row from that row's own length -- the obvious
+    implementation, since each series carries its length -- produces a well-formed matrix in
+    which every row was measured with a different instrument.
+
+    Every series must be at least `kernels.n_timepoints` long. That is what makes the bank safe
+    to apply: the dilation bound guarantees the kernel span fits inside `n_timepoints`, so any
+    longer series admits `output_length >= 1` structurally. Shorter series are rejected rather
+    than padded, because padding would fabricate data and change what the features measure.
+
+    **`max` is biased upward by series length** and PPV is not; see SPEC.md 8.3. If length
+    correlates with the label, half the features carry that correlation directly.
+    """
+    if not series:
+        raise ValueError("no series given")
+
+    features = np.empty((len(series), kernels.num_features), dtype=np.float64)
+    for row, item in enumerate(series):
+        x = np.asarray(item, dtype=np.float64)
+        if kernels.is_multivariate:
+            if x.ndim != 2:
+                raise ValueError(
+                    f"series {row} has shape {x.shape}; a multivariate bank expects 2-D "
+                    f"(n_channels, n_timepoints) per series"
+                )
+            n = x.shape[1]
+        else:
+            if x.ndim == 2 and x.shape[0] == 1:
+                x = x[0]
+            if x.ndim != 1:
+                raise ValueError(
+                    f"series {row} has shape {x.shape}; a univariate bank expects 1-D per series"
+                )
+            n = x.shape[0]
+
+        if n < kernels.n_timepoints:
+            raise ValueError(
+                f"series {row} has {n} timepoints but the bank was drawn against "
+                f"{kernels.n_timepoints}; a shorter series is rejected rather than padded "
+                f"(SPEC.md 8.2). Regenerate the bank against the shortest series"
+            )
+
+        # One row at a time: the arrays are ragged, so there is nothing to batch over.
+        batched = x[None, :, :] if kernels.is_multivariate else x[None, :]
+        single = (
+            _transform_multivariate(batched, _rebound(kernels, n))
+            if kernels.is_multivariate
+            else _transform_fixed(batched, _rebound(kernels, n))
+        )
+        features[row] = single[0]
+
+    return features
+
+
+def _rebound(kernels: Kernels, n_timepoints: int) -> Kernels:
+    """The same bank, relabelled for a longer series.
+
+    Only `n_timepoints` changes, and it is used purely for the length check in the transform --
+    every kernel parameter is carried over untouched. This is what applying one bank to a
+    longer series means, and doing it by copy rather than by loosening the check keeps the
+    check itself strict everywhere else.
+    """
+    return Kernels(
+        n_timepoints=n_timepoints,
+        lengths=kernels.lengths,
+        weights=kernels.weights,
+        offsets=kernels.offsets,
+        biases=kernels.biases,
+        dilations=kernels.dilations,
+        paddings=kernels.paddings,
+        n_channels=kernels.n_channels,
+        channels=kernels.channels,
+        channel_offsets=kernels.channel_offsets,
+    )
 
 
 def normalize_series(x: np.ndarray) -> np.ndarray:

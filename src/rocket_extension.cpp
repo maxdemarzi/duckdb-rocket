@@ -11,7 +11,43 @@
 
 namespace duckdb {
 
-// rocket_transform(series, kernels_per_group, seed, first_kernel) -> DOUBLE[]
+// The reference length a bank is drawn against (SPEC.md 8).
+//
+// Without the optional fifth argument this is the row's own length, which is correct only when
+// every row is the same length. On ragged data that silently gives each row its OWN kernel
+// bank -- weights and lengths would match, but dilation and padding are drawn against `n`, so
+// one extra timepoint is enough to change them. The result is a well-formed feature matrix in
+// which every row was measured with a different instrument, and column `j` means nothing.
+//
+// A series shorter than the reference is rejected rather than padded: padding would fabricate
+// data and change what the features measure.
+static int64_t ReferenceLength(DataChunk &args, idx_t count, idx_t row, int64_t n) {
+	if (args.ColumnCount() < 5) {
+		return n;
+	}
+	UnifiedVectorFormat format;
+	args.data[4].ToUnifiedFormat(count, format);
+	const auto idx = format.sel->get_index(row);
+	if (!format.validity.RowIsValid(idx)) {
+		return n;
+	}
+	const auto reference = UnifiedVectorFormat::GetData<int64_t>(format)[idx];
+	if (reference < duckdb_rocket::KERNEL_LENGTHS[2]) {
+		throw InvalidInputException(
+		    "rocket_transform: n_reference %lld is shorter than the longest kernel (%d)",
+		    static_cast<long long>(reference), duckdb_rocket::KERNEL_LENGTHS[2]);
+	}
+	if (n < reference) {
+		throw InvalidInputException(
+		    "rocket_transform: series has %lld timepoints but n_reference is %lld; a series "
+		    "shorter than the reference is rejected rather than padded (SPEC.md 8.2). Draw the "
+		    "bank against the shortest series in the dataset",
+		    static_cast<long long>(n), static_cast<long long>(reference));
+	}
+	return reference;
+}
+
+// rocket_transform(series, kernels_per_group, seed, first_kernel[, n_reference]) -> DOUBLE[]
 //
 // The argument order deliberately mirrors the Python reference's
 // `generate_kernels(seed, n_timepoints, kernels_per_group, first_kernel)` plus `transform`, so
@@ -113,9 +149,11 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 			    static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
 		}
 
+		const auto n_reference = ReferenceLength(args, count, row, n);
+
 		const auto features = duckdb_rocket::Transform(
-		    series.data(), n, static_cast<uint64_t>(seed_data[seed_idx]), kernels_per_group,
-		    first_kernel);
+		    series.data(), n, n_reference, static_cast<uint64_t>(seed_data[seed_idx]),
+		    kernels_per_group, first_kernel);
 
 		for (size_t j = 0; j < features.size(); j++) {
 			result_data[offset + j] = features[j];
@@ -252,9 +290,11 @@ static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState
 			    static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
 		}
 
+		const auto n_reference = ReferenceLength(args, count, row, n);
+
 		const auto features = duckdb_rocket::TransformMultivariate(
-		    series.data(), n_channels, n, static_cast<uint64_t>(seed_data[seed_idx]),
-		    kernels_per_group, first_kernel);
+		    series.data(), n_channels, n, n_reference,
+		    static_cast<uint64_t>(seed_data[seed_idx]), kernels_per_group, first_kernel);
 
 		for (size_t j = 0; j < features.size(); j++) {
 			result_data[offset + j] = features[j];
@@ -272,15 +312,22 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// Two overloads on one name. Overload resolution is by argument type, so a DOUBLE[] series
 	// takes the univariate path and DOUBLE[][] the multivariate one -- and SPEC.md 7.1
 	// guarantees a single-channel DOUBLE[][] produces exactly what the DOUBLE[] form does.
+	const auto uni = LogicalType::LIST(LogicalType::DOUBLE);
+	const auto multi = LogicalType::LIST(LogicalType::LIST(LogicalType::DOUBLE));
+	const auto out = LogicalType::LIST(LogicalType::DOUBLE);
+	const auto i64 = LogicalType::BIGINT;
+
 	ScalarFunctionSet rocket_transform("rocket_transform");
-	rocket_transform.AddFunction(ScalarFunction(
-	    {LogicalType::LIST(LogicalType::DOUBLE), LogicalType::BIGINT, LogicalType::BIGINT,
-	     LogicalType::BIGINT},
-	    LogicalType::LIST(LogicalType::DOUBLE), RocketTransformFunction));
-	rocket_transform.AddFunction(ScalarFunction(
-	    {LogicalType::LIST(LogicalType::LIST(LogicalType::DOUBLE)), LogicalType::BIGINT,
-	     LogicalType::BIGINT, LogicalType::BIGINT},
-	    LogicalType::LIST(LogicalType::DOUBLE), RocketTransformMultivariateFunction));
+	rocket_transform.AddFunction(
+	    ScalarFunction({uni, i64, i64, i64}, out, RocketTransformFunction));
+	rocket_transform.AddFunction(
+	    ScalarFunction({multi, i64, i64, i64}, out, RocketTransformMultivariateFunction));
+	// The five-argument forms take an explicit reference length, which is what makes one bank
+	// shared across rows of differing length (SPEC.md 8).
+	rocket_transform.AddFunction(
+	    ScalarFunction({uni, i64, i64, i64, i64}, out, RocketTransformFunction));
+	rocket_transform.AddFunction(
+	    ScalarFunction({multi, i64, i64, i64, i64}, out, RocketTransformMultivariateFunction));
 	loader.RegisterFunction(rocket_transform);
 }
 

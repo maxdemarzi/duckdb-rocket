@@ -420,7 +420,12 @@ the prior measurements to interpret the result against. Cheap — one argument, 
       channel *no channel draw is made*, so the univariate stream — and every committed golden
       vector — is untouched. **The pipeline still cannot run a multivariate dataset**:
       `phase5_pipeline.py` writes one `DOUBLE[]` per row, so `BasicMotions` remains skipped
-- [ ] Variable-length series handling — still unspecified in SPEC.md 8
+- [x] Variable-length series handling — **specified** in SPEC.md 8 and implemented:
+      `transform_variable` in the oracle, an optional `n_reference` argument on both
+      `rocket_transform` overloads. The trap it closes is that dilation and padding are
+      drawn against `n`, so without an explicit reference every row of a ragged table
+      gets its own kernel bank — well-formed output, meaningless columns. Note SPEC.md
+      8.3: `max` is length-biased by ~40% across an eightfold length range, PPV is not
 - [x] Parallelize across rows using DuckDB's execution model — comes free from the scalar
       function; visible as speedup that grows with row count (1.7× at 200 rows, 7.1× at 4,000)
 - [x] Benchmark vs. the Python implementation — `scripts/benchmark_transform.py`

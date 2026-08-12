@@ -96,8 +96,8 @@ linked in, plus a loadable `rocket.duckdb_extension`.
 ## `rocket_transform`
 
 ```sql
-rocket_transform(series DOUBLE[],   kernels_per_group, seed, first_kernel) -> DOUBLE[]
-rocket_transform(series DOUBLE[][], kernels_per_group, seed, first_kernel) -> DOUBLE[]
+rocket_transform(series DOUBLE[],   kernels_per_group, seed, first_kernel[, n_reference]) -> DOUBLE[]
+rocket_transform(series DOUBLE[][], kernels_per_group, seed, first_kernel[, n_reference]) -> DOUBLE[]
 ```
 
 Returns `kernels_per_group * 2` features, interleaved: element `2i` is kernel `i`'s max and
@@ -117,6 +117,17 @@ before it:
 -- these are the same kernels
 SELECT rocket_transform(s, 4, 7, 4) = rocket_transform(s, 8, 7, 0)[9:16] FROM ...;  -- true
 ```
+
+`n_reference` matters only for **variable-length** data, and it matters a lot. Kernel weights
+and lengths do not depend on series length, but dilation and padding do — 64 timepoints and 65
+already give different kernels. Without an explicit reference each row draws its bank from its
+own length, so column *j* comes from a different kernel in every row while the output stays
+perfectly well-formed. Pass `n_reference` (the shortest series in the dataset) whenever lengths
+vary; series shorter than it are rejected rather than padded.
+
+Be aware that `max` is biased upward by series length — measured at **+43%** from n=64 to n=512
+on pure noise — while PPV is not. If length correlates with the label, half the features carry
+that correlation directly. See [SPEC.md](SPEC.md) §8.
 
 The pseudo-random stream is SplitMix64, specified byte-for-byte in [SPEC.md](SPEC.md) so the
 C++, the Python reference, and the pure-SQL implementation in [sql/rocket.sql](sql/rocket.sql)

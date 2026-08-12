@@ -328,7 +328,88 @@ Accumulation order is channel-major, and within a channel one tap at a time acro
 positions, matching §4's ordering rule one level down. Features are still `max` and `PPV` of
 `conv`, still 2 per kernel, still interleaved as in §5.
 
-## 8. What is not yet specified
+## 8. Variable-length series
+
+### 8.1 The problem, stated exactly
+
+Kernel weights, lengths and biases are **independent of series length**. Dilation and padding
+are **not**: §3 draws `dilation` from `log2((n - 1) / (length - 1))`, and `padding` is computed
+from the dilation. One extra timepoint is enough to change them —
+
+| `n` | kernel 3's dilation | kernel 5's dilation | kernel 5's padding |
+|---|---|---|---|
+| 64 | 8 | 5 | 15 |
+| 65 | 9 | 6 | 18 |
+
+(seed 0, first eight kernels).
+
+So a bank generated against one length is a **different bank** from one generated against
+another. That matters because a classifier compares feature *j* across rows: column *j* has to
+be produced by the same kernel in every row or it means nothing. Deriving `n` per row — which
+is what a naive implementation does, since the series carries its own length — produces a
+well-formed feature matrix in which every row was measured with a different instrument.
+
+### 8.2 The rule — normative
+
+**One bank per dataset, drawn against a single declared reference length `n_ref`, applied
+unchanged to every series.** `n_ref` is a property of the dataset, never of the row.
+
+**Every series must satisfy `n >= n_ref`.** This is what makes the bank safe to apply: §3's
+dilation bound gives `(length - 1) * dilation <= n_ref - 1`, so for any `n >= n_ref` the
+unpadded `output_length = n - (length - 1) * dilation` is at least 1, structurally rather than
+by a runtime check. A series shorter than `n_ref` is **rejected**, not padded — silently
+padding would fabricate data and change what the features measure.
+
+**`n_ref = min(n)` over the dataset is the recommended choice**, because it is the only value
+that admits every series without rejecting any. Larger values are permitted and produce more
+dilation diversity, at the cost of excluding the shortest series.
+
+### 8.3 The bias this introduces — and it is not removable
+
+`output_length` grows with `n`, so a longer series is scored over more output positions:
+
+- **PPV is unaffected.** It is a proportion — `count(conv > 0) / output_length` — so it stays
+  comparable across lengths.
+- **`max` is biased upward by length.** A maximum over more positions is larger in expectation,
+  for any fixed distribution. Series length therefore leaks into every even-numbered feature.
+
+Measured, on identically-distributed standard-normal noise — so any difference here is length
+alone, not signal. 200 kernels drawn against `n_ref = 64`, 60 series per length:
+
+| `n` | mean `max` | vs. n=64 | mean PPV | vs. n=64 |
+|---|---|---|---|---|
+| 64 | 5.9803 | — | 0.5103 | — |
+| 128 | 7.0120 | **+17.3%** | 0.5107 | +0.1% |
+| 256 | 7.8080 | **+30.6%** | 0.5108 | +0.1% |
+| 512 | 8.5273 | **+42.6%** | 0.5107 | +0.1% |
+
+An eightfold length difference moves `max` by more than 40% on pure noise. That is far larger
+than the difference between many real classes.
+
+This is a property of the ROCKET feature definition, not of this implementation, and it cannot
+be fixed by choosing `n_ref` differently. **Where series lengths vary and length is correlated
+with the label, half the features carry that correlation directly**, and a classifier will use
+it. Equalise lengths first — by resampling or by truncating to a common window — whenever that
+is a risk. When lengths vary for reasons unrelated to the label, the bias is a nuisance rather
+than a confound.
+
+Stated here rather than discovered later: an accuracy number on a variable-length dataset with
+label-correlated lengths is not measuring what it appears to measure.
+
+### 8.4 Calling convention
+
+`rocket_transform` takes `n_ref` as an explicit optional final argument:
+
+```sql
+rocket_transform(series, kernels_per_group, seed, first_kernel)              -- n_ref = len(series)
+rocket_transform(series, kernels_per_group, seed, first_kernel, n_reference) -- n_ref explicit
+```
+
+The four-argument form uses the row's own length, which is correct **only** when every row has
+the same length — the equal-length case, where the two forms agree. Any table with varying
+lengths must pass `n_reference`, and the function rejects a series shorter than it.
+
+## 9. What is not yet specified
 
 Deliberately open; these will be added here before being implemented.
 - **Variable-length series.** Dilations are drawn against a specific `n`. The reference

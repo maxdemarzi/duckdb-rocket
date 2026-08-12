@@ -119,3 +119,41 @@ statement error
 SELECT rocket_transform([[1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],[1.0,2,3]]::DOUBLE[][], 4, 0, 0);
 ----
 every channel must be the same length
+
+# --- variable length (SPEC.md 8) ---------------------------------------------------------
+
+# When the reference equals the series' own length the two forms are the same call.
+query I
+SELECT rocket_transform(v, 3, 0, 0) = rocket_transform(v, 3, 0, 0, 64)
+FROM (SELECT [x::DOUBLE for x in range(64)] AS v);
+----
+true
+
+# ...and when it does not, they differ -- which is the whole point. Without an explicit
+# reference, a 96-point row draws its own bank, so its column j comes from a different kernel
+# than a 64-point row's column j.
+query I
+SELECT rocket_transform(v, 3, 0, 0) = rocket_transform(v, 3, 0, 0, 64)
+FROM (SELECT [x::DOUBLE for x in range(96)] AS v);
+----
+false
+
+# One bank across differing lengths: both rows scored against n_reference = 64.
+query II
+SELECT len(rocket_transform(v, 5, 0, 0, 64)), len(v) FROM (
+  SELECT [x::DOUBLE for x in range(64)] AS v
+  UNION ALL SELECT [x::DOUBLE for x in range(150)]
+) ORDER BY 2;
+----
+10	64
+10	150
+
+statement error
+SELECT rocket_transform([x::DOUBLE for x in range(32)], 4, 0, 0, 64);
+----
+rejected rather than padded
+
+statement error
+SELECT rocket_transform([x::DOUBLE for x in range(64)], 4, 0, 0, 5);
+----
+n_reference 5 is shorter than the longest kernel

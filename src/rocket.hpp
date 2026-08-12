@@ -271,12 +271,16 @@ inline void ApplyKernelMultivariate(const double *series, int64_t n, const Kerne
 // SPEC.md 5: features are INTERLEAVED -- column 2i is kernel i's max, 2i+1 its PPV. That is
 // what makes a contiguous column range correspond to a whole set of kernels, which is what
 // group extraction needs.
-inline std::vector<double> Transform(const double *series, int64_t n, uint64_t master_seed,
-                                     int64_t kernels_per_group, int64_t first_kernel) {
+// `n_reference` is what the kernels are DRAWN against; `n` is the length of this particular
+// series. They differ only for variable-length data (SPEC.md 8), where one bank must be shared
+// across rows of differing length or column `j` stops meaning the same thing in every row.
+inline std::vector<double> Transform(const double *series, int64_t n, int64_t n_reference,
+                                     uint64_t master_seed, int64_t kernels_per_group,
+                                     int64_t first_kernel) {
 	std::vector<double> features(static_cast<size_t>(kernels_per_group * FEATURES_PER_KERNEL));
 	for (int64_t i = 0; i < kernels_per_group; i++) {
 		const Kernel kernel =
-		    GenerateKernel(master_seed, static_cast<uint64_t>(first_kernel + i), n);
+		    GenerateKernel(master_seed, static_cast<uint64_t>(first_kernel + i), n_reference);
 		ApplyKernel(series, n, kernel, &features[static_cast<size_t>(i * FEATURES_PER_KERNEL)]);
 	}
 	return features;
@@ -284,13 +288,14 @@ inline std::vector<double> Transform(const double *series, int64_t n, uint64_t m
 
 // The multivariate bank. `series` is channel-major, `n_channels * n` doubles.
 inline std::vector<double> TransformMultivariate(const double *series, int64_t n_channels,
-                                                 int64_t n, uint64_t master_seed,
+                                                 int64_t n, int64_t n_reference,
+                                                 uint64_t master_seed,
                                                  int64_t kernels_per_group,
                                                  int64_t first_kernel) {
 	std::vector<double> features(static_cast<size_t>(kernels_per_group * FEATURES_PER_KERNEL));
 	for (int64_t i = 0; i < kernels_per_group; i++) {
-		const Kernel kernel =
-		    GenerateKernel(master_seed, static_cast<uint64_t>(first_kernel + i), n, n_channels);
+		const Kernel kernel = GenerateKernel(
+		    master_seed, static_cast<uint64_t>(first_kernel + i), n_reference, n_channels);
 		ApplyKernelMultivariate(series, n, kernel,
 		                        &features[static_cast<size_t>(i * FEATURES_PER_KERNEL)]);
 	}

@@ -3,14 +3,25 @@
 What has actually been measured, with the caveats that make each number readable. Raw output is
 in the JSON files beside this one; every script named here regenerates its own.
 
-**Environment.** Windows 11, RTX 3060 (unused — `torch` is the CPU wheel by design), DuckDB
-v1.5.5 (`d8cdaa33`), `anofox_tabfm` `bc6d8af`, `tabpfn` 8.2.0, `tabicl-v2` as the DuckDB-side
-backbone.
+**Environment.** Two, and which one a number came from matters:
 
-**Every timing here is contended.** The box was simultaneously running an unrelated
-`finetune.py` training job with two worker processes, plus this project's own background runs.
-PLAN.md already requires reported figures to come from a pod; these are correctness-oriented
-numbers with a comparative reading at best.
+- **Local** — Windows 11, RTX 3060 (unused; `torch` is the CPU wheel by design), DuckDB v1.5.5
+  (`d8cdaa33`), `anofox_tabfm` `bc6d8af`, `tabpfn` 8.2.0, `tabicl-v2` as the DuckDB-side
+  backbone. Phases 1–4 and the earlier Phase 5 numbers.
+- **Pod** — RunPod CPU instance, 16 vCPU, Linux, same DuckDB and `anofox_tabfm`. Full tuple in
+  `pod_doctor.json`. The Phase 5 breadth table.
+
+Each Phase 5 report now carries its own `environment` block and a `caveat` that is `null` on a
+pod and populated off-pod, so provenance is something the run observed rather than something
+asserted for it. That was not always true: the string was previously hardcoded, and every pod
+run archived itself as "local Windows timing on a contended box" — exactly backwards, on the
+runs that existed to be reportable.
+
+**Local timings here are contended, and understate the pipeline by roughly 1.8x.** The box was
+simultaneously running an unrelated `finetune.py` training job with two worker processes, plus
+this project's own background runs. Measured against the pod: Beef 129 s local against 67 s,
+Coffee 128 s against 64 s. PLAN.md requires reported figures to come from a pod, and the reason
+is visible in that gap.
 
 ---
 
@@ -255,20 +266,38 @@ The loadable extension was also verified against the **stock upstream v1.5.5 CLI
 not only the shell built here — the check that the pinned ABI genuinely matches rather than
 being self-consistent.
 
-### Breadth: eight datasets, G=40, e=1, `tabicl-v2`
+### Breadth: nine datasets on a pod, G=40, e=1, `tabicl-v2`
 
-| Dataset | Test rows | Channels | Timepoints | Accuracy | Wall clock |
-|---|---|---|---|---|---|
-| BasicMotions | 40 | **6** | 100 | 1.0000 | 132 s |
-| Coffee | 28 | 1 | 286 | 1.0000 | 128 s |
-| Trace | 100 | 1 | 275 | 1.0000 | 260 s |
-| GunPoint | 150 | 1 | 150 | 0.9933 | 258 s |
-| SyntheticControl | 300 | 1 | 60 | 0.9867 | 674 s |
-| FaceFour | 88 | 1 | 350 | 0.9773 | 172 s |
-| OSULeaf | 242 | 1 | 427 | 0.9711 | 449 s |
-| Beef | 30 | 1 | 470 | 0.7667 | 129 s |
+RunPod CPU instance, 16 vCPU, `--test-chunk 128`, `memory_limit` from the cgroup. Environment
+tuple in `pod_doctor.json`; each report carries its own `environment` block and a `caveat` of
+`null`, meaning it observed itself running containerised rather than asserting it.
+
+| Dataset | Test rows | Channels | Timepoints | Accuracy | Wall clock | Local run |
+|---|---|---|---|---|---|---|
+| BasicMotions | 40 | **6** | 100 | 1.0000 | 79 s | 1.0000 |
+| Coffee | 28 | 1 | 286 | 1.0000 | 64 s | 1.0000 |
+| Trace | 100 | 1 | 275 | 1.0000 | 133 s | 1.0000 |
+| GunPoint | 150 | 1 | 150 | 0.9933 | 185 s | 0.9933 |
+| SyntheticControl | 300 | 1 | 60 | 0.9867 | 653 s | 0.9867 |
+| FaceFour | 88 | 1 | 350 | 0.9773 | 87 s | 0.9773 |
+| ItalyPowerDemand | **1029** | 1 | 24 | 0.9718 | 1010 s | — |
+| OSULeaf | 242 | 1 | 427 | 0.9711 | 355 s | 0.9711 |
+| Beef | 30 | 1 | 470 | 0.7667 | 67 s | 0.7667 |
 
 Row alignment was total on every one: 40 of 40 groups scored every row, no duplicates, no drops.
+Zero `f0` collisions across all 40 groups of every dataset, so the id recovery — which joins
+scored rows back on a feature value, because `anofox_tabfm` echoes back only the columns named
+in `features` — never fanned out.
+
+**Every dataset that had a local number reproduced it exactly**, across two machines, two
+operating systems, and (for GunPoint) three different chunk configurations. The pod is also
+~1.8x faster than the contended local box: Beef 67 s against 129 s, Coffee 64 s against 128 s.
+That matters for reading the wall-clock column at all — the local timings understated the
+pipeline by nearly half, in the direction that flatters it.
+
+`ItalyPowerDemand` is new here. It could not be run before: at 1,029 test rows in a single
+`tabfm_classify` call it took 25.7 GB and killed the local machine, then was OOM-killed twice on
+the pod. See "The classify call's memory" below.
 
 `BasicMotions` is the multivariate case, and the first multivariate prediction this project has
 produced. It exercises the whole SPEC.md 7 path — per-kernel channel subsets, per-channel
@@ -277,16 +306,42 @@ it. `SyntheticControl` and `OSULeaf` are the two the failed pod run was meant to
 locally instead; `SyntheticControl` is incidentally the dataset that died on the pod every time,
 so running it clean here is what proved that failure environmental.
 
-**Mean accuracy 0.9619 — and it should not be compared to the paper's 0.900.** That figure is a
-mean over 92 datasets with 30 resamples; this is a single split of eight datasets chosen for
+**Mean accuracy 0.9630 — and it should not be compared to the paper's 0.900.** That figure is a
+mean over 92 datasets with 30 resamples; this is a single split of nine datasets chosen for
 *spread* rather than difficulty, using a different backbone (`tabicl-v2`, because `tabpfn-v2-5`
 will not load) at e=1 rather than e=8. The two numbers measure different things and the
 resemblance is not evidence of anything.
 
-**Two of the ten subset datasets remain unrun:** `ECG5000` (4,500 test rows) and
-`ItalyPowerDemand` (1,029). Both are slow rather than unsupported — `tabfm_classify` cost scales
-with rows, and 40 groups over 4,500 rows is hours locally. They are the obvious use for a
-well-sized pod.
+It moved from the eight-dataset 0.9619 only because `ItalyPowerDemand` (0.9718) happens to sit
+above that mean. A mean over nine hand-picked datasets moves with *which* dataset you add, not
+with how good the method is — which is the same reason it cannot be read against the paper's.
+
+### The classify call's memory
+
+The earlier note here said the two missing datasets were "slow rather than unsupported". That was
+wrong, and the correction is the useful part.
+
+`tabfm_classify`'s memory scales with the rows in one call and lives **outside** DuckDB's buffer
+manager, so `SET memory_limit` does not contain it. Four hypotheses were tested against the
+failure; three were wrong:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| SQL text too large | 18.7 MB -> 7.6 MB | failure moved 18.3 s -> 17.2 s. No |
+| DuckDB's own budget | cap 20 GB -> 8 GB | plateau moved 28.73 -> 28.73 GB. No |
+| Test rows per call | chunk 128 -> 32 | same 28.7 GB plateau; only the early spike changed. No |
+| **Train context size** | GunPoint 50 rows: 11.75 GB. ECG5000 500 rows: 28.7 GB | **yes** |
+
+`--test-chunk` splits the test rows across several calls, which is what made `ItalyPowerDemand`
+runnable — its context is only 67 rows, so bounding the chunk bounds the call. It is
+identity-preserving, and that was verified rather than argued: GunPoint chunked against
+unchunked, same pod, same commit, **150/150 rows identical**. `scripts/compare_predictions.py`
+is that check.
+
+`ECG5000` is the one dataset the technique cannot reach on a small box. Its **train context is
+500 rows**, which every call must carry, so its floor is ~501 rows per call however finely the
+test rows are split — and that floor alone needs ~29 GB against the first pod's 29.8 GB ceiling.
+It is not slow; it does not fit. Running it needs a larger instance, not a cleverer query.
 
 What the table *is* good for is a sanity check, and it passes one: these values sit where
 published ROCKET results sit on these datasets, including Beef being much the hardest — the

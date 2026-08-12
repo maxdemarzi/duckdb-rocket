@@ -190,6 +190,18 @@ PREPARE fill_feat AS
                           CAST($1 AS BIGINT))
   FROM raw;
 
+-- ORDER BELOW IS LOAD-BEARING. Nothing may be PREPAREd against an empty source table.
+--
+-- DuckDB fixes a filter's selectivity from the source's statistics at PREPARE time. Prepared
+-- against an empty table, `WHERE split = 'train'` is pruned to always-false, and that plan is
+-- then replayed for the rest of the run -- inserting nothing, raising nothing. Measured on
+-- v1.5.5: the same statement prepared on an empty source inserts 0 of 5 rows, and prepared on a
+-- populated one inserts 5 of 5. The first symptom here was tabfm_classify reporting an empty
+-- context, three steps downstream of the actual cause.
+--
+-- So: fill feat_cur first, then prepare everything that reads it.
+EXECUTE fill_feat({0});
+
 PREPARE fill_train AS
   INSERT INTO train_cur SELECT label, {projection} FROM feat_cur WHERE split = 'train';
 
@@ -201,22 +213,20 @@ PREPARE fill_src AS
   INSERT INTO test_src_cur SELECT id, f[1] FROM feat_cur
    WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
 
--- Prime the tables before preparing the classify. tabfm_classify validates its context at BIND
--- time, so preparing it against an empty train_cur fails outright with "target 'y' has no
--- non-NULL rows to use as context". The fills above are ordinary INSERT..SELECT and bind fine
--- on empty tables; only the table function looks at contents.
---
--- This repeats group 0 / chunk 0's fills, which the loop below then does again. That is one
--- group's transform of wasted work, and it buys a loop with no special case in it -- the
--- alternative is skipping the first iteration, which is exactly the kind of off-by-one that
--- silently drops a chunk from the ensemble.
-DELETE FROM feat_cur;
-EXECUTE fill_feat({0});
-DELETE FROM train_cur;
+-- Prime train_cur and test_cur too: tabfm_classify validates its context at BIND time, so
+-- preparing `score` against an empty train_cur fails with "target 'y' has no non-NULL rows to
+-- use as context".
 EXECUTE fill_train;
-DELETE FROM test_cur; DELETE FROM test_src_cur;
 EXECUTE fill_test({bounds[0][0]}, {bounds[0][1]});
 EXECUTE fill_src({bounds[0][0]}, {bounds[0][1]});
+
+-- Fail loudly if the priming produced nothing. Every failure in this area has been silent, and
+-- the loop below would otherwise run to completion producing an empty result set.
+SELECT CASE
+         WHEN (SELECT count(*) FROM train_cur) = 0 OR (SELECT count(*) FROM test_cur) = 0
+         THEN CAST('priming inserted no rows -- a prepared fill was pruned to a no-op' AS BIGINT)
+         ELSE 0
+       END AS prime_check;
 
 -- test_cur omits the target: tabfm_classify unions train and test BY NAME, and a target present
 -- in both is a duplicate-name binder error naming neither cause (Phase 2).

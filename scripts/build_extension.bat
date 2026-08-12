@@ -30,11 +30,17 @@ if "%1"=="clean" (
     exit /b 0
 )
 
+REM `tests` also builds DuckDB's sqllogictest runner so test\sql\*.test can actually be
+REM executed. It is off by default because the runner roughly doubles the build, and the
+REM extension itself does not need it.
+set "UNITTESTS=0"
+if "%1"=="tests" set "UNITTESTS=1"
+
 cmake -G Ninja -B "%BUILD%" -S "%ROOT%\duckdb" ^
     -DCMAKE_BUILD_TYPE=Release ^
     -DDUCKDB_EXTENSION_CONFIGS="%ROOT%\extension_config.cmake" ^
     -DEXTENSION_STATIC_BUILD=1 ^
-    -DBUILD_UNITTESTS=0 ^
+    -DBUILD_UNITTESTS=%UNITTESTS% ^
     -DBUILD_SHELL=1 || exit /b 1
 
 cmake --build "%BUILD%" --config Release || exit /b 1
@@ -43,3 +49,9 @@ echo.
 echo BUILD OK
 echo   shell:     %BUILD%\duckdb.exe
 echo   extension: %BUILD%\extension\rocket\rocket.duckdb_extension
+
+if "%UNITTESTS%"=="1" (
+    echo.
+    echo Running test\sql\rocket.test
+    "%BUILD%\test\unittest.exe" "%ROOT%\test\sql\rocket.test" || exit /b 1
+)

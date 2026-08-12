@@ -1,5 +1,26 @@
 # Open tasks — handoff at 2026-08-12 11:50 (machine restart)
 
+## ⚠ LIVE POD — `hwkx2c4ceogn71` is billing right now
+
+Created 2026-08-12 after the restart, for the ItalyPowerDemand / ECG5000 runs.
+
+    python scripts/pod/runpod_cpu.py check
+    python scripts/pod/runpod_cpu.py terminate hwkx2c4ceogn71 --yes-destroy-the-volume
+
+`duckdb-rocket-cpu-sweep`, 16 vCPU, **32 GB RAM**, ~$0.56/hr. **Terminate it when done.**
+
+Two facts about it that were not what the recipe asked for:
+
+- **32 GB RAM, and ItalyPowerDemand measured 25.7 GB.** `runpod_cpu.py` picks compute-optimised
+  flavors first (`cpu5c`), ~2 GB/vCPU. Its comment claims the sweep is "not memory-bound"; the
+  25.7 GB measurement falsifies that. ECG5000 is 4.4x larger and will not fit — it needs either a
+  general-purpose flavor (`cpu*g`, ~4 GB/vCPU), more vCPUs, or DuckDB spilling to disk via an
+  explicit `memory_limit` + `temp_directory`.
+- **`volumeInGb: 0`** — the requested 40 GB volume was not attached. Only the 60 GB container
+  disk exists, so **nothing on this pod survives termination**. Copy results off before
+  terminating, or they are gone.
+
+
 Written mid-task because the box ran out of memory. Everything below is verified state, not plans.
 
 ## Safe: committed and pushed

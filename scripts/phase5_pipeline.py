@@ -194,6 +194,10 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         f"SET temp_directory = '{temp_dir.as_posix()}';",
         f"CREATE OR REPLACE TABLE raw AS "
         f"SELECT * FROM read_parquet('{meta['raw_parquet']}');",
+        # One row per group, filled as each group's features are built and before they are
+        # dropped. Per group because f0 is a different kernel's output in each one, so a
+        # collision in group 17 is invisible to a check that only looks at group 0.
+        "CREATE OR REPLACE TABLE f0_checks (grp BIGINT, collisions BIGINT);",
     ]
 
     # Test ids are contiguous and start at n_train: write_raw_parquet lays the table out as
@@ -219,6 +223,9 @@ FROM raw;
 
 CREATE OR REPLACE VIEW train_g{g} AS
     SELECT label AS y, {projection} FROM feat_g{g} WHERE split = 'train';
+
+INSERT INTO f0_checks
+SELECT {g}, count(*) - count(DISTINCT f[1]) FROM feat_g{g} WHERE split = 'test';
 """)
         # One classify call per chunk of test rows. This is not an approximation: an in-context
         # learner treats each test row as an independent query against the train context, so a
@@ -286,11 +293,19 @@ GROUP BY p.id, r.label;
 SELECT id, yhat, y FROM predictions ORDER BY id;
 
 .once '{(outdir / "assertions.json").as_posix()}'
+-- `f0_collisions` guards the one assumption the id recovery rests on. anofox_tabfm echoes back
+-- only the target and the columns named in `features`, so a plain id column is dropped and the
+-- scored rows are rejoined to their ids on the feature value f0. Two test rows sharing an f0
+-- would fan that join out and score both against each other's id. The row-alignment counts
+-- below already fail in that case, but they report it as "a row was scored by only N of 40
+-- groups", which names the symptom and not the cause. Measured 0 across all ten datasets in the
+-- subset, ECG5000's 4500 rows included -- this is here so a future dataset says so directly.
 SELECT (SELECT count(*) FROM predictions)          AS predicted_rows,
        (SELECT count(DISTINCT id) FROM all_groups) AS distinct_ids,
        (SELECT count(*) FROM all_groups)           AS group_rows,
        (SELECT min(n_groups_seen) FROM per_class)  AS min_groups_per_row,
-       (SELECT max(n_groups_seen) FROM per_class)  AS max_groups_per_row;
+       (SELECT max(n_groups_seen) FROM per_class)  AS max_groups_per_row,
+       (SELECT coalesce(sum(collisions), 0) FROM f0_checks) AS f0_collisions;
 """)
     return "\n".join(parts)
 
@@ -405,6 +420,12 @@ def main() -> int:
         failures.append(
             f"{facts['group_rows']} group rows, expected {n_test * config.n_groups}: the "
             f"feature-value join dropped or duplicated rows"
+        )
+    if facts.get("f0_collisions"):
+        failures.append(
+            f"{facts['f0_collisions']} test rows share an f0 with another row across the "
+            f"{config.n_groups} groups; ids are recovered by joining on f0, so those rows were "
+            f"scored against each other's id"
         )
     if facts["min_groups_per_row"] != config.n_groups:
         failures.append(

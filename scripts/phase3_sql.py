@@ -41,6 +41,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from duckdb_rocket.budget import default_memory_limit  # noqa: E402
 from duckdb_rocket.datasets import load  # noqa: E402
 from duckdb_rocket.shells import pinned_shell  # noqa: E402
 from duckdb_rocket.pipeline import RocketPFNConfig  # noqa: E402
@@ -56,13 +57,25 @@ DUCKDB = pinned_shell()
 MODEL = "tabicl-v2"
 
 
-def preamble(max_features: int) -> str:
+def preamble(max_features: int, threads: int = 4) -> str:
     # anofox's feature ceiling is a configurable guard rather than a model limit, but it
     # defaults to 500 and a 500-feature group sits exactly on the boundary. Set it explicitly.
+    #
+    # threads and memory_limit are pinned for the reason phase5_pipeline.py pins them: inside a
+    # container neither `nproc` nor `free` reports this process's budget. A cgroup OOM kill
+    # leaves no DuckDB error and no Python traceback, so it reads as a hang.
+    #
+    # This does NOT make Phase 3 safe on a large test split. `tabfm_classify` below is called
+    # once for the whole split, and its allocation is ONNX's rather than the buffer manager's,
+    # so no memory_limit contains it -- on Phase 5 a 6 GB limit died faster than a 20 GB one.
+    # Phase 5 solved that with --test-chunk; Phase 3 has no equivalent and is bounded to the
+    # small datasets it was built for. GunPoint, its only archived comparison, is 150 test rows.
     return (
         "LOAD anofox_tabfm;\n"
         "SET anofox_tabfm_accept_hf_license = true;\n"
         f"SET anofox_tabfm_max_features = {max(max_features * 2, 1000)};\n"
+        f"SET threads = {threads};\n"
+        f"SET memory_limit = '{default_memory_limit()}';\n"
     )
 
 

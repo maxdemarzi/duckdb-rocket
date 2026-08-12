@@ -47,6 +47,17 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=ROOT / "reference" / "pod_sweep.json")
     parser.add_argument("--timeout", type=int, default=7200, help="seconds per run")
     parser.add_argument(
+        "--test-chunk",
+        type=int,
+        default=128,
+        help="test rows per tabfm_classify call. Defaulted ON here, unlike in phase5_pipeline.py: "
+             "this entry point runs the whole subset, and the subset contains datasets that "
+             "cannot complete without it. ItalyPowerDemand's 1029 test rows in one call reached "
+             "29.8 GB and were OOM-killed; the peak is set by the widest call, so this bounds it. "
+             "Identity-preserving -- verified on GunPoint, 150/150 rows, 0 disagreements. "
+             "Pass 0 for the old unchunked behaviour.",
+    )
+    parser.add_argument(
         "--jobs",
         type=int,
         default=1,
@@ -86,6 +97,8 @@ def main() -> int:
             "--seed", str(seed),
             "--out", str(out),
         ]
+        if args.test_chunk:
+            cmd += ["--test-chunk", str(args.test_chunk)]
         started = time.perf_counter()
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=args.timeout)

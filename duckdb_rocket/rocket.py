@@ -22,8 +22,10 @@ from .prng import SplitMix64, kernel_seed
 # ROCKET draws kernel length uniformly from this set. Fixed by the paper, not a tunable.
 KERNEL_LENGTHS = (7, 9, 11)
 
-# Each kernel contributes exactly 2 features. This is what makes the paper's arithmetic work:
-# 1,000 kernels per group * 2 = 2,000 features = TabPFN v2.5's column cap, exactly.
+# Each kernel contributes exactly 2 features (global max and PPV). The paper pairs this with
+# 1,000 kernels per group to land on 2,000 features, TabPFN v2.5's stated column cap -- but see
+# pipeline.TABPFN_MAX_FEATURES_PER_ESTIMATOR: a single estimator only ever sees 500 of them, so
+# this project groups 250 kernels instead. The per-kernel count is fixed by the paper either way.
 FEATURES_PER_KERNEL = 2
 
 

@@ -1,0 +1,41 @@
+{
+  "dataset": "Coffee",
+  "model": "tabicl-v2",
+  "config": {
+    "num_kernels": 1000,
+    "n_groups": 4,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "anofox_reachable": true
+  },
+  "shape": {
+    "dataset": "Coffee",
+    "n_groups": 4,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_train": 28,
+    "n_test": 28,
+    "n_timepoints": 286
+  },
+  "accuracy": 1.0,
+  "plumbing_conformance": {
+    "sql_matches_numpy": 28,
+    "of": 28,
+    "exact": true,
+    "probabilities_sum_to_one": true
+  },
+  "row_alignment": {
+    "predicted_rows": 28,
+    "distinct_ids": 28,
+    "group_rows": 112,
+    "min_groups_per_row": 4,
+    "max_groups_per_row": 4,
+    "positional_mismatches": 0
+  },
+  "failures": [],
+  "timing": {
+    "feature_seconds": 5.6,
+    "sql_seconds": 15.6
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "dataset": "GunPoint",
+  "model": "tabicl-v2",
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "anofox_reachable": true
+  },
+  "shape": {
+    "dataset": "GunPoint",
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_train": 50,
+    "n_test": 150,
+    "n_timepoints": 150
+  },
+  "accuracy": 0.9933333333333333,
+  "plumbing_conformance": {
+    "sql_matches_numpy": 150,
+    "of": 150,
+    "exact": true,
+    "probabilities_sum_to_one": true
+  },
+  "row_alignment": {
+    "predicted_rows": 150,
+    "distinct_ids": 150,
+    "group_rows": 6000,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "positional_mismatches": 0
+  },
+  "failures": [],
+  "timing": {
+    "feature_seconds": 12.5,
+    "sql_seconds": 287.0
+  }
+}

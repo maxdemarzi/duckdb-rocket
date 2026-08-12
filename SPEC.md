@@ -217,8 +217,17 @@ set of kernels, which is what group extraction needs.
 
 ## 6. Groups
 
-The paper's configuration is 10,000 kernels as `G = 10` groups of 1,000. Each group yields
-`1000 * 2 = 2000` features — exactly TabPFN v2.5's column cap.
+The paper's configuration is 10,000 kernels as `G = 10` groups of 1,000, each group yielding
+`1000 * 2 = 2000` features — which the paper matches to TabPFN v2.5's 2,000-column cap.
+
+**This project uses `G = 40` groups of 250 instead**, for 500 features per group. 2,000 is
+TabPFN v2.5's *input* ceiling, but a single estimator only ever sees 500 features
+(`max_features_per_estimator`); wider groups are subsampled per estimator and need `e >= 4` to
+be covered at all, which `anofox_tabfm` — capped at `e = 1` — cannot supply. Narrowing the
+group preserves the 10,000-kernel budget and the averaging structure while keeping one
+estimator's view complete. See `reference/PHASE2_FINDINGS.md`.
+
+Nothing in this section depends on which of the two splits is used; `G` is a parameter.
 
 Group `g` consists of global kernel indices `[g * k, (g + 1) * k)` where `k = K / G`. Because
 kernel `i` is a pure function of `(master_seed, i)`, **the groups are a partition of one bank,

@@ -97,7 +97,7 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
     )
 
 
-def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path) -> str:
+def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int) -> str:
     n_features = config.features_per_group
     names = [f"f{j}" for j in range(n_features)]
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
@@ -109,6 +109,12 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path) -> str:
         "LOAD anofox_tabfm;",
         "SET anofox_tabfm_accept_hf_license = true;",
         f"SET anofox_tabfm_max_features = {max(n_features * 2, 1000)};",
+        # Thread count is set explicitly rather than inherited from the visible core count.
+        # On a 112-core pod, four concurrent runs each sized their own pool from that number,
+        # on top of ONNX's per-session threads, and every run died near completion with no
+        # error message at all. A container's visible core count is not its budget, especially
+        # when several of these run side by side.
+        f"SET threads = {threads};",
         f"CREATE OR REPLACE TABLE raw AS "
         f"SELECT * FROM read_parquet('{meta['raw_parquet']}');",
     ]
@@ -185,6 +191,14 @@ def main() -> int:
     parser.add_argument("--shell", type=Path, default=SHELL)
     parser.add_argument("--compare", type=Path,
                         help="a Phase 3 report to check predictions against")
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=4,
+        help="DuckDB threads for this run. Deliberately not the core count: on a many-core "
+             "box, several concurrent runs each sizing a pool from the visible cores is what "
+             "killed the pod sweep.",
+    )
     parser.add_argument("--keep-sql", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
@@ -209,7 +223,7 @@ def main() -> int:
     print(f"      {meta['n_train']} train / {meta['n_test']} test, "
           f"{meta['n_timepoints']} timepoints")
 
-    sql = build_sql(config, meta, workdir)
+    sql = build_sql(config, meta, workdir, args.threads)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")
@@ -221,13 +235,28 @@ def main() -> int:
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     seconds = time.perf_counter() - started
+    raw_stderr = proc.stderr or ""
     stderr = "\n".join(
-        ln for ln in (proc.stderr or "").splitlines()
+        ln for ln in raw_stderr.splitlines()
         if not ln.startswith("Schema error: Trying to register schema") and ln.strip()
     )
     if proc.returncode != 0:
-        print(f"FAILED after {seconds:.1f}s", file=sys.stderr)
-        print(stderr[:3000], file=sys.stderr)
+        print(f"FAILED after {seconds:.1f}s (exit {proc.returncode})", file=sys.stderr)
+        if stderr:
+            print(stderr[:3000], file=sys.stderr)
+        else:
+            # The filter above removes ONNX's schema-registration spam, which is necessary --
+            # it is thousands of lines. But when a run dies without producing any *other*
+            # stderr, filtering leaves nothing and the failure reports itself as a bare
+            # "FAILED after Ns". That is exactly what happened on the pod, and it turned a
+            # diagnosable crash into an hour of guessing. Fall back to the raw tail.
+            print(
+                "no error message survived the ONNX-noise filter; raw stderr tail follows "
+                f"({len(raw_stderr)} chars total):",
+                file=sys.stderr,
+            )
+            print(raw_stderr[-1500:] or "(stderr was completely empty — the process was "
+                                        "probably killed by a signal)", file=sys.stderr)
         return 1
     print(f"      {seconds:.1f}s")
 

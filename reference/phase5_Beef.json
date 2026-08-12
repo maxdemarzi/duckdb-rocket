@@ -1,0 +1,31 @@
+{
+  "dataset": "Beef",
+  "model": "tabicl-v2",
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0
+  },
+  "shape": {
+    "dataset": "Beef",
+    "n_train": 30,
+    "n_test": 30,
+    "n_timepoints": 470,
+    "raw_parquet": "C:/Users/maxde/duckdb-rocket/data/phase5/Beef/raw.parquet"
+  },
+  "accuracy": 0.7666666666666667,
+  "row_alignment": {
+    "predicted_rows": 30,
+    "distinct_ids": 30,
+    "group_rows": 1200,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40
+  },
+  "failures": [],
+  "seconds": 129.0,
+  "comparison": null,
+  "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
+}

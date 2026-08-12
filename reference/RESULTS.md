@@ -138,6 +138,33 @@ The loadable extension was also verified against the **stock upstream v1.5.5 CLI
 not only the shell built here — the check that the pinned ABI genuinely matches rather than
 being self-consistent.
 
+### Breadth: five datasets, G=40, e=1, `tabicl-v2`
+
+| Dataset | Test rows | Timepoints | Accuracy | Wall clock |
+|---|---|---|---|---|
+| Coffee | 28 | 286 | 1.0000 | 128 s |
+| Trace | 100 | 275 | 1.0000 | 260 s |
+| GunPoint | 150 | 150 | 0.9933 | 258 s |
+| FaceFour | 88 | 350 | 0.9773 | 172 s |
+| Beef | 30 | 470 | 0.7667 | 129 s |
+
+Row alignment was total on every one: 40 of 40 groups scored every row, no duplicates, no drops.
+
+**Mean accuracy 0.9475 — and it should not be compared to the paper's 0.900.** That figure is a
+mean over 92 datasets with 30 resamples; this is a single split of five datasets chosen for
+*spread* rather than difficulty, using a different backbone (`tabicl-v2`, because `tabpfn-v2-5`
+will not load) at e=1 rather than e=8. The two numbers measure different things and the
+resemblance is not evidence of anything.
+
+What the table *is* good for is a sanity check, and it passes one: these values sit where
+published ROCKET results sit on these datasets, including Beef being much the hardest — the
+subset notes flagged it as "classically hard" before any of it was run. A ROCKET implementation
+that was subtly wrong would be unlikely to land in the right neighbourhood on five datasets at
+once while also matching the Python oracle bit-for-bit.
+
+Timings are contended and include process startup and Parquet I/O per dataset; they scale with
+test rows, as expected when the classify calls dominate.
+
 **What Python still does:** downloads the dataset, writes Parquet, and generates the SQL text.
 It computes none of the result. The generation is mechanical templating that cannot currently be
 avoided, because `tabfm_classify` needs N named scalar columns — the `LIST` form crashes the
@@ -153,9 +180,10 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   Every number above is local.
 - **Multivariate and variable-length series.** Still unspecified in SPEC.md §7, so
   `BasicMotions` remains skipped rather than silently mishandled.
-- **The 92-dataset / 30-resample protocol.** Phase 5 has been run on GunPoint and Coffee only,
-  which is exactly the "conclusions from one dataset" the plan warns against. Breadth is the
-  obvious next step.
+- **The 92-dataset / 30-resample protocol.** Phase 5 covers five datasets on a single split.
+  That is enough to rule out a one-dataset fluke and nowhere near enough to compare against the
+  paper. The multivariate case is excluded by construction, and the larger datasets
+  (`ECG5000`, `ItalyPowerDemand`, `OSULeaf`, `SyntheticControl`) were skipped for runtime.
 - **Upstream reports.** Two are worth filing against `DataZooDE/anofox-tabfm` — the
   checkpoint/graph mismatch and the `LIST`-column internal error — but filing on a third-party
   repo is the maintainer's call to invite, so they are written up here rather than submitted.

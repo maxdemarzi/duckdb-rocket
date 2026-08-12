@@ -20,13 +20,22 @@ DUCKDB_VERSION="${DUCKDB_VERSION:-v1.5.5}"
 log() { printf '\n=== %s\n' "$*"; }
 
 log "system packages"
-if ! command -v cmake >/dev/null 2>&1; then
+# Checked per tool, not on `cmake` alone. RunPod's PyTorch images ship cmake but neither ninja
+# nor a compiler, so a single-tool guard skips the install and the failure surfaces much later
+# as "CMAKE_CXX_COMPILER not set" during the extension build.
+missing=()
+for tool in git cmake ninja g++ unzip curl; do
+    command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+done
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "missing: ${missing[*]}"
     apt-get update -qq
-    # ninja and a compiler are needed for the extension; unzip for the DuckDB CLI zip.
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
         git cmake ninja-build build-essential unzip curl ca-certificates
 fi
 cmake --version | head -1
+ninja --version
+g++ --version | head -1
 
 log "uv"
 if ! command -v uv >/dev/null 2>&1; then

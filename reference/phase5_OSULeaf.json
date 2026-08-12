@@ -1,0 +1,31 @@
+{
+  "dataset": "OSULeaf",
+  "model": "tabicl-v2",
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0
+  },
+  "shape": {
+    "dataset": "OSULeaf",
+    "n_train": 200,
+    "n_test": 242,
+    "n_timepoints": 427,
+    "raw_parquet": "C:/Users/maxde/duckdb-rocket/data/phase5/OSULeaf/raw.parquet"
+  },
+  "accuracy": 0.9710743801652892,
+  "row_alignment": {
+    "predicted_rows": 242,
+    "distinct_ids": 242,
+    "group_rows": 9680,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40
+  },
+  "failures": [],
+  "seconds": 448.5,
+  "comparison": null,
+  "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
+}

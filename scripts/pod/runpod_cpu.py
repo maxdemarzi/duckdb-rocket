@@ -134,8 +134,13 @@ def cmd_plan(args) -> int:
     print(json.dumps({**recipe(args), "env": {"PUBLIC_KEY": "<your key>"}}, indent=2))
     print(f"\n  CPU pod, {args.vcpu} vCPU, flavors in priority order: {', '.join(CPU_FLAVORS)}")
     print(f"  disk    {args.container_disk} GB container + {args.volume} GB volume")
-    print("  cost    CPU pods are billed per vCPU; RunPod quotes the rate at creation.")
-    print("          Expect roughly an order of magnitude under a 48 GB GPU card.")
+    print("  cost    CPU pods are billed per vCPU, around $0.035/vCPU/hr -- so 16 vCPU is")
+    print("          ~$0.56/hr, only about 25% under the $0.74/hr RTX 6000 Ada this project")
+    print("          first used. **Measured, not assumed**: an earlier version of this file")
+    print("          claimed 'roughly an order of magnitude cheaper' and that was simply")
+    print("          wrong. The reason to prefer CPU here is that the GPU is provably idle")
+    print("          (anofox's ONNX Runtime is CPU-only), not that it is dramatically cheaper.")
+    print("          Fewer vCPUs is the actual lever on cost.")
     print("\n  `stop` keeps the volume AND keeps billing it. `terminate` destroys it.")
     print("\nto actually create it, re-run with:  create --yes-i-will-pay")
     return 0
@@ -158,12 +163,10 @@ def cmd_create(args) -> int:
 def cmd_ssh(args) -> int:
     pod = request(f"/pods/{args.pod_id}")
     ip = pod.get("publicIp")
-    port = None
-    for mapping in pod.get("portMappings") or []:
-        if str(mapping.get("privatePort")) == "22":
-            port = mapping.get("publicPort")
-    if isinstance(pod.get("portMappings"), dict):
-        port = pod["portMappings"].get("22")
+    # portMappings comes back as {"22": 42374} -- a private->public dict, not the list of
+    # {privatePort, publicPort} objects the older GraphQL API returned.
+    mappings = pod.get("portMappings") or {}
+    port = mappings.get("22") if isinstance(mappings, dict) else None
     if not ip or not port:
         print(f"pod {args.pod_id} has no public 22/tcp mapping yet "
               f"(status {pod.get('desiredStatus')}); it may still be starting.")

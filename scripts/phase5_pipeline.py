@@ -249,7 +249,11 @@ SELECT (SELECT count(*) FROM predictions)          AS predicted_rows,
        (SELECT count(*) FROM all_groups)           AS group_rows,
        (SELECT min(n_groups_seen) FROM per_class)  AS min_groups_per_row,
        (SELECT max(n_groups_seen) FROM per_class)  AS max_groups_per_row,
-       (SELECT coalesce(sum(collisions), 0) FROM f0_checks) AS f0_collisions;
+       -- CAST because sum() over BIGINT returns HUGEINT, and `.mode json` renders HUGEINT as a
+       -- *string* to avoid precision loss. "0" is truthy in Python, so the guard below fired on
+       -- every run while reporting zero collisions.
+       (SELECT CAST(coalesce(sum(collisions), 0) AS BIGINT)
+          FROM f0_checks)                         AS f0_collisions;
 """)
     return "\n".join(parts)
 
@@ -365,7 +369,10 @@ def main() -> int:
             f"{facts['group_rows']} group rows, expected {n_test * config.n_groups}: the "
             f"feature-value join dropped or duplicated rows"
         )
-    if facts.get("f0_collisions"):
+    # int() rather than a bare truth test: DuckDB hands some aggregates back as strings, and
+    # every non-empty string is truthy. Belt and braces with the CAST in the SQL above -- this
+    # guard exists to catch a wrong answer, so it must not itself become one.
+    if int(float(facts.get("f0_collisions") or 0)):
         failures.append(
             f"{facts['f0_collisions']} test rows share an f0 with another row across the "
             f"{config.n_groups} groups; ids are recovered by joining on f0, so those rows were "

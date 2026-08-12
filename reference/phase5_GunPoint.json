@@ -25,13 +25,16 @@
     "max_groups_per_row": 40
   },
   "failures": [],
-  "seconds": 261.5,
+  "seconds": 258.0,
   "comparison": {
     "phase3_report": "reference\\phase3_GunPoint.json",
     "phase3_accuracy": 0.9933333333333333,
     "phase5_accuracy": 0.9933333333333333,
     "delta": 0.0,
-    "identical_accuracy": true
+    "identical_accuracy": true,
+    "rows_compared": 150,
+    "rows_agreeing": 150,
+    "identical_predictions": true
   },
   "caveat": "local Windows timing on a contended box; PLAN.md requires reported numbers to come from a pod"
 }

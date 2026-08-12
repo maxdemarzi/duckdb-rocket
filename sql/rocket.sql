@@ -183,3 +183,151 @@ CREATE OR REPLACE MACRO draw(master_hi, master_lo, i, step) AS
 
 -- `step` is 1-based: SPEC.md 2 is explicit that a kernel's first draw is
 -- mix(kernel_seed + GOLDEN_GAMMA), not mix(kernel_seed).
+
+-- ----------------------------------------------------------------------------------------
+-- Kernel generation (SPEC.md 3)
+-- ----------------------------------------------------------------------------------------
+-- The draw order is normative: length, then `length` normals, then bias, then dilation, then
+-- the padding coin. The awkward part in SQL is the normals, because SPEC.md 1.5's polar method
+-- rejects roughly 21% of pairs and therefore consumes a data-dependent number of draws -- a
+-- loop, in a language without one.
+--
+-- The way through is that the draw stream is addressable (see `draw` above): rather than
+-- iterating, generate a fixed grid of draws per kernel, evaluate every candidate pair at once,
+-- and use a running count of accepted pairs to work out both which pairs supplied the normals
+-- AND what step the stream had reached afterwards -- which is what bias, dilation and padding
+-- need in order to continue from the right place.
+--
+-- MAX_PAIRS is a safety margin, not a tuning knob. At ~78.5% acceptance, needing 11 normals
+-- takes ~14 pairs; 80 makes exhaustion a ~1e-30 event. `rocket_kernels` asserts it anyway,
+-- because the alternative to an assertion here is silently short weights.
+CREATE OR REPLACE MACRO rocket_max_pairs() AS 80;
+
+-- Every candidate pair for every kernel, with its acceptance decision.
+-- Pair p occupies steps (2 + 2p) and (3 + 2p); step 1 is the length draw.
+CREATE OR REPLACE MACRO rocket_pairs(master_hi, master_lo, first_kernel, n_kernels) AS TABLE
+SELECT
+    i AS kernel_id,
+    p,
+    2 * u - 1 AS u,
+    2 * v - 1 AS v,
+    (2 * u - 1) * (2 * u - 1) + (2 * v - 1) * (2 * v - 1) AS s,
+    3 + 2 * p AS end_step
+FROM (
+    SELECT
+        i, p,
+        draw(master_hi, master_lo, first_kernel + i, 2 + 2 * p) AS u,
+        draw(master_hi, master_lo, first_kernel + i, 3 + 2 * p) AS v
+    FROM range(n_kernels) AS t(i), range(rocket_max_pairs()) AS q(p)
+);
+
+-- Kernel scalars: length, bias, dilation, padding -- plus the stream position they were drawn
+-- from, which is what ties them to the normals that preceded them.
+CREATE OR REPLACE MACRO rocket_kernel_params(master_hi, master_lo, first_kernel, n_kernels,
+                                             n_timepoints) AS TABLE
+WITH lengths AS (
+    SELECT i AS kernel_id,
+           [7, 9, 11][1 + floor(draw(master_hi, master_lo, first_kernel + i, 1) * 3)::INT]
+               AS length
+    FROM range(n_kernels) AS t(i)
+),
+accepted AS (
+    -- Accepted pairs only, numbered in stream order. `s = 0` is astronomically unlikely but
+    -- would divide by zero; `s >= 1` is the ordinary rejection outside the unit disc.
+    SELECT kernel_id, p, u, s, end_step,
+           row_number() OVER (PARTITION BY kernel_id ORDER BY p) AS nth
+    FROM rocket_pairs(master_hi, master_lo, first_kernel, n_kernels)
+    WHERE s > 0 AND s < 1
+),
+-- Where the stream stands once `length` normals have been produced.
+cursor AS (
+    SELECT a.kernel_id, l.length, a.end_step
+    FROM accepted a JOIN lengths l USING (kernel_id)
+    WHERE a.nth = l.length
+)
+SELECT
+    c.kernel_id,
+    c.length,
+    -- SPEC.md 3: bias, then dilation, then the padding coin, in that order.
+    -1 + 2 * draw(master_hi, master_lo, first_kernel + c.kernel_id, c.end_step + 1) AS bias,
+    floor(pow(2.0,
+              draw(master_hi, master_lo, first_kernel + c.kernel_id, c.end_step + 2)
+              * log2((n_timepoints - 1)::DOUBLE / (c.length - 1)::DOUBLE)))::BIGINT AS dilation,
+    CASE WHEN floor(draw(master_hi, master_lo, first_kernel + c.kernel_id, c.end_step + 3) * 2)
+              = 1
+         THEN ((c.length - 1) *
+               floor(pow(2.0,
+                         draw(master_hi, master_lo, first_kernel + c.kernel_id, c.end_step + 2)
+                         * log2((n_timepoints - 1)::DOUBLE / (c.length - 1)::DOUBLE)))::BIGINT)
+              // 2
+         ELSE 0 END AS padding,
+    c.end_step
+FROM cursor c;
+
+-- The weights: `length` normals, mean-centred (SPEC.md 3).
+CREATE OR REPLACE MACRO rocket_kernels(master_hi, master_lo, first_kernel, n_kernels,
+                                       n_timepoints) AS TABLE
+WITH params AS (
+    SELECT * FROM rocket_kernel_params(master_hi, master_lo, first_kernel, n_kernels,
+                                       n_timepoints)
+),
+normals AS (
+    SELECT a.kernel_id,
+           a.nth - 1 AS j,
+           a.u * sqrt(-2 * ln(a.s) / a.s) AS raw
+    FROM (
+        SELECT kernel_id, p, u, s,
+               row_number() OVER (PARTITION BY kernel_id ORDER BY p) AS nth
+        FROM rocket_pairs(master_hi, master_lo, first_kernel, n_kernels)
+        WHERE s > 0 AND s < 1
+    ) a
+    JOIN params pm USING (kernel_id)
+    WHERE a.nth <= pm.length
+),
+centred AS (
+    -- Plain arithmetic mean over the kernel's own weights.
+    SELECT kernel_id, j, raw - avg(raw) OVER (PARTITION BY kernel_id) AS weight
+    FROM normals
+)
+SELECT c.kernel_id, c.j, c.weight, p.length, p.bias, p.dilation, p.padding
+FROM centred c JOIN params p USING (kernel_id);
+
+-- ----------------------------------------------------------------------------------------
+-- The transform (SPEC.md 4)
+-- ----------------------------------------------------------------------------------------
+-- `series` is (series_id, t, value) in long form -- one row per timepoint. That is the shape a
+-- join can work with; `sql_rocket_check.py` unnests a LIST column into it.
+--
+-- This is where the pure-SQL path stops being competitive, and visibly so: the join below is
+-- series x kernels x output_positions x taps, which for the paper's configuration is billions
+-- of rows. It is written for clarity and for its value as an executable statement of the spec,
+-- not for throughput. That is exactly what PLAN.md Phase 4 predicted, and the measurement in
+-- `sql_rocket_check.py` is what turns the prediction into a number.
+CREATE OR REPLACE MACRO rocket_features(master_hi, master_lo, first_kernel, n_kernels,
+                                        n_timepoints, series) AS TABLE
+WITH kernels AS (
+    SELECT * FROM rocket_kernels(master_hi, master_lo, first_kernel, n_kernels, n_timepoints)
+),
+shape AS (
+    SELECT DISTINCT kernel_id, length, bias, dilation, padding,
+           n_timepoints + 2 * padding - (length - 1) * dilation AS output_length
+    FROM kernels
+),
+conv AS (
+    SELECT s.series_id, sh.kernel_id, o.k,
+           sh.bias + sum(kw.weight * x.value) AS value
+    FROM shape sh
+    CROSS JOIN (SELECT DISTINCT series_id FROM series) s
+    CROSS JOIN LATERAL range(sh.output_length) AS o(k)
+    JOIN kernels kw ON kw.kernel_id = sh.kernel_id
+    -- A tap outside [0, n) lands on the zero padding and contributes nothing, so an inner
+    -- join expresses the padding exactly (SPEC.md 4).
+    JOIN series x ON x.series_id = s.series_id
+                 AND x.t = o.k + kw.j * sh.dilation - sh.padding
+    GROUP BY s.series_id, sh.kernel_id, o.k, sh.bias
+)
+SELECT series_id, kernel_id,
+       max(value) AS max_feature,
+       (count(*) FILTER (WHERE value > 0))::DOUBLE / count(*)::DOUBLE AS ppv_feature
+FROM conv
+GROUP BY series_id, kernel_id;

@@ -10,3 +10,6 @@ token.txt
 
 # Golden vectors are conformance fixtures for the C++ extension — they ship with the repo.
 !reference/golden/*.parquet
+
+# CMake/Ninja build tree for the extension.
+build/

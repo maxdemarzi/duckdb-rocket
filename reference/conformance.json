@@ -1,0 +1,32 @@
+{
+  "duckdb": "C:\\Users\\maxde\\duckdb-rocket\\build\\release\\duckdb.exe",
+  "tolerance": 1e-09,
+  "seed": 20260811,
+  "passed": true,
+  "fixtures": [
+    {
+      "fixture": "features_base",
+      "ok": true,
+      "shape": [
+        8,
+        128
+      ],
+      "max_abs_diff": 1.7763568394002505e-15,
+      "max_rel_diff": 3.2434334311835626e-16,
+      "values_outside_tolerance": 0,
+      "max_ppv_diff": 0.0
+    },
+    {
+      "fixture": "features_offset",
+      "ok": true,
+      "shape": [
+        8,
+        32
+      ],
+      "max_abs_diff": 1.7763568394002505e-15,
+      "max_rel_diff": 2.9046538206350956e-16,
+      "values_outside_tolerance": 0,
+      "max_ppv_diff": 0.0
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+# name: test/sql/rocket.test
+# description: rocket_transform basics and its error surface
+# group: [rocket]
+
+require rocket
+
+# Two features per kernel (SPEC.md 5), so a 2-kernel bank yields 4 values.
+query I
+SELECT len(rocket_transform([1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[], 2, 0, 0));
+----
+4
+
+# 250 kernels is this project's group size: 500 features, which is exactly one TabPFN
+# estimator's view (see reference/PHASE2_FINDINGS.md).
+query I
+SELECT len(rocket_transform((SELECT list(v::DOUBLE) FROM range(128) t(v)), 250, 0, 0));
+----
+500
+
+# Determinism: kernel i is a pure function of (seed, i), so the same arguments must give the
+# same features every time.
+query I
+SELECT rocket_transform(s, 8, 42, 0) = rocket_transform(s, 8, 42, 0)
+FROM (SELECT [1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[] AS s);
+----
+true
+
+# A different seed must give different kernels.
+query I
+SELECT rocket_transform(s, 8, 42, 0) = rocket_transform(s, 8, 43, 0)
+FROM (SELECT [1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[] AS s);
+----
+false
+
+# Group addressing: kernels [0,4) and kernels [4,8) are different kernels from one bank, not
+# two independently-seeded banks. This is the property the whole G-group design rests on.
+query I
+SELECT rocket_transform(s, 4, 7, 0) = rocket_transform(s, 4, 7, 4)
+FROM (SELECT [1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[] AS s);
+----
+false
+
+# ...and asking for a group directly must equal the corresponding slice of the full bank.
+query I
+SELECT rocket_transform(s, 4, 7, 4) = rocket_transform(s, 8, 7, 0)[9:16]
+FROM (SELECT [1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[] AS s);
+----
+true
+
+# PPV is a proportion, so every odd-indexed feature (1-based: every even subscript) is in [0,1].
+query I
+SELECT bool_and(v >= 0.0 AND v <= 1.0)
+FROM (
+  SELECT unnest(f) AS v, generate_subscripts(f, 1) AS i
+  FROM (SELECT rocket_transform((SELECT list(t::DOUBLE) FROM range(64) r(t)), 16, 3, 0) AS f)
+) WHERE i % 2 = 0;
+----
+true
+
+# NULL series propagates rather than erroring.
+query I
+SELECT rocket_transform(NULL::DOUBLE[], 4, 0, 0) IS NULL;
+----
+true
+
+statement error
+SELECT rocket_transform([1.0,2.0,3.0]::DOUBLE[], 4, 0, 0);
+----
+shorter than the longest kernel
+
+statement error
+SELECT rocket_transform([1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[], 0, 0, 0);
+----
+kernels_per_group must be positive
+
+statement error
+SELECT rocket_transform([1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[], 4, 0, -1);
+----
+first_kernel must be non-negative
+
+statement error
+SELECT rocket_transform([1.0,NULL,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0]::DOUBLE[], 4, 0, 0);
+----
+contains NULL values

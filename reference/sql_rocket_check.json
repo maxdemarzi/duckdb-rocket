@@ -1,0 +1,20 @@
+{
+  "config": {
+    "kernels": 8,
+    "first_kernel": 0,
+    "series": 2,
+    "timepoints": 48,
+    "seed": 0
+  },
+  "correct": true,
+  "max_abs_diff": 1.7763568394002505e-15,
+  "max_ppv_diff": 0.0,
+  "values_outside_tolerance": 0,
+  "kernels_with_bad_weight_count": 0,
+  "timing": {
+    "python_seconds": 0.0009,
+    "sql_seconds": 342.395,
+    "slowdown": 396198.7,
+    "note": "one DuckDB process launch is included in sql_seconds; at this size that is a meaningful share of it, so the ratio flatters Python at small inputs and is best read at the largest size that finishes"
+  }
+}

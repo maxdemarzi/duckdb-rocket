@@ -402,19 +402,32 @@ the prior measurements to interpret the result against. Cheap — one argument, 
 
 **Goal:** replace the Python feature step.
 
-- [ ] **First: a pure-SQL macro** over DuckDB `LIST` operations. Expect it to be too slow —
-      but it establishes the semantics in-database and gives a zero-build fallback. If it is
-      merely 5–10× slow rather than 1000×, seriously consider stopping here.
-- [ ] Otherwise scaffold from a template — **which one is a real decision; see below**
-- [ ] Implement `rocket_transform(series, kernels, seed, group)` → `FLOAT[]`
-- [ ] **Conformance test against Phase 1 golden vectors** (tight float tolerance)
-- [ ] Multivariate support (random channel subsets per kernel)
-- [ ] Variable-length series handling
-- [ ] Parallelize across kernels/rows using DuckDB's execution model
-- [ ] Benchmark vs. the Python implementation
+- [x] **First: a pure-SQL macro** — `sql/rocket.sql`. It is **correct** (max abs diff 1.8e-15
+      against the oracle, PPV exact) and **not remotely viable**: ~4×10⁵ slower than Python on
+      8 kernels / 2 series / 48 timepoints — 342 s for what Python does in 1 ms. The
+      "5–10× slow, consider stopping here" branch is decisively closed. It stays as an
+      executable statement of the spec and a zero-build fallback for tiny inputs
+- [x] Scaffold from the C++ template, following swan
+- [x] Implement `rocket_transform(series, kernels_per_group, seed, first_kernel)` → `DOUBLE[]`
+- [x] **Conformance test against Phase 1 golden vectors** — `scripts/conformance.py`. Both
+      fixtures pass at 1e-9, max abs diff 1.8e-15, PPV differences exactly 0. The offset
+      fixture (global kernel index 9,000) is the one that matters: it proves `first_kernel`
+      addresses into one bank rather than reseeding
+- [ ] Multivariate support (random channel subsets per kernel) — still unspecified in SPEC.md 7
+- [ ] Variable-length series handling — still unspecified in SPEC.md 7
+- [x] Parallelize across rows using DuckDB's execution model — comes free from the scalar
+      function; visible as speedup that grows with row count (1.7× at 200 rows, 7.1× at 4,000)
+- [x] Benchmark vs. the Python implementation — `scripts/benchmark_transform.py`
 
 **Build note:** MSVC Build Tools required on Windows; see `tabicl/scaling/build_native.py` for
 a working precedent.
+
+> **Built, first try.** `scripts/build_extension.bat` — a `.bat` rather than the template's
+> Makefile because `vcvars64` mutates the environment of the shell that calls it, and that does
+> not survive being set up in one process and used in another. cmake and ninja are installed but
+> not on a non-interactive shell's PATH, so the script adds them. Artifacts land in
+> `build/release/` (`duckdb.exe` with the extension statically linked, plus a loadable
+> `rocket.duckdb_extension`).
 
 ### Template: the C++ one, following `maxdemarzi/swan`
 

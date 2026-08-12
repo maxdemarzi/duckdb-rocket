@@ -1,0 +1,16 @@
+{
+  "config": {
+    "series": 200,
+    "timepoints": 150,
+    "kernels_per_group": 250,
+    "features": 500,
+    "seed": 0,
+    "repeats": 3
+  },
+  "python_seconds": 0.1076,
+  "cpp_seconds": 0.0649,
+  "speedup": 1.7,
+  "outputs_agree": true,
+  "max_abs_diff": 5.329070518200751e-15,
+  "caveat": "local Windows timings, correctness-oriented hardware; PLAN.md requires reported numbers to come from a pod"
+}

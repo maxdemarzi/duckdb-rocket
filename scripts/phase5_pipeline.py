@@ -201,6 +201,23 @@ PREPARE fill_src AS
   INSERT INTO test_src_cur SELECT id, f[1] FROM feat_cur
    WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
 
+-- Prime the tables before preparing the classify. tabfm_classify validates its context at BIND
+-- time, so preparing it against an empty train_cur fails outright with "target 'y' has no
+-- non-NULL rows to use as context". The fills above are ordinary INSERT..SELECT and bind fine
+-- on empty tables; only the table function looks at contents.
+--
+-- This repeats group 0 / chunk 0's fills, which the loop below then does again. That is one
+-- group's transform of wasted work, and it buys a loop with no special case in it -- the
+-- alternative is skipping the first iteration, which is exactly the kind of off-by-one that
+-- silently drops a chunk from the ensemble.
+DELETE FROM feat_cur;
+EXECUTE fill_feat({0});
+DELETE FROM train_cur;
+EXECUTE fill_train;
+DELETE FROM test_cur; DELETE FROM test_src_cur;
+EXECUTE fill_test({bounds[0][0]}, {bounds[0][1]});
+EXECUTE fill_src({bounds[0][0]}, {bounds[0][1]});
+
 -- test_cur omits the target: tabfm_classify unions train and test BY NAME, and a target present
 -- in both is a duplicate-name binder error naming neither cause (Phase 2).
 PREPARE score AS
@@ -209,6 +226,9 @@ PREPARE score AS
   FROM tabfm_classify('train_cur', 'y', test := 'test_cur',
                       model := '{MODEL}', features := {feature_list}) c
   JOIN test_src_cur s ON s.f0 = c.f0;
+
+-- f0_checks is filled by the loop below, which starts from group 0 again; nothing above wrote
+-- to it, so there is no priming row to remove.
 """)
 
     for g in range(config.n_groups):

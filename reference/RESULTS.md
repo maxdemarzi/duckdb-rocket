@@ -255,30 +255,38 @@ The loadable extension was also verified against the **stock upstream v1.5.5 CLI
 not only the shell built here — the check that the pinned ABI genuinely matches rather than
 being self-consistent.
 
-### Breadth: seven datasets, G=40, e=1, `tabicl-v2`
+### Breadth: eight datasets, G=40, e=1, `tabicl-v2`
 
-| Dataset | Test rows | Timepoints | Accuracy | Wall clock |
-|---|---|---|---|---|
-| Coffee | 28 | 286 | 1.0000 | 128 s |
-| Trace | 100 | 275 | 1.0000 | 260 s |
-| GunPoint | 150 | 150 | 0.9933 | 258 s |
-| SyntheticControl | 300 | 60 | 0.9867 | 674 s |
-| FaceFour | 88 | 350 | 0.9773 | 172 s |
-| OSULeaf | 242 | 427 | 0.9711 | 449 s |
-| Beef | 30 | 470 | 0.7667 | 129 s |
+| Dataset | Test rows | Channels | Timepoints | Accuracy | Wall clock |
+|---|---|---|---|---|---|
+| BasicMotions | 40 | **6** | 100 | 1.0000 | 132 s |
+| Coffee | 28 | 1 | 286 | 1.0000 | 128 s |
+| Trace | 100 | 1 | 275 | 1.0000 | 260 s |
+| GunPoint | 150 | 1 | 150 | 0.9933 | 258 s |
+| SyntheticControl | 300 | 1 | 60 | 0.9867 | 674 s |
+| FaceFour | 88 | 1 | 350 | 0.9773 | 172 s |
+| OSULeaf | 242 | 1 | 427 | 0.9711 | 449 s |
+| Beef | 30 | 1 | 470 | 0.7667 | 129 s |
 
 Row alignment was total on every one: 40 of 40 groups scored every row, no duplicates, no drops.
 
-`SyntheticControl` and `OSULeaf` are the two the failed pod run was meant to add; they were run
-locally instead, at full configuration, after the pod was stopped. `SyntheticControl` is
-incidentally the dataset that failed on the pod every time — running clean here is what
-identified that failure as environmental rather than anything to do with the data.
+`BasicMotions` is the multivariate case, and the first multivariate prediction this project has
+produced. It exercises the whole SPEC.md 7 path — per-kernel channel subsets, per-channel
+mean-centring, the `DOUBLE[][]` overload — and 1.0000 is where published ROCKET results sit on
+it. `SyntheticControl` and `OSULeaf` are the two the failed pod run was meant to add, run
+locally instead; `SyntheticControl` is incidentally the dataset that died on the pod every time,
+so running it clean here is what proved that failure environmental.
 
-**Mean accuracy 0.9564 — and it should not be compared to the paper's 0.900.** That figure is a
-mean over 92 datasets with 30 resamples; this is a single split of seven datasets chosen for
+**Mean accuracy 0.9619 — and it should not be compared to the paper's 0.900.** That figure is a
+mean over 92 datasets with 30 resamples; this is a single split of eight datasets chosen for
 *spread* rather than difficulty, using a different backbone (`tabicl-v2`, because `tabpfn-v2-5`
 will not load) at e=1 rather than e=8. The two numbers measure different things and the
 resemblance is not evidence of anything.
+
+**Two of the ten subset datasets remain unrun:** `ECG5000` (4,500 test rows) and
+`ItalyPowerDemand` (1,029). Both are slow rather than unsupported — `tabfm_classify` cost scales
+with rows, and 40 groups over 4,500 rows is hours locally. They are the obvious use for a
+well-sized pod.
 
 What the table *is* good for is a sanity check, and it passes one: these values sit where
 published ROCKET results sit on these datasets, including Beef being much the hardest — the
@@ -306,8 +314,10 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   the flag performs, and an expensive one.
 - **Anything measured on a pod.** One was run and it produced **no usable results**; see
   "The pod run that failed" below. Every number above is local.
-- **Multivariate and variable-length series.** Still unspecified in SPEC.md §7, so
-  `BasicMotions` remains skipped rather than silently mishandled.
+- **Variable-length series.** Still unspecified (SPEC.md §8). The transform rejects a length
+  mismatch rather than silently producing incomparable features, which is the right failure but
+  not a solution. *(Multivariate is done — specified in §7, implemented in both the oracle and
+  the extension, and running end to end on `BasicMotions`.)*
 - **The 92-dataset / 30-resample protocol.** Phase 5 covers five datasets on a single split.
   That is enough to rule out a one-dataset fluke and nowhere near enough to compare against the
   paper. The multivariate case is excluded by construction, and the larger datasets

@@ -57,21 +57,25 @@ checkpoint also needs running through their `convert_weights.py`. Details in
 | Pure-SQL ROCKET | correct, and ~**4×10⁵** slower than Python — a fallback, not an option |
 | Extension test suite | 12 assertions via DuckDB's sqllogictest runner |
 
-Accuracy on five UCR datasets, G=40, e=1 — the oracle (TabPFN v2.5, fp32) beside the DuckDB
-pipeline (TabICL v2), with the measured seed-to-seed noise for scale:
+Accuracy on eight UCR/UEA datasets, G=40, e=1, through the DuckDB pipeline (TabICL v2):
 
-| Dataset | TabPFN (oracle) | TabICL (DuckDB) | seed sd |
-|---|---|---|---|
-| Coffee | 1.0000 | 1.0000 | 0.0000 |
-| Trace | 1.0000 | 1.0000 | 0.0000 |
-| GunPoint | 0.9933 | 0.9933 | 0.0038 |
-| FaceFour | 0.9773 | 0.9773 | 0.0000 |
-| Beef | 0.8333 | 0.7667 | 0.0509 |
+| Dataset | Channels | Accuracy |
+|---|---|---|
+| BasicMotions | **6** | 1.0000 |
+| Coffee | 1 | 1.0000 |
+| Trace | 1 | 1.0000 |
+| GunPoint | 1 | 0.9933 |
+| SyntheticControl | 1 | 0.9867 |
+| FaceFour | 1 | 0.9773 |
+| OSULeaf | 1 | 0.9711 |
+| Beef | 1 | 0.7667 |
 
-Four of five are identical and the one difference is two test rows out of thirty, against a
+Where the Python oracle (TabPFN v2.5, pinned fp32) has also been run, it agrees exactly on four
+of five datasets; the one difference is two test rows out of thirty on Beef, against a
 seed-to-seed sd of 0.0509 on that same dataset — so this subset cannot tell the two backbones
 apart. Do not read the mean against the paper's 0.900: that is 92 datasets over 30 resamples,
-this is one split of five. Full detail and caveats in [reference/RESULTS.md](reference/RESULTS.md).
+this is one split of eight. Full detail and caveats in
+[reference/RESULTS.md](reference/RESULTS.md).
 
 All timings are local Windows numbers on a contended box and belong in no table — PLAN.md
 requires reported figures to come from a pod.
@@ -92,12 +96,18 @@ linked in, plus a loadable `rocket.duckdb_extension`.
 ## `rocket_transform`
 
 ```sql
-rocket_transform(series DOUBLE[], kernels_per_group BIGINT, seed BIGINT, first_kernel BIGINT)
-  -> DOUBLE[]
+rocket_transform(series DOUBLE[],   kernels_per_group, seed, first_kernel) -> DOUBLE[]
+rocket_transform(series DOUBLE[][], kernels_per_group, seed, first_kernel) -> DOUBLE[]
 ```
 
 Returns `kernels_per_group * 2` features, interleaved: element `2i` is kernel `i`'s max and
 `2i+1` its PPV.
+
+The second overload is the multivariate one — outer list channels, inner list timepoints. Each
+kernel draws a random subset of channels with independent weights per channel, and still yields
+exactly 2 features, because the selected channels are summed inside a single convolution. A
+one-channel series gives byte-identical kernels either way, which is what keeps the univariate
+golden vectors valid (SPEC.md §7.1).
 
 `first_kernel` is what makes groups work. Kernel `i` is a pure function of `(seed, i)`, so group
 `g` is global kernel indices `[g*k, (g+1)*k)` and can be generated without generating the groups

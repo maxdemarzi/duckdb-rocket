@@ -492,11 +492,75 @@ step.
 
 ## Phase 5 — Full pipeline and benchmark
 
-- [ ] Whole pipeline in SQL: raw series table → predictions, no Python anywhere
-- [ ] Run the 10-dataset subset on a pod; accuracy must match Phase 1
+- [x] Whole pipeline in SQL: raw series table → predictions. **Every arithmetic step** from raw
+      series to predicted label happens in DuckDB. Python still downloads the dataset, writes it
+      to Parquet and templates the SQL — `tabfm_classify` needs 500 named scalar columns rather
+      than one LIST column (Phase 2), so the script is ~0.8 MB and goes through a file. It
+      computes none of the result.
+- [~] Run the 10-dataset subset on a pod; accuracy must match Phase 1 — **in progress.** All ten
+      are runnable; see the memory wall below for why two of them were not until now.
 - [ ] Expand toward the paper's 92-dataset / 30-resample protocol if timing permits
 - [ ] Compare wall-clock against the paper's ~30s/fold median
-- [ ] Every result archived with its environment tuple
+- [x] Every result archived with its environment tuple — reports now carry `threads`,
+      `memory_limit`, `memory_budget_source` and `test_chunk` in `config`, alongside
+      `doctor.json`. A timing is not comparable against a run given a different budget.
+
+### The memory wall, and what it actually was
+
+Eight datasets ran locally. The ninth, ItalyPowerDemand, took the Windows box down at 25.7 GB,
+then was OOM-killed twice on a 29 GB pod. ECG5000 was never attempted.
+
+The first two explanations were both wrong, and both were wrong in the same way — reasoning from
+the shape of the SQL rather than measuring:
+
+1. *"The per-group feature tables."* Off by three orders of magnitude: 500 features × 1029 rows
+   is ~4 MB.
+2. *"Too big for any pod."* A two-point linear fit predicted ~120 GB for ECG5000. It was an
+   extrapolation, not a measurement.
+
+It is the **single `tabfm_classify` call**, in ONNX allocations DuckDB's buffer manager never
+sees. That is why `SET memory_limit` and `--threads 1` changed nothing: the 6 GB run died
+*faster* (10.2s) than the 20 GB one (25.9s).
+
+Two fixes, and it matters which one did the work:
+
+- **`--test-chunk N`** — one classify call per N test rows. Peak memory becomes a function of N
+  rather than of the dataset. **This is the fix.** It is identity-preserving because an
+  in-context learner treats each test row as an independent query against the train context, and
+  that was *verified, not argued*: GunPoint chunked vs unchunked, same pod, same commit —
+  150/150 ids, **0 rows disagreeing**. Cost is nil: 248.7s vs 258s for 3× the calls.
+- **An explicit `memory_limit` from the cgroup, not from `free`.** Inside a container `free`
+  reports the host's RAM (124 GB here) while the cgroup ceiling was 29 GB, so DuckDB's default
+  of 80%-of-visible aimed ~99 GB. Necessary hygiene; it was not what unblocked the datasets.
+
+Note the axis. swan's `predict_ensemble()` caps `context_rows` — the *train* side — which does
+change predictions, which is why it is an ensemble. This chunks the *test* side, which does not.
+Train contexts here are 50–67 rows while test rows run 150 → 4500, so the test axis was the one
+that mattered; swan's lever would not have helped.
+
+### Results
+
+Pod, 16 vCPU, `tabicl-v2`, e=1, G=40, `--test-chunk 128`, `memory_limit 20GB`. Accuracy is
+`reference/phase5_*.json`; row alignment was exact on every row of every run.
+
+| Dataset | Test rows | Accuracy | Seconds | Provenance |
+|---|---|---|---|---|
+| ItalyPowerDemand | 1029 | 0.9718 | 1035.4 | pod |
+| GunPoint | 150 | 0.9933 | ~249 | pod (also 0.9933 locally, and unchunked) |
+| BasicMotions (multivariate) | 40 | 1.0000 | 131.5 | local — re-running on pod |
+| Beef | 30 | 0.7667 | 129.0 | local — re-running on pod |
+| Coffee | 28 | 1.0000 | 128.0 | local — re-running on pod |
+| FaceFour | 88 | 0.9773 | 171.9 | local — re-running on pod |
+| OSULeaf | 242 | 0.9711 | 448.5 | local — re-running on pod |
+| SyntheticControl | 300 | 0.9867 | 674.2 | local — re-running on pod |
+| Trace | 100 | 1.0000 | 260.0 | local — re-running on pod |
+| ECG5000 | 4500 | pending | pending | queued last, the long pole |
+
+GunPoint is the only dataset with a Phase 3 comparison: delta 0.0 **and identical per-row
+predictions**, which is the end-to-end statement that the C++ transform is interchangeable with
+the Python oracle — the weaker equal-accuracy claim is not the one worth making.
+
+Timing scales sub-linearly: 6.9× GunPoint's rows cost 4.2× its time.
 
 ---
 
@@ -527,6 +591,8 @@ step.
 | 2,000-column SQL calling convention unusable | 2 | Upstream list-valued features PR |
 | TabPFN inference dominates runtime, making C++ ROCKET pointless | 3 | Phase 3 measures this *before* any C++ is written |
 | Conclusions drawn from one dataset | 1, 5 | 10-dataset subset; noise floor measured first |
+| **`tabfm_classify` memory scales with the test batch, outside DuckDB's accounting** | 5 | Retired by `--test-chunk`, which bounds peak by chunk size. Verified identity-preserving (GunPoint, 0/150 rows disagreeing). Defaults ON in `scripts/pod/sweep.py`, OFF in `phase5_pipeline.py` so an archived result reproduces unchanged. `SET memory_limit` does **not** contain it — the allocation is ONNX's, not the buffer manager's |
+| A container's limits are not what `free` and `nproc` report | 5 | Both now read explicitly: `threads` was already pinned for this reason, `memory_limit` now comes from the cgroup. A cgroup OOM kill leaves no DuckDB error and no Python traceback — it looks exactly like a hang |
 | Local Windows timings mislead (WDDM spills instead of OOM) | all | Numbers come from pods, not the 3060 |
 | **TabPFN v2.5 weights need an accepted Prior Labs licence** | 1, 5 | One-time browser acceptance, then `TABPFN_TOKEN` in the environment; inject into every pod, never commit it |
 | A forgotten pod bills silently | all | `check` before and after every session; shared account |

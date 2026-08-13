@@ -90,12 +90,24 @@ log "prebuilt shell?"
 # already resolves `built_shell()`, so caching it needs no code change anywhere.
 #
 # Two safeties, both load-bearing:
-#   * the URL carries the commit, so a stale binary cannot be silently picked up;
+#   * the key identifies the exact inputs, so a stale binary cannot be silently picked up;
 #   * the download is smoke-tested before it is trusted, and a failure falls back to building.
 # Skipping either turns "we saved 15 minutes" into "we measured the wrong code".
-COMMIT="$(git rev-parse --short=12 HEAD)"
+#
+# The key is a hash of what the build actually consumes, NOT the HEAD commit. Keying on HEAD was
+# the obvious thing and it was wrong: every docs commit invalidated a byte-identical binary, and
+# the artifact had to be republished three times in one afternoon while nothing that compiles had
+# changed. These four inputs are the entire build surface -- the sources, the two cmake files and
+# the pinned duckdb revision -- so equal key means equal binary, and a change to any of them
+# changes the key. `git rev-parse` emits a tree hash for src/, blob hashes for the cmake files and
+# the submodule's commit, all content-addressed, so the key is identical on every machine.
+build_key() {
+    git rev-parse "HEAD:src" "HEAD:CMakeLists.txt" "HEAD:extension_config.cmake" "HEAD:duckdb" \
+        | sha256sum | cut -c1-12
+}
+KEY="$(build_key)"
 PREBUILT_URL="${PREBUILT_URL:-https://github.com/maxdemarzi/duckdb-rocket/releases/download/prebuilt}"
-ARTIFACT="duckdb-rocket-${COMMIT}-$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m)"
+ARTIFACT="duckdb-rocket-${KEY}-$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m)"
 
 if [ ! -x build/release/duckdb ]; then
     mkdir -p build/release
@@ -105,13 +117,13 @@ if [ ! -x build/release/duckdb ]; then
         if build/release/duckdb -c \
              "SELECT len(rocket_transform([1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]::DOUBLE[], 3, 0, 0));" \
              >/dev/null 2>&1; then
-            echo "  using the prebuilt shell for ${COMMIT} -- skipping the build"
+            echo "  using the prebuilt shell for build ${KEY} -- skipping the build"
         else
             echo "  prebuilt shell downloaded but failed its smoke test; building instead"
             rm -f build/release/duckdb
         fi
     else
-        echo "  none published for ${COMMIT}; building"
+        echo "  none published for build ${KEY}; building"
     fi
 fi
 
@@ -129,12 +141,12 @@ build/release/duckdb -c "SELECT len(rocket_transform([1.0,2,3,4,5,6,7,8,9,10,11,
 
 # Publish it so the next pod skips the build entirely. One command, from a machine with `gh`:
 #
-#   gh release create prebuilt --title "prebuilt shells" --notes "keyed by commit" 2>/dev/null
+#   gh release create prebuilt --title "prebuilt shells" --notes "keyed by build inputs" 2>/dev/null
 #   gh release upload prebuilt \
 #       "build/release/duckdb#${ARTIFACT}" --repo maxdemarzi/duckdb-rocket --clobber
 #
-# The '#name' syntax renames the asset on upload, which is what makes the commit-keyed lookup
-# above work. Publishing is deliberately manual: an artifact that uploads itself from whatever
+# The '#name' syntax renames the asset on upload, which is what makes the keyed lookup above
+# work. Publishing is deliberately manual: an artifact that uploads itself from whatever
 # happens to be checked out is how the wrong binary becomes the cached one.
 if [ ! -f /root/.rocket_prebuilt_note ]; then
     echo "  to skip this build next time: gh release upload prebuilt \\"

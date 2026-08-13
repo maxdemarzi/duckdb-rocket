@@ -497,10 +497,17 @@ step.
       to Parquet and templates the SQL — `tabfm_classify` needs 500 named scalar columns rather
       than one LIST column (Phase 2), so the script is ~0.8 MB and goes through a file. It
       computes none of the result.
-- [~] Run the 10-dataset subset on a pod; accuracy must match Phase 1 — **in progress.** All ten
-      are runnable; see the memory wall below for why two of them were not until now.
+- [~] Run the 10-dataset subset on a pod; accuracy must match Phase 1 — **nine of ten done**,
+      every one reproducing its local accuracy exactly. ECG5000 is the tenth; it needs a larger
+      instance than the others, see below.
 - [ ] Expand toward the paper's 92-dataset / 30-resample protocol if timing permits
-- [ ] Compare wall-clock against the paper's ~30s/fold median
+- [ ] Compare wall-clock against the paper's ~30s/fold median. **Blocked on it not being a
+      like-for-like comparison, not on the measurement.** The paper's figure is ROCKET features
+      plus a linear classifier; this is ROCKET features plus in-context inference over 40 groups,
+      where the classify calls dominate and the transform is a rounding error. Pod timings are
+      64s–1010s per dataset, but quoting either number against 30s/fold would compare two
+      different pipelines. Splitting transform from classify time is what would make it
+      answerable, and that has not been measured per-run.
 - [x] Every result archived with its environment tuple — reports now carry `threads`,
       `memory_limit`, `memory_budget_source` and `test_chunk` in `config`, alongside
       `doctor.json`. A timing is not comparable against a run given a different budget.
@@ -540,27 +547,57 @@ that mattered; swan's lever would not have helped.
 
 ### Results
 
-Pod, 16 vCPU, `tabicl-v2`, e=1, G=40, `--test-chunk 128`, `memory_limit 20GB`. Accuracy is
-`reference/phase5_*.json`; row alignment was exact on every row of every run.
+All nine from one pod — 16 vCPU, Linux, `tabicl-v2`, e=1, G=40, `--test-chunk 128`,
+`memory_limit` read from the cgroup. Reports in `reference/phase5_*.json`, environment tuple in
+`reference/pod_doctor.json`. Row alignment was exact on every row of every run, and `f0`
+collisions were zero across all 40 groups of all nine.
 
-| Dataset | Test rows | Accuracy | Seconds | Provenance |
+| Dataset | Test rows | Accuracy | Seconds | Matches its local run |
 |---|---|---|---|---|
-| ItalyPowerDemand | 1029 | 0.9718 | 1035.4 | pod |
-| GunPoint | 150 | 0.9933 | ~249 | pod (also 0.9933 locally, and unchunked) |
-| BasicMotions (multivariate) | 40 | 1.0000 | 131.5 | local — re-running on pod |
-| Beef | 30 | 0.7667 | 129.0 | local — re-running on pod |
-| Coffee | 28 | 1.0000 | 128.0 | local — re-running on pod |
-| FaceFour | 88 | 0.9773 | 171.9 | local — re-running on pod |
-| OSULeaf | 242 | 0.9711 | 448.5 | local — re-running on pod |
-| SyntheticControl | 300 | 0.9867 | 674.2 | local — re-running on pod |
-| Trace | 100 | 1.0000 | 260.0 | local — re-running on pod |
-| ECG5000 | 4500 | pending | pending | queued last, the long pole |
+| BasicMotions (multivariate) | 40 | 1.0000 | 78.7 | yes |
+| Coffee | 28 | 1.0000 | 64.0 | yes |
+| Trace | 100 | 1.0000 | 132.9 | yes |
+| GunPoint | 150 | 0.9933 | 184.6 | yes |
+| SyntheticControl | 300 | 0.9867 | 653.1 | yes |
+| FaceFour | 88 | 0.9773 | 87.3 | yes |
+| ItalyPowerDemand | **1029** | 0.9718 | 1009.5 | — (never ran locally) |
+| OSULeaf | 242 | 0.9711 | 355.4 | yes |
+| Beef | 30 | 0.7667 | 67.2 | yes |
+| ECG5000 | 4500 | see below | — | — |
+
+Mean 0.9630 over the nine. It is not comparable to the paper's 0.900 — that is 92 datasets at
+30 resamples with a different backbone at e=8, and this mean moves with *which* dataset you add
+(it was 0.9619 before ItalyPowerDemand, which sits above it).
+
+Every dataset that had a local number reproduced it **exactly**, across two machines and two
+operating systems; GunPoint reproduced across three chunk configurations as well. The pod is
+also ~1.8× faster than the contended local box (Beef 67s vs 129s), so the local timings
+understated the pipeline by nearly half — in the direction that flatters it.
 
 GunPoint is the only dataset with a Phase 3 comparison: delta 0.0 **and identical per-row
 predictions**, which is the end-to-end statement that the C++ transform is interchangeable with
 the Python oracle — the weaker equal-accuracy claim is not the one worth making.
 
-Timing scales sub-linearly: 6.9× GunPoint's rows cost 4.2× its time.
+### ECG5000 needed a bigger machine, not a better query
+
+The last dataset would not fit the 16 vCPU pod's 29.8 GB ceiling. Three hypotheses were tested
+and killed before the real one:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| SQL text too large | 18.7 MB → 7.6 MB | failure moved 18.3s → 17.2s. No |
+| DuckDB's own budget | cap 20 GB → 8 GB | plateau moved 28.73 → 28.73 GB. No |
+| Test rows per call | chunk 128 → 32 | same 28.7 GB plateau; only the early spike moved. No |
+| **Train context size** | GunPoint 50 rows: 11.75 GB. ECG5000 500 rows: 28.7 GB | **yes** |
+
+Its 500-row train context rides in every call, so the floor is ~501 rows per call however finely
+the test rows are split — and that floor alone wants ~29 GB. Chunking cannot go below it. Re-run
+on a 64 vCPU / 119 GB pod, where it peaked at 44.4 GB.
+
+**The two scaling problems are coupled**, which is the part worth carrying forward: lowering
+rows-per-call means more chunks, and more chunks is what inflates the SQL. ECG5000 at chunk 32
+would have been 27.9 MB of SQL under the old generator — worse than the 18.7 MB that already
+died. It is 766 KB under the prepared-plan one.
 
 ---
 

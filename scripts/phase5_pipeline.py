@@ -130,6 +130,12 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     parts = [
         "LOAD anofox_tabfm;",
         "SET anofox_tabfm_accept_hf_license = true;",
+        # Costs nothing to raise. Read the extension's source rather than guessing: it is a
+        # bind-time guard only -- `if (fields.size() > max_features) throw BinderException` in
+        # tabfm_generate.cpp -- and sizes no allocation. The comparison is strictly greater, so
+        # {n_features} features would in fact pass at exactly {n_features}; the doubling is
+        # margin, not necessity. Left as it is because it is free, and noted here so nobody
+        # investigates it a second time looking for a memory or speed win. There isn't one.
         f"SET anofox_tabfm_max_features = {max(n_features * 2, 1000)};",
         # Thread count is set explicitly rather than inherited from the visible core count.
         # On a 112-core pod, four concurrent runs each sized their own pool from that number,

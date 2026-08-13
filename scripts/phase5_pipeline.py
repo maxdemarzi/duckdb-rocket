@@ -490,6 +490,13 @@ def main() -> int:
     shell, shell_args, load_rocket = rocket_shell(args.shell if args.shell != SHELL else None)
     if load_rocket:
         print(f"      {shell.name} + prebuilt rocket extension (no local build)", flush=True)
+    # `LOAD '<path>'` of a locally-built extension is refused without -unsigned. The built shell
+    # needs no flag for `rocket` itself (statically linked), so this is only reached when an
+    # anofox extension is being loaded by path. It fails in 0.3s rather than mid-run, but it
+    # fails after the dataset has been written and the SQL generated, which is a slow way to
+    # learn it.
+    if args.anofox_extension and "-unsigned" not in shell_args:
+        shell_args = [*shell_args, "-unsigned"]
 
     sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
                     args.test_chunk, onnx_threads, load_rocket,

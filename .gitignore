@@ -13,3 +13,6 @@ token.txt
 
 # CMake/Ninja build tree for the extension.
 build/
+
+# vcpkg manifest-mode output, created by any local `vcpkg install` in this tree.
+vcpkg_installed/

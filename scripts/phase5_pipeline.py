@@ -296,6 +296,11 @@ EXECUTE fill_train;
                 f"EXECUTE score({g});"
             )
         parts.append(f"INSERT INTO timings VALUES ({g}, 'classify_done', current_timestamp);")
+        # Something to watch. Between "[3/3] running the pipeline" and the accuracy line there
+        # was previously no output at all -- fine for a 60s dataset, useless for one that ran
+        # four hours with no way to tell progress from a hang. `.print` is a CLI dot command, so
+        # it emits a bare line that survives the ONNX schema-noise filter.
+        parts.append(f".print   [rocket] group {g + 1}/{config.n_groups} scored")
 
     parts.append(f"""
 

@@ -2,9 +2,10 @@
 #
 # PREPARED, NOT SUBMITTED. Publishing is a decision for the repository owner.
 #
-# The breadth gate is met: Phase 5 ran nine datasets on one pod at one config, every accuracy
-# reproducing its local value exactly (reference/RESULTS.md). ECG5000 is the one dataset without
-# a number and is recorded as a characterised gap, not a caveat on the others.
+# The breadth gate is met: Phase 5 ran the full ten-dataset subset (reference/RESULTS.md). Nine
+# came from one CPU pod at one config, every accuracy reproducing its local value exactly; ECG5000
+# needed a GPU, with GunPoint re-run on the same GPU build as the control that makes it
+# comparable.
 #
 # `ref` below is pinned and must stay a real, pushed commit -- the community repo builds from
 # that exact revision, not from a branch. Re-pin only when the built artifact would change:

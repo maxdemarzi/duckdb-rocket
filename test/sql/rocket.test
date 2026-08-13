@@ -1,6 +1,6 @@
 # name: test/sql/rocket.test
 # description: rocket_transform basics and its error surface
-# group: [rocket]
+# group: [sql]
 
 require rocket
 

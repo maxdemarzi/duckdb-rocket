@@ -17,9 +17,6 @@
 # exactly -- extension-ci-tools carries a branch per DuckDB release, and mixing them is how a
 # green CI ends up proving something about a different DuckDB than the one that ships.
 #
-# Not enabled: the `_extension_code_quality.yml` job with `format;tidy`. There is no .clang-format
-# in this repository, so it would fail on its first run for reasons unrelated to correctness.
-# Worth adding after adopting DuckDB's format config, not before.
 #
 name: Main Extension Distribution Pipeline
 on:
@@ -39,3 +36,12 @@ jobs:
       duckdb_version: v1.5.5
       ci_tools_version: v1.5.5
       extension_name: rocket
+
+  code-quality-check:
+    name: Code Quality Check
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.5.5
+    with:
+      duckdb_version: v1.5.5
+      ci_tools_version: v1.5.5
+      extension_name: rocket
+      format_checks: 'format;tidy'

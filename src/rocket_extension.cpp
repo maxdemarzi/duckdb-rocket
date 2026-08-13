@@ -24,8 +24,7 @@ namespace duckdb {
 //
 // `format` is flattened once by the caller and passed in. Doing it here would re-flatten the
 // whole vector for every row of the chunk, which is quadratic in the chunk size for no reason.
-static int64_t ReferenceLength(bool has_reference, const UnifiedVectorFormat &format, idx_t row,
-                               int64_t n) {
+static int64_t ReferenceLength(bool has_reference, const UnifiedVectorFormat &format, idx_t row, int64_t n) {
 	if (!has_reference) {
 		return n;
 	}
@@ -35,16 +34,14 @@ static int64_t ReferenceLength(bool has_reference, const UnifiedVectorFormat &fo
 	}
 	const auto reference = UnifiedVectorFormat::GetData<int64_t>(format)[idx];
 	if (reference < duckdb_rocket::KERNEL_LENGTHS[2]) {
-		throw InvalidInputException(
-		    "rocket_transform: n_reference %lld is shorter than the longest kernel (%d)",
-		    static_cast<long long>(reference), duckdb_rocket::KERNEL_LENGTHS[2]);
+		throw InvalidInputException("rocket_transform: n_reference %lld is shorter than the longest kernel (%d)",
+		                            static_cast<long long>(reference), duckdb_rocket::KERNEL_LENGTHS[2]);
 	}
 	if (n < reference) {
-		throw InvalidInputException(
-		    "rocket_transform: series has %lld timepoints but n_reference is %lld; a series "
-		    "shorter than the reference is rejected rather than padded (SPEC.md 8.2). Draw the "
-		    "bank against the shortest series in the dataset",
-		    static_cast<long long>(n), static_cast<long long>(reference));
+		throw InvalidInputException("rocket_transform: series has %lld timepoints but n_reference is %lld; a series "
+		                            "shorter than the reference is rejected rather than padded (SPEC.md 8.2). Draw the "
+		                            "bank against the shortest series in the dataset",
+		                            static_cast<long long>(n), static_cast<long long>(reference));
 	}
 	return reference;
 }
@@ -95,8 +92,7 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 		if (!kernels_format.validity.RowIsValid(k_idx)) {
 			continue;
 		}
-		total_features += static_cast<idx_t>(kernels_data[k_idx] *
-		                                     duckdb_rocket::FEATURES_PER_KERNEL);
+		total_features += static_cast<idx_t>(kernels_data[k_idx] * duckdb_rocket::FEATURES_PER_KERNEL);
 	}
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
@@ -116,10 +112,8 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 		const auto seed_idx = seed_format.sel->get_index(row);
 		const auto f_idx = first_format.sel->get_index(row);
 
-		if (!series_format.validity.RowIsValid(s_idx) ||
-		    !kernels_format.validity.RowIsValid(k_idx) ||
-		    !seed_format.validity.RowIsValid(seed_idx) ||
-		    !first_format.validity.RowIsValid(f_idx)) {
+		if (!series_format.validity.RowIsValid(s_idx) || !kernels_format.validity.RowIsValid(k_idx) ||
+		    !seed_format.validity.RowIsValid(seed_idx) || !first_format.validity.RowIsValid(f_idx)) {
 			result_validity.SetInvalid(row);
 			result_entries[row] = list_entry_t(offset, 0);
 			continue;
@@ -152,16 +146,14 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 		// the log2 bound undefined rather than merely awkward. Reject it rather than produce
 		// features that are not comparable with anything.
 		if (n < duckdb_rocket::KERNEL_LENGTHS[2]) {
-			throw InvalidInputException(
-			    "rocket_transform: series length %lld is shorter than the longest kernel (%d)",
-			    static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
+			throw InvalidInputException("rocket_transform: series length %lld is shorter than the longest kernel (%d)",
+			                            static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
 		}
 
 		const auto n_reference = ReferenceLength(has_reference, reference_format, row, n);
 
 		const auto features = duckdb_rocket::Transform(
-		    series.data(), n, n_reference, static_cast<uint64_t>(seed_data[seed_idx]),
-		    kernels_per_group, first_kernel);
+		    series.data(), n, n_reference, static_cast<uint64_t>(seed_data[seed_idx]), kernels_per_group, first_kernel);
 
 		for (size_t j = 0; j < features.size(); j++) {
 			result_data[offset + j] = features[j];
@@ -183,8 +175,7 @@ static void RocketTransformFunction(DataChunk &args, ExpressionState &state, Vec
 //
 // Still two features per kernel: a kernel sums its selected channels inside one convolution
 // rather than producing a feature per channel.
-static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState &state,
-                                                Vector &result) {
+static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	const auto count = args.size();
 
 	UnifiedVectorFormat outer_format;
@@ -223,8 +214,7 @@ static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState
 		if (!kernels_format.validity.RowIsValid(k_idx)) {
 			continue;
 		}
-		total_features +=
-		    static_cast<idx_t>(kernels_data[k_idx] * duckdb_rocket::FEATURES_PER_KERNEL);
+		total_features += static_cast<idx_t>(kernels_data[k_idx] * duckdb_rocket::FEATURES_PER_KERNEL);
 	}
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
@@ -244,10 +234,8 @@ static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState
 		const auto seed_idx = seed_format.sel->get_index(row);
 		const auto f_idx = first_format.sel->get_index(row);
 
-		if (!outer_format.validity.RowIsValid(o_idx) ||
-		    !kernels_format.validity.RowIsValid(k_idx) ||
-		    !seed_format.validity.RowIsValid(seed_idx) ||
-		    !first_format.validity.RowIsValid(f_idx)) {
+		if (!outer_format.validity.RowIsValid(o_idx) || !kernels_format.validity.RowIsValid(k_idx) ||
+		    !seed_format.validity.RowIsValid(seed_idx) || !first_format.validity.RowIsValid(f_idx)) {
 			result_validity.SetInvalid(row);
 			result_entries[row] = list_entry_t(offset, 0);
 			continue;
@@ -282,33 +270,30 @@ static void RocketTransformMultivariateFunction(DataChunk &args, ExpressionState
 			} else if (this_n != n) {
 				// Dilations are drawn against one series length; a ragged series has no single
 				// length to draw against, so the kernels would not be well defined.
-				throw InvalidInputException(
-				    "rocket_transform: channel %llu has %lld timepoints but channel 0 has "
-				    "%lld; every channel must be the same length",
-				    static_cast<unsigned long long>(c), static_cast<long long>(this_n),
-				    static_cast<long long>(n));
+				throw InvalidInputException("rocket_transform: channel %llu has %lld timepoints but channel 0 has "
+				                            "%lld; every channel must be the same length",
+				                            static_cast<unsigned long long>(c), static_cast<long long>(this_n),
+				                            static_cast<long long>(n));
 			}
 			for (idx_t j = 0; j < channel.length; j++) {
 				const auto s_idx = sample_format.sel->get_index(channel.offset + j);
 				if (!sample_format.validity.RowIsValid(s_idx)) {
-					throw InvalidInputException(
-					    "rocket_transform: series contains NULL values");
+					throw InvalidInputException("rocket_transform: series contains NULL values");
 				}
 				series.push_back(sample_data[s_idx]);
 			}
 		}
 
 		if (n < duckdb_rocket::KERNEL_LENGTHS[2]) {
-			throw InvalidInputException(
-			    "rocket_transform: series length %lld is shorter than the longest kernel (%d)",
-			    static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
+			throw InvalidInputException("rocket_transform: series length %lld is shorter than the longest kernel (%d)",
+			                            static_cast<long long>(n), duckdb_rocket::KERNEL_LENGTHS[2]);
 		}
 
 		const auto n_reference = ReferenceLength(has_reference, reference_format, row, n);
 
-		const auto features = duckdb_rocket::TransformMultivariate(
-		    series.data(), n_channels, n, n_reference,
-		    static_cast<uint64_t>(seed_data[seed_idx]), kernels_per_group, first_kernel);
+		const auto features = duckdb_rocket::TransformMultivariate(series.data(), n_channels, n, n_reference,
+		                                                           static_cast<uint64_t>(seed_data[seed_idx]),
+		                                                           kernels_per_group, first_kernel);
 
 		for (size_t j = 0; j < features.size(); j++) {
 			result_data[offset + j] = features[j];
@@ -332,16 +317,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	const auto i64 = LogicalType::BIGINT;
 
 	ScalarFunctionSet rocket_transform("rocket_transform");
-	rocket_transform.AddFunction(
-	    ScalarFunction({uni, i64, i64, i64}, out, RocketTransformFunction));
-	rocket_transform.AddFunction(
-	    ScalarFunction({multi, i64, i64, i64}, out, RocketTransformMultivariateFunction));
+	rocket_transform.AddFunction(ScalarFunction({uni, i64, i64, i64}, out, RocketTransformFunction));
+	rocket_transform.AddFunction(ScalarFunction({multi, i64, i64, i64}, out, RocketTransformMultivariateFunction));
 	// The five-argument forms take an explicit reference length, which is what makes one bank
 	// shared across rows of differing length (SPEC.md 8).
-	rocket_transform.AddFunction(
-	    ScalarFunction({uni, i64, i64, i64, i64}, out, RocketTransformFunction));
-	rocket_transform.AddFunction(
-	    ScalarFunction({multi, i64, i64, i64, i64}, out, RocketTransformMultivariateFunction));
+	rocket_transform.AddFunction(ScalarFunction({uni, i64, i64, i64, i64}, out, RocketTransformFunction));
+	rocket_transform.AddFunction(ScalarFunction({multi, i64, i64, i64, i64}, out, RocketTransformMultivariateFunction));
 	loader.RegisterFunction(rocket_transform);
 }
 

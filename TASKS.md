@@ -1,31 +1,28 @@
 # Open tasks — handoff at 2026-08-12 11:50 (machine restart)
 
-## ⚠ TWO LIVE PODS are billing right now
+## GPU inference: CLOSED, the documented install route does not exist
 
-**GPU probe — `n499zdli4azave`**, `69.30.85.97:22178`, NVIDIA A40 48 GB, ~$0.46/hr.
-Launched from **black_swan's** launcher, not this repo's:
+An A40 pod (`n499zdli4azave`, terminated after 25 minutes / ~$0.19) was rented to test whether GPU
+inference is worth it, given inference is 96–99% of this pipeline's wall clock.
 
-    cd C:/Users/maxde/black_swan
-    python scripts/cloud/runpod_launch.py check
-    python scripts/cloud/runpod_launch.py ssh n499zdli4azave
-    python scripts/cloud/runpod_launch.py terminate n499zdli4azave
+**It is not reachable.** CUDA is a compile-time flavor (`TABFM_EP_CUDA`), and both the README and
+the extension's own error message send you to `https://ext.anofox.com/tabfm/cuda`. That host **has
+no DNS record** — `anofox.com` resolves, `ext.anofox.com` does not, from a box downloading GitHub
+releases at 39 MB/s. Every version and the `cpu` path fail identically with connection errors, not
+404s. Filed as [#4](https://github.com/maxdemarzi/anofox-tabfm/issues/4).
 
-Unlike the CPU pods this one has a **100 GB volume**, so its contents survive `stop` (and keep
-billing ~$0.012/hr). Exists to test whether the GPU flavor of `anofox_tabfm` is worth anything:
+So GPU would require building `anofox_tabfm` **and** a CUDA-enabled ONNX Runtime from source. That
+is a real build, not an afternoon, and it is the only remaining route.
 
-    SET custom_extension_repository = 'https://ext.anofox.com/tabfm/cuda';
-    INSTALL anofox_tabfm;             -- the cuda flavor; the community build is CPU-only
-    SET anofox_tabfm_device = 'cuda';
+**The gate is why this cost $0.19 rather than an afternoon.** `FROM tabfm_devices();` after the
+install attempt, before any measurement — it failed in 4 seconds. PLAN.md records an earlier GPU
+pod that sat idle 140 minutes for the same underlying reason.
 
-**Gate before measuring anything:** `FROM tabfm_devices();` must actually report a CUDA provider.
-PLAN.md records a GPU pod that sat idle 140 minutes because the community build is CPU-only, and
-that is the failure to avoid repeating.
-
-**Then pin precision before comparing accuracy.** `anofox_tabfm_gpu_precision` defaults to
-**bf16**, so a GPU run out of the box is a *different numerical pipeline* from every archived
-result. `SET anofox_tabfm_gpu_precision = 'fp32'` first and check accuracy reproduces exactly;
-measure bf16 afterwards as its own speed/accuracy row. PLAN.md's "AMP silently corrupts accuracy
-numbers" risk is exactly this trap.
+**If anyone retries this**, `anofox_tabfm_gpu_precision` defaults to **bf16**, so a GPU run out of
+the box is a *different numerical pipeline* from every archived result. Pin
+`SET anofox_tabfm_gpu_precision = 'fp32'` and check accuracy reproduces exactly *before* believing
+any speed number; measure bf16 afterwards as its own row. PLAN.md's "AMP silently corrupts accuracy
+numbers" risk is precisely this trap.
 
 ## ⚠ LIVE POD — `khv4iojz2zbphj` is billing right now
 

@@ -112,11 +112,29 @@ whole run. **A CPU pod is the correct instance type**, and the tooling should su
 > their buffers, and the **full 4526-node graph then runs on CUDA** at every shape tried,
 > matching the CPU EP to 3.5e-4 relative on identical inputs.
 >
-> Not yet ours to use: validated with *random* weights on an RTX 3060, not with the real
-> checkpoint, not through the DuckDB pipeline, and not on the regression graph. It is also a
-> mask over an ONNX Runtime bug (still present in 1.28.0), not a fix. Before any GPU run is
-> planned on it, the thing to check is the golden fixture with real weights — until then the
-> CPU numbers above stand on their own and nothing here depends on it.
+> **Confirmed with the real checkpoint (2026-08-13).** Built the `cuda` flavor from stock
+> upstream on an A40 and registered the stock and patched graphs from the same real weights
+> and tensor map, so the graph was the only variable. Stock on CUDA fails; patched on CUDA
+> scores all 60 rows with **0/60 label mismatches** against the CPU baseline (max softmax
+> delta 4.6e-3, ordinary fp32 CPU/GPU divergence), and patched on CPU is **bit-identical** to
+> stock. So GPU is genuinely available to this pipeline, and the CPU numbers below are
+> unaffected either way.
+>
+> Still true: it masks an ONNX Runtime bug (present in 1.26.0 and 1.28.0), not a fix, and it
+> is unmerged upstream ([#23](https://github.com/DataZooDE/anofox-tabfm/pull/23)). We do not
+> need the merge — `tabfm_register_model` points the stock extension at our own graph — but we
+> do need a self-built `cuda` flavor, because **no GPU build is published for any platform**:
+> the `ext.anofox.com` host named in anofox's own error message does not resolve (NXDOMAIN
+> from both Windows and Linux).
+>
+> **Not on Windows.** GPU here is Linux-only for now — `ProbeCudaDevices` was compiled out on
+> Windows, so `tabfm_devices()` returned the cpu row alone even with a working card. Ported to
+> NVML-via-`LoadLibrary` and verified against the local RTX 3060 (`cuda:0`, sm_86, 12 GB,
+> driver 610.74); the full Windows CUDA build is the outstanding piece.
+>
+> Sizing note if a GPU run is ever planned: the local card is 12 GB against ECG5000's ~44 GB
+> CPU peak. A GPU changes the speed, not the context-row scaling, so the large datasets still
+> need the test-set chunking.
 >
 > **The CPU path is not implicated, and this is now settled rather than assumed.** Reading the
 > shipped graph statically, `ScatterND`'s `indices` is `Unsqueeze(Slice(Range(0,T,1), 0, S))`

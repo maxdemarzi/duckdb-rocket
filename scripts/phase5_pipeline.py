@@ -149,6 +149,16 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         # Distinct fingerprints are what says the 40 groups really were 40 different kernel
         # banks. Cheap enough to be unconditional.
         "CREATE OR REPLACE TABLE f0_checks (grp BIGINT, collisions BIGINT, fingerprint DOUBLE);",
+        # Where the wall clock actually goes. PLAN.md's risk table asks whether inference
+        # dominates so completely that the C++ transform is pointless; that is answerable only by
+        # splitting the two, and it is also what stops the paper's ~30s/fold median being
+        # compared against a pipeline that spends its time somewhere else entirely.
+        #
+        # Marked per group rather than per chunk: 40 rows of overhead instead of 1440, and the
+        # group boundary is exactly where the transform ends and the classifies begin.
+        # current_timestamp is transaction-scoped, which is fine here -- the CLI autocommits, so
+        # each INSERT is its own transaction and gets a fresh reading.
+        "CREATE OR REPLACE TABLE timings (grp BIGINT, phase VARCHAR, ts TIMESTAMP);",
     ]
 
     # Test ids are contiguous and start at n_train: write_raw_parquet lays the table out as
@@ -247,8 +257,10 @@ PREPARE score AS
         # prepared statements are bound to. Refilling keeps the entry, which is the whole point.
         parts.append(f"""
 -- Group {g}: global kernel indices [{first_kernel}, {first_kernel + config.kernels_per_group}).
+INSERT INTO timings VALUES ({g}, 'group_start', current_timestamp);
 DELETE FROM feat_cur;
 EXECUTE fill_feat({first_kernel});
+INSERT INTO timings VALUES ({g}, 'transform_done', current_timestamp);
 INSERT INTO f0_checks
 SELECT {g}, count(*) - count(DISTINCT f[1]), sum(f[1]) FROM feat_cur WHERE split = 'test';
 DELETE FROM train_cur;
@@ -265,6 +277,7 @@ EXECUTE fill_train;
                 f"EXECUTE fill_test({lo}, {hi}); EXECUTE fill_src({lo}, {hi});\n"
                 f"EXECUTE score({g});"
             )
+        parts.append(f"INSERT INTO timings VALUES ({g}, 'classify_done', current_timestamp);")
 
     parts.append(f"""
 
@@ -284,6 +297,22 @@ GROUP BY p.id, r.label;
 .mode json
 .once '{(outdir / "predictions.json").as_posix()}'
 SELECT id, yhat, y FROM predictions ORDER BY id;
+
+.once '{(outdir / "timings.json").as_posix()}'
+-- Seconds spent computing ROCKET features, versus seconds spent in tabfm_classify. The gap
+-- between (transform_done -> classify_done) and the classify calls is the chunk fills and the
+-- id-recovery joins, which are counted as classify here because they exist only to feed it.
+WITH t AS (
+  SELECT grp,
+         max(ts) FILTER (WHERE phase = 'group_start')    AS t0,
+         max(ts) FILTER (WHERE phase = 'transform_done') AS t1,
+         max(ts) FILTER (WHERE phase = 'classify_done')  AS t2
+  FROM timings GROUP BY grp
+)
+SELECT round(sum(epoch(t1 - t0)), 2) AS transform_seconds,
+       round(sum(epoch(t2 - t1)), 2) AS classify_seconds,
+       count(*)                      AS groups_timed
+FROM t;
 
 .once '{(outdir / "assertions.json").as_posix()}'
 -- `f0_collisions` guards the one assumption the id recovery rests on. anofox_tabfm echoes back
@@ -410,6 +439,22 @@ def main() -> int:
 
     predictions = json.loads((workdir / "predictions.json").read_text(encoding="utf-8"))
     facts = json.loads((workdir / "assertions.json").read_text(encoding="utf-8"))[0]
+
+    # Optional: a report from before this was emitted still loads.
+    timing_path = workdir / "timings.json"
+    split = None
+    if timing_path.exists():
+        row = json.loads(timing_path.read_text(encoding="utf-8"))[0]
+        tr, cl = float(row["transform_seconds"]), float(row["classify_seconds"])
+        total = tr + cl
+        split = {
+            "transform_seconds": round(tr, 2),
+            "classify_seconds": round(cl, 2),
+            "classify_share": round(cl / total, 4) if total else None,
+            "groups_timed": int(row["groups_timed"]),
+        }
+        print(f"\n  transform {tr:.1f}s | classify {cl:.1f}s "
+              f"({100 * cl / total:.1f}% of measured work)" if total else "")
 
     n_test = len(y_test)
     failures = []
@@ -543,6 +588,9 @@ def main() -> int:
         "shape": meta,
         "accuracy": accuracy,
         "row_alignment": facts,
+        # Answers PLAN.md's standing risk "TabPFN inference dominates runtime, making C++ ROCKET
+        # pointless" with a number instead of an intuition, per dataset.
+        "time_split": split,
         "failures": failures,
         "seconds": round(seconds, 1),
         "comparison": comparison,

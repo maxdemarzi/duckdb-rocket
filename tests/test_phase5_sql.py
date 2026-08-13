@@ -130,6 +130,33 @@ class TestAssertions:
         assert "CAST(count(DISTINCT fingerprint) AS BIGINT)" in sql
 
 
+class TestTimingSplit:
+    """Answers PLAN.md's "does inference dominate so the C++ transform is pointless?" risk."""
+
+    def test_one_mark_per_group_per_phase(self):
+        for n_groups in (40, 50):
+            sql = build(50, 150, 128, n_groups=n_groups)
+            for phase in ("group_start", "transform_done", "classify_done"):
+                # n_groups INSERTs, plus one reference in the FILTER clause that reads them.
+                assert sql.count(f"'{phase}'") == n_groups + 1
+
+    def test_transform_mark_sits_between_the_fill_and_the_classifies(self):
+        sql = build(50, 150, 128)
+        start = sql.index("VALUES (0, 'group_start'")
+        fill = sql.index("EXECUTE fill_feat(0);", start)
+        done = sql.index("VALUES (0, 'transform_done'")
+        first_score = sql.index("EXECUTE score(0);")
+        assert start < fill < done < first_score, (
+            "transform_done must fall after the feature fill and before any classify, or the "
+            "split attributes the transform's cost to inference"
+        )
+
+    def test_marks_are_all_written_before_they_are_read(self):
+        sql = build(50, 150, 128)
+        assert sql.rindex("'classify_done'") < sql.index("FROM timings GROUP BY grp") or \
+               sql.index("FROM timings GROUP BY grp") > sql.rindex("INSERT INTO timings")
+
+
 class TestSqlSize:
     def test_the_feature_list_is_emitted_once_however_many_chunks(self):
         # It is ~4 KB. Emitted per call it was 74% of a 7.6 MB script; an earlier form reached

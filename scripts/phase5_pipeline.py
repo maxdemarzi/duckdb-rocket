@@ -119,7 +119,9 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
 
 def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               memory_limit: str, temp_dir: Path, test_chunk: int | None,
-              onnx_threads: int, load_rocket: str = "") -> str:
+              onnx_threads: int, load_rocket: str = "", device: str = "cpu",
+              model: str = MODEL, anofox_extension: Path | None = None,
+              register_dir: Path | None = None) -> str:
     n_features = config.features_per_group
     names = [f"f{j}" for j in range(n_features)]
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
@@ -127,9 +129,15 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     projection = ", ".join(f"f[{j + 1}] AS f{j}" for j in range(n_features))
     select_features = ", ".join(names)
 
+    # `LOAD anofox_tabfm` takes the installed (community, CPU-only) extension. A GPU run needs a
+    # self-built cuda flavor loaded from a path instead -- no GPU build is published for any
+    # platform (the ext.anofox.com host in anofox's own error message does not resolve).
+    load_anofox = (f"LOAD '{anofox_extension.as_posix()}';" if anofox_extension
+                   else "LOAD anofox_tabfm;")
+
     parts = [
         load_rocket,
-        "LOAD anofox_tabfm;",
+        load_anofox,
         "SET anofox_tabfm_accept_hf_license = true;",
         # Costs nothing to raise. Read the extension's source rather than guessing: it is a
         # bind-time guard only -- `if (fields.size() > max_features) throw BinderException` in
@@ -155,6 +163,18 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         # overflow into a slow query instead of a dead process.
         f"SET memory_limit = '{memory_limit}';",
         f"SET temp_directory = '{temp_dir.as_posix()}';",
+        # 'cpu' is emitted explicitly rather than left to anofox's 'auto' default, so a run's
+        # device is recorded in the SQL that produced it rather than inferred from the box.
+        f"SET anofox_tabfm_device = '{device}';",
+        # A registered model points at OUR graph file. Needed on CUDA: the shipped tabicl-v2
+        # graph fails at a ScatterND node there (DataZooDE/anofox-tabfm#21), and the workaround
+        # is a graph edit (#23). Inert on CPU -- the patched graph is bit-identical there.
+        (f"CALL tabfm_register_model(id := '{model}', base_dir := '{register_dir.as_posix()}', "
+         f"classification_graph := 'graph_tabicl_classification.onnx', "
+         f"classification_weights := 'model.ckpt', "
+         f"classification_tensor_map := 'tensor_map_tabicl_classification.json', "
+         f"license := 'bsd-3-clause', preprocessing_profile := 'tabicl_v2_raw');"
+         if register_dir else ""),
         f"CREATE OR REPLACE TABLE raw AS "
         f"SELECT * FROM read_parquet('{meta['raw_parquet']}');",
         # One row per group, filled as each group's features are built. Per group because f0 is
@@ -263,7 +283,7 @@ PREPARE score AS
   INSERT INTO all_groups
   SELECT CAST($1 AS BIGINT), s.id, c.proba
   FROM tabfm_classify('train_cur', 'y', test := 'test_cur',
-                      model := '{MODEL}', features := {feature_list}) c
+                      model := '{model}', features := {feature_list}) c
   JOIN test_src_cur s ON s.f0 = c.f0;
 
 -- f0_checks is filled by the loop below, which starts from group 0 again; nothing above wrote
@@ -407,9 +427,35 @@ def main() -> int:
              "concurrent sessions sum to the cores this process actually has. The "
              "extension's own default reads the host's core count and ignores the cpuset.",
     )
+    parser.add_argument(
+        "--device",
+        default="cpu",
+        choices=("cpu", "cuda"),
+        help="Execution device for anofox_tabfm. 'cuda' needs a self-built cuda-flavor "
+             "extension (--anofox-extension) because no GPU build is published, and for "
+             "tabicl-v2 it also needs the patched graph (--register-model-dir): the shipped "
+             "graph fails at a ScatterND node on CUDA (DataZooDE/anofox-tabfm#21).",
+    )
+    parser.add_argument(
+        "--anofox-extension",
+        type=Path,
+        default=None,
+        help="Path to an anofox_tabfm.duckdb_extension to LOAD instead of the installed one.",
+    )
+    parser.add_argument(
+        "--register-model-dir",
+        type=Path,
+        default=None,
+        help="Directory holding graph_tabicl_classification.onnx, model.ckpt and "
+             "tensor_map_tabicl_classification.json. Registered under the model id so the run "
+             "uses that graph. On CPU the patched graph is bit-identical to the shipped one.",
+    )
     parser.add_argument("--keep-sql", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
+    if args.device == "cuda" and not args.anofox_extension:
+        parser.error("--device cuda needs --anofox-extension: the installed community build is "
+                     "CPU-only and would silently run on the CPU.")
 
     if not args.shell.exists():
         print(f"no such shell: {args.shell}\nBuild with scripts/build_extension.bat",
@@ -446,7 +492,10 @@ def main() -> int:
         print(f"      {shell.name} + prebuilt rocket extension (no local build)", flush=True)
 
     sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
-                    args.test_chunk, onnx_threads, load_rocket)
+                    args.test_chunk, onnx_threads, load_rocket,
+                    device=args.device, model=MODEL,
+                    anofox_extension=args.anofox_extension,
+                    register_dir=args.register_model_dir)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")
@@ -656,6 +705,12 @@ def main() -> int:
     report = {
         "dataset": args.dataset,
         "model": MODEL,
+        # Which device produced this number, and whether it came from the shipped graph or a
+        # patched one. Without both, a GPU result is indistinguishable from a CPU result that
+        # silently fell back -- and on CUDA the graph is not the shipped graph.
+        "device": args.device,
+        "anofox_extension": (str(args.anofox_extension) if args.anofox_extension else None),
+        "registered_graph": (str(args.register_model_dir) if args.register_model_dir else None),
         "config": {
             "num_kernels": config.num_kernels,
             "n_groups": config.n_groups,

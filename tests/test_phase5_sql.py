@@ -188,3 +188,56 @@ class TestSqlSize:
         chunks_few, chunks_many = -(-4500 // 128) * groups, -(-4500 // 32) * groups
         per_chunk = (many - few) / (chunks_many - chunks_few)
         assert per_chunk < 300, f"{per_chunk:.0f} bytes per chunk is projection-sized, not EXECUTE-sized"
+
+
+# --- device / graph selection (GPU runs) -------------------------------------------------
+#
+# A GPU run differs from a CPU run in three places at once: which extension is loaded, which
+# device is set, and which graph the model id resolves to. Getting one of the three wrong is
+# the failure that produces a plausible number from the wrong thing -- most obviously a "GPU"
+# run that silently executed on the CPU.
+
+
+def build_device(device: str = "cpu", extension: Path | None = None,
+                 register_dir: Path | None = None) -> str:
+    cfg = RocketPFNConfig(num_kernels=10_000, n_groups=40, seed=0, n_estimators=1)
+    cfg.validate()
+    meta = {"raw_parquet": "/tmp/raw.parquet", "n_train": 20, "n_test": 10}
+    return p5.build_sql(cfg, meta, WORKDIR, 4, "20GB", WORKDIR, None, 8,
+                        device=device, anofox_extension=extension, register_dir=register_dir)
+
+
+def test_default_run_is_cpu_and_uses_the_installed_extension():
+    sql = build_device()
+    assert "LOAD anofox_tabfm;" in sql
+    assert "SET anofox_tabfm_device = 'cpu';" in sql
+    # No registration means the shipped, bundled graph -- the pre-GPU behaviour, unchanged.
+    assert "tabfm_register_model" not in sql
+
+
+def test_device_is_always_stated_explicitly():
+    # Not left to anofox's 'auto', so the SQL records what it ran on.
+    assert "SET anofox_tabfm_device = 'cuda';" in build_device("cuda", Path("/x/ext.duckdb_extension"))
+
+
+def test_explicit_extension_replaces_the_installed_load():
+    sql = build_device("cuda", Path("/opt/anofox_tabfm.duckdb_extension"))
+    assert "LOAD '/opt/anofox_tabfm.duckdb_extension';" in sql
+    # The installed one must NOT also be loaded: it is the CPU-only community build, and
+    # loading it instead would run the whole thing on the CPU while reporting success.
+    assert "LOAD anofox_tabfm;" not in sql
+
+
+def test_registered_graph_is_bound_to_the_model_id_used_by_classify():
+    sql = build_device("cuda", Path("/x/ext"), Path("/models/tabicl"))
+    assert f"tabfm_register_model(id := '{p5.MODEL}'" in sql
+    assert "base_dir := '/models/tabicl'" in sql
+    assert "classification_graph := 'graph_tabicl_classification.onnx'" in sql
+    # The id registered must be the id classify asks for, or the run silently uses the bundled
+    # graph and the registration is dead code.
+    assert f"model := '{p5.MODEL}'" in sql
+
+
+def test_registration_precedes_every_classify_call():
+    sql = build_device("cuda", Path("/x/ext"), Path("/models/tabicl"))
+    assert sql.index("tabfm_register_model") < sql.index(f"model := '{p5.MODEL}'")

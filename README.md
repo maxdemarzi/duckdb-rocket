@@ -129,15 +129,29 @@ is that **every prediction pays full price** — there is nothing to amortise, a
 
 ### Against the alternatives
 
-**ROCKET + ridge regression** — the original 2020 pipeline — is the honest comparison, and for most
-production uses it is the better tool: it trains in seconds and then classifies for almost nothing.
-If you can run scikit-learn and you have labels, do that. This project is not faster and is not
-claiming to be more accurate.
+**ROCKET + ridge regression** — the original 2020 pipeline — is the honest comparison, and it has
+now been measured on these same ten datasets rather than asserted (`scripts/ridge_baseline.py`):
+
+| | mean accuracy | wins | total time, 10 datasets |
+|---|---|---|---|
+| ROCKET + ridge | **0.9636** | 3 | **262 s** |
+| this pipeline | 0.9615 | 4 | ~3,741 s |
+| ties | | 3 | |
+
+**Accuracy is a coin flip; cost is not** — roughly 14×, and that is against our slower Python
+feature extractor, not the C++ one. If you have labels and can run scikit-learn, do that. This
+project is not faster and is not more accurate.
 
 What it offers instead is the *shape*: no training step to run or schedule, no model artefact to
 store, version or serve, and no process boundary between your data and your predictions. That is
 worth something when the alternative is standing up a training pipeline for a question you might
 ask once.
+
+**The thing ridge cannot do is train without labels**, and that is where the two compose rather
+than compete: use this pipeline once to label an unlabelled pool, then distil into a cheap student
+that serves in milliseconds. The soft per-class probabilities needed for that already exist inside
+the pipeline (averaged over 40 kernel groups). Design, protocol and kill criteria in
+[docs/DISTILLATION_PLAN.md](docs/DISTILLATION_PLAN.md) — proposed, not built.
 
 **A trained deep model** (InceptionTime, ROCKET+ridge at scale) will beat this on accuracy-per-
 dollar whenever you have enough labels and enough runs to amortise training. Nothing here competes

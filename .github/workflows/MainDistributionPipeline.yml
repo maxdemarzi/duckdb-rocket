@@ -6,7 +6,12 @@
 # and arm64), musl and mingw as well, so without this the first build on those platforms is the
 # one a maintainer sees rather than the one we see.
 #
-# The wasm targets are excluded here for the same reason they are excluded in `description.yml`.
+# wasm is NOT excluded, despite `description.yml` having excluded it since before this workflow
+# existed. Nothing recorded a reason -- not the commit that introduced the exclusion, not any
+# document -- and this extension is close to the ideal wasm candidate: pure C++11 arithmetic over
+# doubles, zero dependencies by explicit design, no threads, no filesystem, no network. Those are
+# the things extensions normally exclude wasm *for*. Building it here is how we find out whether
+# the exclusion costs reach for no reason.
 #
 # `duckdb_version` and `ci_tools_version` are pinned to v1.5.5, matching the `duckdb` submodule
 # exactly -- extension-ci-tools carries a branch per DuckDB release, and mixing them is how a
@@ -34,4 +39,3 @@ jobs:
       duckdb_version: v1.5.5
       ci_tools_version: v1.5.5
       extension_name: rocket
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'

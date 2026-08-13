@@ -57,18 +57,23 @@ checkpoint also needs running through their `convert_weights.py`. Details in
 | Pure-SQL ROCKET | correct, and ~**4×10⁵** slower than Python — a fallback, not an option |
 | Extension test suite | 12 assertions via DuckDB's sqllogictest runner |
 
-Accuracy on eight UCR/UEA datasets, G=40, e=1, through the DuckDB pipeline (TabICL v2):
+Accuracy on nine UCR/UEA datasets, G=40, e=1, through the DuckDB pipeline (TabICL v2), run on a
+pod:
 
-| Dataset | Channels | Accuracy |
-|---|---|---|
-| BasicMotions | **6** | 1.0000 |
-| Coffee | 1 | 1.0000 |
-| Trace | 1 | 1.0000 |
-| GunPoint | 1 | 0.9933 |
-| SyntheticControl | 1 | 0.9867 |
-| FaceFour | 1 | 0.9773 |
-| OSULeaf | 1 | 0.9711 |
-| Beef | 1 | 0.7667 |
+| Dataset | Test rows | Channels | Accuracy |
+|---|---|---|---|
+| BasicMotions | 40 | **6** | 1.0000 |
+| Coffee | 28 | 1 | 1.0000 |
+| Trace | 100 | 1 | 1.0000 |
+| GunPoint | 150 | 1 | 0.9933 |
+| SyntheticControl | 300 | 1 | 0.9867 |
+| FaceFour | 88 | 1 | 0.9773 |
+| ItalyPowerDemand | **1029** | 1 | 0.9718 |
+| OSULeaf | 242 | 1 | 0.9711 |
+| Beef | 30 | 1 | 0.7667 |
+
+Every dataset that had also been run locally reproduced its accuracy **exactly** on the pod —
+two machines, two operating systems, and for GunPoint three different batching configurations.
 
 Where the Python oracle (TabPFN v2.5, pinned fp32) has also been run, it agrees exactly on four
 of five datasets; the one difference is two test rows out of thirty on Beef, against a
@@ -77,8 +82,11 @@ apart. Do not read the mean against the paper's 0.900: that is 92 datasets over 
 this is one split of eight. Full detail and caveats in
 [reference/RESULTS.md](reference/RESULTS.md).
 
-All timings are local Windows numbers on a contended box and belong in no table — PLAN.md
-requires reported figures to come from a pod.
+Accuracies above are from a pod; each report carries an `environment` block recording what it
+observed, so provenance is measured rather than asserted. The `rocket_transform` micro-benchmarks
+in the table above are still local Windows numbers and are marked as such in
+[reference/RESULTS.md](reference/RESULTS.md) — the local box runs this pipeline roughly 1.8×
+slower than the pod, so its timings understate it in the direction that flatters it.
 
 ## Try it
 

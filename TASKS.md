@@ -206,6 +206,40 @@ This reconciliation was the committed next step and is **not** done. It was deli
 until the last two datasets landed, so the checkboxes could be ticked truthfully in one pass
 rather than half-ticked.
 
+## Upstream work: `maxdemarzi/anofox-tabfm` (fork, MIT)
+
+Forked from `DataZooDE/anofox-tabfm`, cloned locally to `C:\Users\maxde\Repositories\anofox-tabfm`
+with `upstream` set. Three container-blindness findings came out of Phase 5; one is fixed in our
+own pipeline, two are upstream-shaped and written up.
+
+**Branch `container-aware-thread-default` — pushed, NOT built, NOT tested.**
+`src/tabfm_settings.cpp` defaulted ONNX intra-op threads to
+`std::thread::hardware_concurrency() / 2`, which reads the *host*. On a 64-core cpuset inside a
+256-core host that is `anofox_tabfm_threads = 128` per session, and DuckDB builds one session per
+concurrent task — 132 threads in one process, load average 143, for a query with `SET threads = 4`.
+The branch swaps in `sched_getaffinity`, falling back to `hardware_concurrency()` off Linux and on
+failure. Needs a Linux box to:
+
+1. build the extension and confirm it still compiles clean;
+2. confirm the default resolves to cores/2 **of the cpuset** (32, not 128, on that pod);
+3. confirm no change on a host where the two counts agree;
+4. only then decide whether to offer it upstream. No PR has been opened.
+
+**Issues, on the fork** (GitHub disables issues on forks by default; enabled deliberately):
+
+- [#1](https://github.com/maxdemarzi/anofox-tabfm/issues/1) — `tabfm_classify` re-encodes the whole
+  train context on every call. 40 encodings are irreducible (one per feature group); the rest are
+  repetition. ~78% of ECG5000's model work is 1,400 redundant encodings of one 500-row context.
+- [#2](https://github.com/maxdemarzi/anofox-tabfm/issues/2) — classify memory is outside DuckDB's
+  buffer manager, so `SET memory_limit` cannot bound it and a cgroup kill leaves no error. 20 GB vs
+  8 GB moved the plateau by 0.00 GB.
+
+Nothing has been sent to DataZoo. PLAN.md's etiquette (issue before large PR; no CONTRIBUTING
+guide; anofox is a commercial product) is why these sit on the fork.
+
+**Already fixed on our side, needing no upstream change:** `anofox_tabfm_threads` was always
+settable, so `scripts/phase5_pipeline.py` now sets it to cores/duckdb_threads (`656c52f`).
+
 ## Also open, lower priority
 
 - `description.yml:20` still has `ref: TODO-pin-a-commit-before-submitting`. The community-

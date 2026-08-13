@@ -59,6 +59,35 @@ def binding_memory_bytes() -> tuple[int, str]:
     return int(status.ullTotalPhys), "visible RAM"
 
 
+def binding_cpu_count() -> tuple[int, str]:
+    """Cores this process may actually run on, and where that number came from.
+
+    The third sighting of the same bug. `nproc` and `os.cpu_count()` report what the kernel can
+    see; a cpuset-restricted container gets far fewer. `sched_getaffinity` is the one that
+    respects the cpuset, so it is tried first.
+
+    This matters because `anofox_tabfm`'s ONNX intra-op default is
+    `std::thread::hardware_concurrency() / 2`, which on a 256-core host inside a 64-core cpuset
+    is **128 threads per session** -- and DuckDB runs several classify calls at once, each with
+    its own session. Measured on a 64-core pod: 132 threads in one process and a load average of
+    143, for a workload with `SET threads = 4`.
+    """
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0)), "sched_getaffinity"
+    return os.cpu_count() or 1, "cpu_count"
+
+
+def default_onnx_threads(duckdb_threads: int) -> int:
+    """Intra-op threads per ONNX session, so the pools sum to the cores we actually have.
+
+    DuckDB runs `duckdb_threads` classify calls concurrently and each builds its own session, so
+    the product is what lands on the CPU. Oversubscribing a memory-bound workload costs
+    throughput to contention rather than buying parallelism.
+    """
+    cores, _ = binding_cpu_count()
+    return max(1, cores // max(1, duckdb_threads))
+
+
 def default_memory_limit() -> str:
     """70% of the binding limit, as a DuckDB size string.
 

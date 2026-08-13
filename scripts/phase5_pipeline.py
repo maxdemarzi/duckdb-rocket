@@ -40,7 +40,12 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from duckdb_rocket.budget import binding_memory_bytes, default_memory_limit  # noqa: E402
+from duckdb_rocket.budget import (  # noqa: E402
+    binding_cpu_count,
+    binding_memory_bytes,
+    default_memory_limit,
+    default_onnx_threads,
+)
 from duckdb_rocket.datasets import load  # noqa: E402
 from duckdb_rocket.shells import built_shell  # noqa: E402
 from duckdb_rocket.pipeline import RocketPFNConfig  # noqa: E402
@@ -113,7 +118,8 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
 
 
 def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
-              memory_limit: str, temp_dir: Path, test_chunk: int | None) -> str:
+              memory_limit: str, temp_dir: Path, test_chunk: int | None,
+              onnx_threads: int) -> str:
     n_features = config.features_per_group
     names = [f"f{j}" for j in range(n_features)]
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
@@ -131,6 +137,12 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         # error message at all. A container's visible core count is not its budget, especially
         # when several of these run side by side.
         f"SET threads = {threads};",
+        # Third instance of the same trap, and the one that had never been touched.
+        # anofox_tabfm's ONNX intra-op default is hardware_concurrency()/2, which reads the
+        # HOST's cores: on a 64-core pod inside a 256-core host it defaulted to 128 threads per
+        # session, and DuckDB runs `threads` of them at once. Observed there: 132 threads in one
+        # process, load average 143. Sized here so the pools sum to the cores we actually have.
+        f"SET anofox_tabfm_threads = {onnx_threads};",
         # Same reasoning as the thread count, for memory. Without an explicit limit DuckDB sizes
         # itself against RAM it cannot actually have, and a temp directory is what turns the
         # overflow into a slow query instead of a dead process.
@@ -371,6 +383,14 @@ def main() -> int:
              "rather than by the dataset. Verify identity against an unchunked run before "
              "trusting it on a dataset that has never fitted.",
     )
+    parser.add_argument(
+        "--onnx-threads",
+        type=int,
+        default=None,
+        help="ONNX intra-op threads per session. Defaults to cores/duckdb-threads so the "
+             "concurrent sessions sum to the cores this process actually has. The "
+             "extension's own default reads the host's core count and ignores the cpuset.",
+    )
     parser.add_argument("--keep-sql", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
@@ -400,7 +420,13 @@ def main() -> int:
     print(f"      memory_limit {memory_limit} (from {budget_source}), "
           f"spilling to {workdir}", flush=True)
 
-    sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir, args.test_chunk)
+    onnx_threads = args.onnx_threads or default_onnx_threads(args.threads)
+    cores, core_source = binding_cpu_count()
+    print(f"      anofox_tabfm_threads {onnx_threads} x {args.threads} duckdb threads "
+          f"= {onnx_threads * args.threads} of {cores} cores (from {core_source})", flush=True)
+
+    sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
+                    args.test_chunk, onnx_threads)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")
@@ -584,6 +610,8 @@ def main() -> int:
             "memory_limit": memory_limit,
             "memory_budget_source": budget_source,
             "test_chunk": args.test_chunk,
+            "onnx_threads": onnx_threads,
+            "cpu_count_source": core_source,
         },
         "shape": meta,
         "accuracy": accuracy,

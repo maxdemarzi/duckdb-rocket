@@ -34,11 +34,12 @@ import phase5_pipeline as p5  # noqa: E402
 WORKDIR = Path("/tmp/wd")
 
 
-def build(n_train: int, n_test: int, chunk: int | None, n_groups: int = 40) -> str:
+def build(n_train: int, n_test: int, chunk: int | None, n_groups: int = 40,
+          onnx_threads: int = 16) -> str:
     cfg = RocketPFNConfig(num_kernels=10_000, n_groups=n_groups, seed=0, n_estimators=1)
     cfg.validate()
     meta = {"raw_parquet": "/tmp/raw.parquet", "n_train": n_train, "n_test": n_test}
-    return p5.build_sql(cfg, meta, WORKDIR, 4, "20GB", WORKDIR, chunk)
+    return p5.build_sql(cfg, meta, WORKDIR, 4, "20GB", WORKDIR, chunk, onnx_threads)
 
 
 def windows(sql: str) -> list[tuple[int, int]]:
@@ -155,6 +156,20 @@ class TestTimingSplit:
         sql = build(50, 150, 128)
         assert sql.rindex("'classify_done'") < sql.index("FROM timings GROUP BY grp") or \
                sql.index("FROM timings GROUP BY grp") > sql.rindex("INSERT INTO timings")
+
+
+class TestThreadBudget:
+    """The extension's ONNX default reads the host's cores and ignores the cpuset."""
+
+    def test_onnx_thread_count_is_set_explicitly(self):
+        assert "SET anofox_tabfm_threads = 16;" in build(50, 150, 128, onnx_threads=16)
+
+    def test_pools_are_sized_to_divide_the_cores_available(self):
+        from duckdb_rocket.budget import default_onnx_threads
+
+        # 4 DuckDB tasks each build their own session, so the product is what hits the CPU.
+        assert default_onnx_threads(4) >= 1
+        assert default_onnx_threads(10_000) == 1, "never below one thread"
 
 
 class TestSqlSize:

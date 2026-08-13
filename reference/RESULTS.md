@@ -316,6 +316,72 @@ It moved from the eight-dataset 0.9619 only because `ItalyPowerDemand` (0.9718) 
 above that mean. A mean over nine hand-picked datasets moves with *which* dataset you add, not
 with how good the method is — which is the same reason it cannot be read against the paper's.
 
+### Where the wall clock goes, and three things that move it
+
+All measured on one pod, one commit. `time_split` in each `phase5_*.json` carries the first;
+`threads_ab/` carries the third.
+
+**1. Inference is 96–99% of it. The C++ transform is ~1.7%.**
+
+| | transform | classify | share |
+|---|---:|---:|---:|
+| Eight datasets (SyntheticControl excluded, see below) | 35.7 s | 2085 s | **98.3% classify** |
+| OSULeaf, the most transform-heavy in the subset | 13.9 s | 357.9 s | 96.3% |
+
+This settles PLAN.md's standing risk, *"TabPFN inference dominates runtime, making C++ ROCKET
+pointless"*, in the affirmative on the speed axis. `rocket_transform` is 7.1× faster than the
+NumPy oracle and that buys under 2% of the pipeline.
+
+It does **not** make the extension pointless, but it relocates the justification. Pure SQL
+measured ~4×10⁵ slower — not viable — so C++ is what makes ROCKET possible *inside the database
+at all*, which was the goal. The 7.1× is real and nearly irrelevant to the pipeline, and should
+not be quoted as though it moved it.
+
+**2. Chunking the test set costs 2.18×, and preserves every prediction.**
+
+ItalyPowerDemand, same pod, back to back:
+
+| | calls | wall clock | classify |
+|---|---:|---:|---:|
+| `--test-chunk 128` | 360 | 1074.0 s | 1065.9 s |
+| unchunked | 40 | **493.3 s** | **479.8 s** |
+
+**1029/1029 predictions identical, same id set.** Each chunk re-sends the whole train context, so
+splitting multiplies work the model has already done. Chunking was never free — it is the price
+of fitting a small box. Chunk as coarsely as memory allows, not as finely as convenient.
+
+The row-pass model predicted 1.49× (65,280 → 43,840 rows through the model); the measurement is
+2.22× on classify. Per-call overhead therefore costs more than row count alone implies.
+
+**3. The ONNX thread default is sized from the host, not the container: 2.85–5.3×.**
+
+`anofox_tabfm`'s intra-op default is `hardware_concurrency() / 2`, which reads the *host*. On a
+64-core cpuset inside a 256-core host that is **128 threads per session**, and DuckDB builds one
+per concurrent task — 132 threads in one process, load average 143 against 64 usable cores.
+
+Paired and alternating (128, 16, 128, 16), Coffee, one pod:
+
+| `anofox_tabfm_threads` | runs | median | spread |
+|---:|---|---:|---:|
+| 128 (the default here) | 211.0 s, 564.8 s | 387.9 s | **2.68×** |
+| 16 (cores ÷ duckdb threads) | 74.0 s, 71.4 s | 72.7 s | 1.04× |
+
+Median ratio **5.34×**; worst case for the smaller setting is still **2.85×**. Accuracy identical
+across all four.
+
+The variance is half the result: at 16 threads the runs differ by 4%, at 128 by 2.7×.
+Oversubscription costs predictability as well as throughput, which is why a single run of either
+arm would have proved nothing. Filed upstream as
+[anofox-tabfm#3 on the fork](https://github.com/maxdemarzi/anofox-tabfm/issues/3).
+
+**A caveat on all timings here.** The pod is shared and its other tenants are invisible, so
+"benchmark on an idle machine, and prove it was idle" cannot be satisfied. `SyntheticControl` took
+2984 s where the same dataset took 653 s on the smaller pod, while `OSULeaf` minutes before and
+`ItalyPowerDemand` minutes after were within 6% of their earlier numbers. It ran at 16 threads,
+and the 16-thread arm above is stable, so thread contention does not explain it. **It is excluded
+from the aggregate rather than averaged in, and it remains unexplained.** Accuracy is unaffected —
+the pipeline is deterministic, and every dataset reproduced its accuracy exactly.
+
 ### The classify call's memory
 
 The earlier note here said the two missing datasets were "slow rather than unsupported". That was

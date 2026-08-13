@@ -404,10 +404,26 @@ identity-preserving, and that was verified rather than argued: GunPoint chunked 
 unchunked, same pod, same commit, **150/150 rows identical**. `scripts/compare_predictions.py`
 is that check.
 
-`ECG5000` is the one dataset the technique cannot reach on a small box. Its **train context is
-500 rows**, which every call must carry, so its floor is ~501 rows per call however finely the
-test rows are split — and that floor alone needs ~29 GB against the first pod's 29.8 GB ceiling.
-It is not slow; it does not fit. Running it needs a larger instance, not a cleverer query.
+`ECG5000` is the one dataset that never produced a number. Its **train context is 500 rows**,
+which every call must carry, so its floor is ~501 rows per call however finely the test rows are
+split. Four attempts:
+
+| pod | config | outcome |
+|---|---|---|
+| 29 GB | chunk 128 | OOM at 17.2 s |
+| 29 GB | chunk 32 | OOM at 923 s, plateau 28.7 GB against a 29.8 GB ceiling |
+| 119 GB | chunk 128, 128 ONNX threads | killed at 4 h, no progress signal |
+| 119 GB | chunk 128, 16 ONNX threads | terminated at 5 h 46 m, still running |
+
+Established: **~44 GB peak, more than 5h46m of wall clock**, and memory that no `memory_limit` can
+contain because it is ONNX's rather than DuckDB's. It was never slow *because* it was too big —
+memory and time are separate walls and it hit both.
+
+One observation left unexplained rather than rationalised: the last attempt sustained **247% CPU**
+where `ItalyPowerDemand` on the same pod and settings ran at **1531%** — six times less
+parallelism, 5.9 MB of spill, no identified cause. That is where a retry should look first.
+
+The nine-dataset table stands on its own; ECG5000 is a gap, not a caveat on the others.
 
 What the table *is* good for is a sanity check, and it passes one: these values sit where
 published ROCKET results sit on these datasets, including Beef being much the hardest — the

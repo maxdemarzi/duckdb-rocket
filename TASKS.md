@@ -24,7 +24,39 @@ the box is a *different numerical pipeline* from every archived result. Pin
 any speed number; measure bf16 afterwards as its own row. PLAN.md's "AMP silently corrupts accuracy
 numbers" risk is precisely this trap.
 
-## ⚠ LIVE POD — `khv4iojz2zbphj` is billing right now
+## No pods are running. Nothing is billing.
+
+Verified with `python scripts/pod/runpod_cpu.py check` after terminating. Everything below about
+pods is history; keep it for the traps, not as live state.
+
+## ECG5000: not obtained, and here is exactly what is known
+
+The tenth dataset was attempted three times and never produced a number. It is **not** a mystery —
+each attempt failed for a measured reason — but it is not a result either, and the Phase 5 table
+is nine datasets.
+
+| attempt | config | outcome |
+|---|---|---|
+| 1 | 29 GB pod, chunk 128 | OOM-killed at 17.2s; needs ~29 GB, ceiling was 29.8 GB |
+| 2 | 29 GB pod, chunk 32 | OOM-killed at 923s; plateaued at 28.7 GB, under 1 GB of headroom |
+| 3 | 119 GB pod, chunk 128, 128 ONNX threads | killed by us at 4h, no progress signal, 2.3x thread oversubscription |
+| 4 | 119 GB pod, chunk 128, 16 ONNX threads | terminated at 5h46m, still running, no completion estimate |
+
+What is established: it needs **~44 GB** peak, more than **5h46m** of wall clock at a sane thread
+budget, and its 500-row train context is what drives both — every classify call carries it, so
+~501 rows per call is the floor however finely the test rows are split.
+
+One unexplained observation, recorded rather than rationalised: attempt 4 sustained only **247%
+CPU** where ItalyPowerDemand on the same pod and settings ran at **1531%**. Six times less
+parallelism, only 5.9 MB of spill, no obvious cause. Anyone retrying this should look there first.
+
+**To finish it**, in rough order of promise: the per-group heartbeat (`.print`, landed after these
+runs) would show where the time goes; the unchunked path is 2.18x faster and needs enough memory
+to hold 5000 rows in one call; and issue
+[#1](https://github.com/maxdemarzi/anofox-tabfm/issues/1) would remove ~78% of its model work,
+which is the only lever that changes the shape of the problem rather than throwing hardware at it.
+
+## Pod history and traps (no longer live)
 
     python scripts/pod/runpod_cpu.py check
     python scripts/pod/runpod_cpu.py ssh khv4iojz2zbphj

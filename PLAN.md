@@ -497,9 +497,12 @@ step.
       to Parquet and templates the SQL — `tabfm_classify` needs 500 named scalar columns rather
       than one LIST column (Phase 2), so the script is ~0.8 MB and goes through a file. It
       computes none of the result.
-- [~] Run the 10-dataset subset on a pod; accuracy must match Phase 1 — **nine of ten done**,
-      every one reproducing its local accuracy exactly. ECG5000 is the tenth; it needs a larger
-      instance than the others, see below.
+- [~] Run the 10-dataset subset on a pod; accuracy must match Phase 1 — **nine of ten**, every one
+      reproducing its local accuracy exactly, all from one pod at one config.
+      **ECG5000 was attempted four times and never produced a number**; it is the one gap, and it
+      is characterised rather than mysterious — ~44 GB peak, >5h46m of wall clock, driven by a
+      500-row train context that rides in every classify call. Details and the retry notes are in
+      `TASKS.md`.
 - [ ] Expand toward the paper's 92-dataset / 30-resample protocol if timing permits
 - [x] Compare wall-clock against the paper's ~30s/fold median — **answerable now that transform
       and classify are timed separately**, and the answer is that the two halves land on opposite

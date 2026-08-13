@@ -8,9 +8,19 @@ actually wants is uncontended cores.
     python scripts/pod/runpod_cpu.py check                # read-only: what is billing right now
     python scripts/pod/runpod_cpu.py plan                 # read-only: what would be created
     python scripts/pod/runpod_cpu.py create --yes-i-will-pay
+    python scripts/pod/runpod_cpu.py gate POD_ID          # read-only: is this host fast enough?
     python scripts/pod/runpod_cpu.py ssh POD_ID
     python scripts/pod/runpod_cpu.py stop POD_ID          # keeps (and keeps billing) the volume
     python scripts/pod/runpod_cpu.py terminate POD_ID --yes-destroy-the-volume
+
+**Gate before you bootstrap.** Placement varies by host and some are unusably slow. The loop:
+
+    create -> gate -> (PASS: bootstrap) or (FAIL: terminate, create again)
+
+Skipping it cost a session here: four consecutive 32-vCPU pods landed on one host at ~0.08 MB/s
+and the first sat 29 minutes without cloning a single object. `vcpuCount` must be a power of 2,
+so the sizes are 16, 32, 64 -- and asking for a different size is also how you get placed on a
+different host.
 
 Everything except `create` and `terminate` is read-only. That split is the point of the file:
 following `black_swan/scripts/cloud/runpod_launch.py`, which this is a CPU-shaped port of rather
@@ -30,11 +40,19 @@ import argparse
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import urllib.error
 import urllib.request
 
 REST = "https://rest.runpod.io/v1"
+
+# The gate probe. A real artifact this project actually downloads during bootstrap, rather than a
+# synthetic speed-test endpoint, so the number measures the path that matters. ~21 MB, which is
+# also long enough for the measurement to settle.
+DUCKDB_CLI_URL = (
+    "https://github.com/duckdb/duckdb/releases/download/v1.5.5/duckdb_cli-linux-amd64.zip"
+)
 
 # Ubuntu 22.04 base with CUDA is unnecessary here, but RunPod's plain images are thin on build
 # tooling; bootstrap.sh installs what is missing either way, so the cheapest maintained image
@@ -176,6 +194,63 @@ def cmd_ssh(args) -> int:
     return 0
 
 
+def endpoint(pod_id: str) -> tuple[str, int] | None:
+    pod = request(f"/pods/{pod_id}")
+    ip = pod.get("publicIp")
+    mappings = pod.get("portMappings") or {}
+    port = mappings.get("22") if isinstance(mappings, dict) else None
+    return (ip, port) if ip and port else None
+
+
+def cmd_gate(args) -> int:
+    """Measure a pod's download speed. Read-only; exits non-zero below the floor.
+
+    Run this BEFORE bootstrapping. `black_swan`'s `pod_runner.py` gates hosts the same way,
+    after one host with a healthy `nvidia-smi` and 270 kB/s cost a whole session -- and this
+    project then repeated the mistake: four consecutive 32-vCPU pods landed on one host at
+    ~0.08 MB/s, and the first sat 29 minutes without cloning a single object before anyone
+    thought to measure. A 64-vCPU pod placed elsewhere at 34 MB/s. The rule was written down in
+    PLAN.md and not applied, which is why it lives in the tool now rather than in prose.
+    """
+    where = endpoint(args.pod_id)
+    if where is None:
+        print(f"pod {args.pod_id} has no public 22/tcp mapping yet; it may still be starting.")
+        return 1
+    ip, port = where
+
+    # -L matters. The release URL 302-redirects, and without it curl downloads a zero-byte
+    # redirect body and reports 0 B/s -- on a perfectly healthy host, indistinguishable from
+    # the failure this is meant to catch. That misread cost a pod here.
+    probe = (
+        'curl -sL -o /dev/null -w "%{speed_download} %{size_download}" --max-time '
+        f'{args.timeout} {args.url}'
+    )
+    cmd = ["ssh", "-n", "-p", str(port), "-o", "StrictHostKeyChecking=accept-new",
+           "-o", "ConnectTimeout=25", "-o", "BatchMode=yes", f"root@{ip}", probe]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=args.timeout + 60)
+    except subprocess.TimeoutExpired:
+        print(f"  {args.pod_id} at {ip}: probe timed out -- treat as FAIL")
+        return 1
+    try:
+        speed, size = (float(x) for x in proc.stdout.split())
+    except ValueError:
+        print(f"  {args.pod_id} at {ip}: probe returned {proc.stdout!r} {proc.stderr[:200]!r}")
+        return 1
+
+    mb = speed / (1024 * 1024)
+    print(f"  pod {args.pod_id} at {ip}: {mb:.2f} MB/s ({size:.0f} bytes)")
+    if size == 0:
+        print("  FAIL: nothing downloaded. If the URL redirects, the probe needs -L.")
+        return 1
+    if mb < args.floor:
+        print(f"  FAIL: below the {args.floor} MB/s floor. Terminate and create another; "
+              f"placement varies by host, and vcpuCount must be a power of 2.")
+        return 1
+    print(f"  PASS: at or above the {args.floor} MB/s floor.")
+    return 0
+
+
 def cmd_stop(args) -> int:
     request(f"/pods/{args.pod_id}/stop", method="POST")
     print(f"stopped {args.pod_id}. The volume persists AND still bills. "
@@ -219,11 +294,16 @@ def main() -> int:
     create.add_argument("--yes-i-will-pay", action="store_true")
     create.set_defaults(func=cmd_create)
 
-    for name, func in (("ssh", cmd_ssh), ("stop", cmd_stop), ("terminate", cmd_terminate)):
+    for name, func in (("ssh", cmd_ssh), ("gate", cmd_gate),
+                       ("stop", cmd_stop), ("terminate", cmd_terminate)):
         sub = subparsers.add_parser(name)
         sub.add_argument("pod_id")
         if name == "terminate":
             sub.add_argument("--yes-destroy-the-volume", action="store_true")
+        if name == "gate":
+            sub.add_argument("--floor", type=float, default=5.0, help="MB/s, default 5")
+            sub.add_argument("--timeout", type=int, default=60, help="probe seconds")
+            sub.add_argument("--url", default=DUCKDB_CLI_URL)
         sub.set_defaults(func=func)
 
     args = parser.parse_args()

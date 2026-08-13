@@ -101,9 +101,22 @@ whole run. **A CPU pod is the correct instance type**, and the tooling should su
 > first such node and into a second one ~1500 nodes later, so there is no shape we can feed it
 > to avoid this.
 >
-> So "a CPU pod is the correct instance type" holds for a firmer reason than packaging: **for
-> `tabicl-v2` there is currently no GPU path to buy.** Reported upstream in
+> So "a CPU pod is the correct instance type" holds for a firmer reason than packaging: **as
+> shipped, `tabicl-v2` has no GPU path to buy.** Reported upstream in
 > [anofox-tabfm#21](https://github.com/DataZooDE/anofox-tabfm/issues/21).
+>
+> **A workaround exists, and it reopens the GPU question.** The CUDA `Slice` computing the
+> ScatterND's `indices` returns its input untrimmed — `[0..T-1]` rather than `[0..S-1]` —
+> because the CPU-side buffer holding `S` is recycled before the CUDA kernel reads it. Naming
+> the two tensors that carry `S` (`sym_size_int_56`, `val_95`) as extra graph outputs pins
+> their buffers, and the **full 4526-node graph then runs on CUDA** at every shape tried,
+> matching the CPU EP to 3.5e-4 relative on identical inputs.
+>
+> Not yet ours to use: validated with *random* weights on an RTX 3060, not with the real
+> checkpoint, not through the DuckDB pipeline, and not on the regression graph. It is also a
+> mask over an ONNX Runtime bug (still present in 1.28.0), not a fix. Before any GPU run is
+> planned on it, the thing to check is the golden fixture with real weights — until then the
+> CPU numbers above stand on their own and nothing here depends on it.
 >
 > **The CPU path is not implicated, and this is now settled rather than assumed.** Reading the
 > shipped graph statically, `ScatterND`'s `indices` is `Unsqueeze(Slice(Range(0,T,1), 0, S))`

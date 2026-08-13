@@ -1,5 +1,32 @@
 # Open tasks — handoff at 2026-08-12 11:50 (machine restart)
 
+## ⚠ TWO LIVE PODS are billing right now
+
+**GPU probe — `n499zdli4azave`**, `69.30.85.97:22178`, NVIDIA A40 48 GB, ~$0.46/hr.
+Launched from **black_swan's** launcher, not this repo's:
+
+    cd C:/Users/maxde/black_swan
+    python scripts/cloud/runpod_launch.py check
+    python scripts/cloud/runpod_launch.py ssh n499zdli4azave
+    python scripts/cloud/runpod_launch.py terminate n499zdli4azave
+
+Unlike the CPU pods this one has a **100 GB volume**, so its contents survive `stop` (and keep
+billing ~$0.012/hr). Exists to test whether the GPU flavor of `anofox_tabfm` is worth anything:
+
+    SET custom_extension_repository = 'https://ext.anofox.com/tabfm/cuda';
+    INSTALL anofox_tabfm;             -- the cuda flavor; the community build is CPU-only
+    SET anofox_tabfm_device = 'cuda';
+
+**Gate before measuring anything:** `FROM tabfm_devices();` must actually report a CUDA provider.
+PLAN.md records a GPU pod that sat idle 140 minutes because the community build is CPU-only, and
+that is the failure to avoid repeating.
+
+**Then pin precision before comparing accuracy.** `anofox_tabfm_gpu_precision` defaults to
+**bf16**, so a GPU run out of the box is a *different numerical pipeline* from every archived
+result. `SET anofox_tabfm_gpu_precision = 'fp32'` first and check accuracy reproduces exactly;
+measure bf16 afterwards as its own speed/accuracy row. PLAN.md's "AMP silently corrupts accuracy
+numbers" risk is exactly this trap.
+
 ## ⚠ LIVE POD — `khv4iojz2zbphj` is billing right now
 
     python scripts/pod/runpod_cpu.py check

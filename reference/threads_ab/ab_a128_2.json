@@ -1,0 +1,55 @@
+{
+  "dataset": "Coffee",
+  "model": "tabicl-v2",
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "threads": 4,
+    "memory_limit": "83GB",
+    "memory_budget_source": "cgroup v2",
+    "test_chunk": 128,
+    "onnx_threads": 128,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "Coffee",
+    "n_train": 28,
+    "n_test": 28,
+    "n_channels": 1,
+    "n_timepoints": 286,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/Coffee/raw.parquet"
+  },
+  "accuracy": 1.0,
+  "row_alignment": {
+    "predicted_rows": 28,
+    "distinct_ids": 28,
+    "group_rows": 1120,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "f0_collisions": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 1.41,
+    "classify_seconds": 562.55,
+    "classify_share": 0.9975,
+    "groups_timed": 40
+  },
+  "failures": [],
+  "seconds": 564.8,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.17.0-35-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 256,
+    "containerised": true
+  },
+  "caveat": null
+}

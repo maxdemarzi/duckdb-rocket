@@ -444,9 +444,19 @@ def main() -> int:
 
     print(f"[3/3] running the whole pipeline in DuckDB", flush=True)
     started = time.perf_counter()
+    # stdout is INHERITED, not captured, so the per-group `.print` heartbeat reaches whoever is
+    # watching. capture_output=True swallowed it -- the dot commands ran and their output went
+    # into a string nobody reads unless the run fails, which is exactly backwards for a progress
+    # signal on a four-hour job.
+    #
+    # stderr stays piped: it carries thousands of lines of ONNX schema-registration noise that
+    # has to be filtered before anything useful is visible.
+    #
+    # Caveat: with stdout redirected to a file the CLI block-buffers, so the heartbeat arrives in
+    # bursts rather than smoothly. Still the difference between "progressing" and "possibly hung".
     proc = subprocess.run(
         [str(args.shell), "-f", str(script)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
     )
     seconds = time.perf_counter() - started
     raw_stderr = proc.stderr or ""

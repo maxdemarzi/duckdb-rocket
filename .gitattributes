@@ -1,3 +1,8 @@
+# If a file drifts back to CRLF despite the rules below, suspect a script that wrote it. Python's
+# `Path.write_text()` translates \n to \r\n on Windows unless passed `newline=""` -- that is what
+# put scripts/phase5_pipeline.py back to CRLF twice in one session. Use `newline=""` when a tool
+# writes a tracked file, and `git ls-files --eol` to find anything that disagrees with its rule.
+#
 # Everything text is LF in the working tree, not just in the index. `core.autocrlf=true` on a
 # Windows checkout already stores LF, so this changes no committed content -- it stops the
 # working copy from drifting to CRLF and reporting "LF will be replaced by CRLF" on every diff.

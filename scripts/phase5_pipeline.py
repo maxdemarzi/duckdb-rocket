@@ -325,6 +325,10 @@ SELECT id, yhat, y FROM predictions ORDER BY id;
 -- Seconds spent computing ROCKET features, versus seconds spent in tabfm_classify. The gap
 -- between (transform_done -> classify_done) and the classify calls is the chunk fills and the
 -- id-recovery joins, which are counted as classify here because they exist only to feed it.
+-- One row PER GROUP, not a sum. Summing here threw away the only evidence that could explain an
+-- anomaly: SyntheticControl once took 2975s of classify where the same dataset took 653s an hour
+-- earlier, and with only the total there was no way to tell a steady slowdown from one stalled
+-- group. The caller aggregates; the archive keeps the detail.
 WITH t AS (
   SELECT grp,
          max(ts) FILTER (WHERE phase = 'group_start')    AS t0,
@@ -332,10 +336,10 @@ WITH t AS (
          max(ts) FILTER (WHERE phase = 'classify_done')  AS t2
   FROM timings GROUP BY grp
 )
-SELECT round(sum(epoch(t1 - t0)), 2) AS transform_seconds,
-       round(sum(epoch(t2 - t1)), 2) AS classify_seconds,
-       count(*)                      AS groups_timed
-FROM t;
+SELECT grp,
+       round(epoch(t1 - t0), 3) AS transform_seconds,
+       round(epoch(t2 - t1), 3) AS classify_seconds
+FROM t ORDER BY grp;
 
 .once '{(outdir / "assertions.json").as_posix()}'
 -- `f0_collisions` guards the one assumption the id recovery rests on. anofox_tabfm echoes back
@@ -491,17 +495,46 @@ def main() -> int:
     timing_path = workdir / "timings.json"
     split = None
     if timing_path.exists():
-        row = json.loads(timing_path.read_text(encoding="utf-8"))[0]
-        tr, cl = float(row["transform_seconds"]), float(row["classify_seconds"])
+        rows = json.loads(timing_path.read_text(encoding="utf-8"))
+        # Tolerate the older single-row aggregate form so archived runs still load.
+        if rows and "grp" in rows[0]:
+            per_group = [(float(r["transform_seconds"]), float(r["classify_seconds"]))
+                         for r in rows]
+            tr = sum(t for t, _ in per_group)
+            cl = sum(c for _, c in per_group)
+            classify_each = sorted(c for _, c in per_group)
+            mid = len(classify_each) // 2
+            median = (classify_each[mid] if len(classify_each) % 2
+                      else (classify_each[mid - 1] + classify_each[mid]) / 2)
+            # Slowest against median: a shared box that stalls one group looks nothing like one
+            # that is uniformly slow, and the total cannot tell them apart.
+            spread = {
+                "classify_min": round(classify_each[0], 3),
+                "classify_median": round(median, 3),
+                "classify_max": round(classify_each[-1], 3),
+                "max_over_median": round(classify_each[-1] / median, 2) if median else None,
+            }
+        else:
+            row = rows[0]
+            tr, cl = float(row["transform_seconds"]), float(row["classify_seconds"])
+            per_group, spread = [], None
+
         total = tr + cl
         split = {
             "transform_seconds": round(tr, 2),
             "classify_seconds": round(cl, 2),
             "classify_share": round(cl / total, 4) if total else None,
-            "groups_timed": int(row["groups_timed"]),
+            "groups_timed": len(per_group) or int(rows[0].get("groups_timed", 0)),
+            "per_group_classify_spread": spread,
         }
-        print(f"\n  transform {tr:.1f}s | classify {cl:.1f}s "
-              f"({100 * cl / total:.1f}% of measured work)" if total else "")
+        if total:
+            msg = f"\n  transform {tr:.1f}s | classify {cl:.1f}s ({100 * cl / total:.1f}%)"
+            if spread:
+                msg += (f"\n  per-group classify: min {spread['classify_min']:.1f}s "
+                        f"median {spread['classify_median']:.1f}s "
+                        f"max {spread['classify_max']:.1f}s "
+                        f"({spread['max_over_median']:.1f}x median)")
+            print(msg)
 
     n_test = len(y_test)
     failures = []

@@ -83,6 +83,38 @@ log "execution providers — does the GPU do anything for anofox?"
 # it belongs in the run record either way. Locally (Windows) only a CPU provider was offered.
 tools/duckdb -c "LOAD anofox_tabfm; FROM tabfm_devices();" 2>/dev/null | tail -12
 
+log "prebuilt shell?"
+# Building DuckDB from source takes 10-20 minutes and yields a binary that is identical for every
+# machine on the same commit and platform. It was rebuilt on four pods in one day before anyone
+# counted. The shell is cached rather than the loadable extension because every script here
+# already resolves `built_shell()`, so caching it needs no code change anywhere.
+#
+# Two safeties, both load-bearing:
+#   * the URL carries the commit, so a stale binary cannot be silently picked up;
+#   * the download is smoke-tested before it is trusted, and a failure falls back to building.
+# Skipping either turns "we saved 15 minutes" into "we measured the wrong code".
+COMMIT="$(git rev-parse --short=12 HEAD)"
+PREBUILT_URL="${PREBUILT_URL:-https://github.com/maxdemarzi/duckdb-rocket/releases/download/prebuilt}"
+ARTIFACT="duckdb-rocket-${COMMIT}-$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m)"
+
+if [ ! -x build/release/duckdb ]; then
+    mkdir -p build/release
+    echo "looking for ${ARTIFACT}"
+    if curl -fsSL -o build/release/duckdb "${PREBUILT_URL}/${ARTIFACT}" 2>/dev/null; then
+        chmod +x build/release/duckdb
+        if build/release/duckdb -c \
+             "SELECT len(rocket_transform([1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]::DOUBLE[], 3, 0, 0));" \
+             >/dev/null 2>&1; then
+            echo "  using the prebuilt shell for ${COMMIT} -- skipping the build"
+        else
+            echo "  prebuilt shell downloaded but failed its smoke test; building instead"
+            rm -f build/release/duckdb
+        fi
+    else
+        echo "  none published for ${COMMIT}; building"
+    fi
+fi
+
 log "building the rocket extension"
 if [ ! -x build/release/duckdb ]; then
     cmake -G Ninja -B build/release -S duckdb \
@@ -94,6 +126,21 @@ if [ ! -x build/release/duckdb ]; then
     cmake --build build/release
 fi
 build/release/duckdb -c "SELECT len(rocket_transform([1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]::DOUBLE[], 3, 0, 0)) AS n;"
+
+# Publish it so the next pod skips the build entirely. One command, from a machine with `gh`:
+#
+#   gh release create prebuilt --title "prebuilt shells" --notes "keyed by commit" 2>/dev/null
+#   gh release upload prebuilt \
+#       "build/release/duckdb#${ARTIFACT}" --repo maxdemarzi/duckdb-rocket --clobber
+#
+# The '#name' syntax renames the asset on upload, which is what makes the commit-keyed lookup
+# above work. Publishing is deliberately manual: an artifact that uploads itself from whatever
+# happens to be checked out is how the wrong binary becomes the cached one.
+if [ ! -f /root/.rocket_prebuilt_note ]; then
+    echo "  to skip this build next time: gh release upload prebuilt \\"
+    echo "      \"build/release/duckdb#${ARTIFACT}\" --repo maxdemarzi/duckdb-rocket --clobber"
+    touch /root/.rocket_prebuilt_note 2>/dev/null || true
+fi
 
 log "conformance — the Linux build must match the same golden vectors"
 uv run python scripts/conformance.py

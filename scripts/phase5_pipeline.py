@@ -47,7 +47,7 @@ from duckdb_rocket.budget import (  # noqa: E402
     default_onnx_threads,
 )
 from duckdb_rocket.datasets import load  # noqa: E402
-from duckdb_rocket.shells import built_shell  # noqa: E402
+from duckdb_rocket.shells import built_shell, rocket_shell  # noqa: E402
 from duckdb_rocket.pipeline import RocketPFNConfig  # noqa: E402
 from duckdb_rocket.rocket import normalize_series  # noqa: E402
 
@@ -119,7 +119,7 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
 
 def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               memory_limit: str, temp_dir: Path, test_chunk: int | None,
-              onnx_threads: int) -> str:
+              onnx_threads: int, load_rocket: str = "") -> str:
     n_features = config.features_per_group
     names = [f"f{j}" for j in range(n_features)]
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
@@ -128,6 +128,7 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     select_features = ", ".join(names)
 
     parts = [
+        load_rocket,
         "LOAD anofox_tabfm;",
         "SET anofox_tabfm_accept_hf_license = true;",
         # Costs nothing to raise. Read the extension's source rather than guessing: it is a
@@ -440,8 +441,12 @@ def main() -> int:
     print(f"      anofox_tabfm_threads {onnx_threads} x {args.threads} duckdb threads "
           f"= {onnx_threads * args.threads} of {cores} cores (from {core_source})", flush=True)
 
+    shell, shell_args, load_rocket = rocket_shell(args.shell if args.shell != SHELL else None)
+    if load_rocket:
+        print(f"      {shell.name} + prebuilt rocket extension (no local build)", flush=True)
+
     sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
-                    args.test_chunk, onnx_threads)
+                    args.test_chunk, onnx_threads, load_rocket)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")
@@ -459,7 +464,7 @@ def main() -> int:
     # Caveat: with stdout redirected to a file the CLI block-buffers, so the heartbeat arrives in
     # bursts rather than smoothly. Still the difference between "progressing" and "possibly hung".
     proc = subprocess.run(
-        [str(args.shell), "-f", str(script)],
+        [str(shell), *shell_args, "-f", str(script)],
         stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
     )
     seconds = time.perf_counter() - started

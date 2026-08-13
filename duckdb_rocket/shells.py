@@ -35,6 +35,35 @@ def loadable_extension() -> Path:
     return ROOT / "build" / "release" / "extension" / "rocket" / "rocket.duckdb_extension"
 
 
+def rocket_shell(preferred: Path | None = None) -> tuple[Path, list[str], str]:
+    """A shell that can run `rocket_transform`, as (binary, extra argv, SQL to prepend).
+
+    Two ways to get one, and the caller should not have to know which it got:
+
+    * the shell built here, with `rocket` statically linked -- nothing to load;
+    * the pinned upstream CLI plus a downloaded `rocket.duckdb_extension`, which needs
+      `-unsigned` and an explicit `LOAD`.
+
+    The second exists so a pod does not have to compile DuckDB. Building it takes 10-20 minutes
+    and produces a file that is identical for every machine on the same commit and platform --
+    it was rebuilt on four pods in one day before anyone counted the cost.
+    """
+    if preferred is not None:
+        return preferred, [], ""
+    built = built_shell()
+    if built.exists():
+        return built, [], ""
+    ext = loadable_extension()
+    if ext.exists():
+        # -unsigned is required for a locally-built extension; the LOAD needs the full path
+        # because the extension is not in the CLI's own extension directory.
+        return pinned_shell(), ["-unsigned"], f"LOAD '{ext.as_posix()}';\n"
+    raise FileNotFoundError(
+        f"no shell with `rocket`: neither {built} nor {ext} exists. Build with "
+        f"scripts/build_extension.bat, or let scripts/pod/bootstrap.sh fetch a prebuilt one."
+    )
+
+
 def resolve_shell(preferred: Path | None = None) -> Path:
     """Pick a usable shell: an explicit one, else the built one, else the pinned one.
 

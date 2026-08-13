@@ -23,8 +23,14 @@ The paper's reference result is **0.900 mean accuracy across 92 UCR datasets** a
 
 ## Status
 
-The pipeline runs end to end, entirely inside DuckDB. Phases 1–4 of [PLAN.md](PLAN.md) are
-done; Phase 5 is measured on a subset, not yet at the paper's 92-dataset protocol.
+The pipeline runs end to end, entirely inside DuckDB. Phases 1–5 of [PLAN.md](PLAN.md) are done:
+the ten-dataset UCR subset is measured, **mean accuracy 0.9630**, every dataset reproducing its
+local accuracy exactly. That is a subset chosen for spread, not the paper's 92-dataset protocol,
+and the two numbers measure different things — see [reference/RESULTS.md](reference/RESULTS.md).
+
+The extension builds on **nine platforms** — Linux (amd64/arm64), macOS (amd64/arm64), Windows
+(MSVC and mingw) and all three wasm targets — and is
+[submitted to community-extensions](https://github.com/duckdb/community-extensions/pull/2497).
 
 ```sql
 SELECT rocket_transform(values, 250, 0, 0) FROM series;   -- 500 features from 250 kernels

@@ -620,12 +620,23 @@ died. It is 766 KB under the prepared-plan one.
 
 ## Phase 6 — Upstream and release
 
-- [ ] Open the `anofox-tabfm` PRs identified in Phase 2 (list-valued features; probability
-      output if missing). **Open an issue describing the use case before writing a large PR** —
-      DataZoo GmbH has no CONTRIBUTING guide and `anofox` is a commercial product, so confirm
-      appetite first.
-- [ ] Package `rocket` for the DuckDB community-extensions repo (metadata, CI matrix, docs)
-- [ ] README with the composition example front and center
+- [x] Open the `anofox-tabfm` PRs identified in Phase 2 — **both turned out moot**, which Phase 2
+      established before any code was written: probability output already exists, and list-valued
+      features were a *bug* rather than a feature request. Filed as such and **merged upstream**
+      (#17/#18). Five further contributions came out of Phase 5 rather than Phase 2:
+      [#19](https://github.com/DataZooDE/anofox-tabfm/pull/19) (container-aware thread default,
+      **merged**, shipped in v2026.08.13), [#22](https://github.com/DataZooDE/anofox-tabfm/pull/22)
+      (Ort::Env ordering), [#23](https://github.com/DataZooDE/anofox-tabfm/pull/23) (ScatterND
+      CUDA workaround), [#24](https://github.com/DataZooDE/anofox-tabfm/pull/24) (Windows CUDA
+      discovery), [#25](https://github.com/DataZooDE/anofox-tabfm/issues/25) (the flavor
+      repository host does not resolve).
+- [x] Package `rocket` for the DuckDB community-extensions repo (metadata, CI matrix, docs) —
+      [submitted](https://github.com/duckdb/community-extensions/pull/2497). The descriptor was
+      verified against their `build.py` and all 314 existing entries rather than copied from one;
+      the distribution pipeline runs on this repo and is **green on nine platforms**, including
+      the three wasm targets that `description.yml` had excluded since its first draft for no
+      recorded reason.
+- [x] README with the composition example front and center
 
 ---
 

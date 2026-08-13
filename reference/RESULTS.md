@@ -96,23 +96,29 @@ whole run. **A CPU pod is the correct instance type**, and the tooling should su
 > being CPU-only is a packaging choice and could change. It turns out not to matter: building
 > the `cuda` flavor from source and running it on an A40 (sm_86, CUDA 12.8), **`tabicl-v2` —
 > our backbone — cannot execute on CUDA at all.** It fails inside the graph at a `ScatterND`
-> node whose `updates` tensor is sized by the *train* rows while `indices` is sized by *all*
-> rows, which ONNX forbids. `mitra` runs fine on the same build and device, and `tabicl-v2`
-> runs fine on the CPU EP, so this is specific to that model on that provider. Zeroing the
-> test rows gets past the first such node and into a second one ~1500 nodes later, so there is
-> no shape we can feed it to avoid this.
+> node. `mitra` runs fine on the same build and device, and `tabicl-v2` runs fine on the CPU
+> EP, so this is specific to that model on that provider. Zeroing the test rows gets past the
+> first such node and into a second one ~1500 nodes later, so there is no shape we can feed it
+> to avoid this.
 >
 > So "a CPU pod is the correct instance type" holds for a firmer reason than packaging: **for
-> `tabicl-v2` there is currently no GPU path to buy.** Reported upstream with the shape
-> breakdown in [anofox-tabfm#21](https://github.com/DataZooDE/anofox-tabfm/issues/21).
+> `tabicl-v2` there is currently no GPU path to buy.** Reported upstream in
+> [anofox-tabfm#21](https://github.com/DataZooDE/anofox-tabfm/issues/21).
 >
-> Unresolved, and it touches every accuracy number below: the ONNX violation is real, but it
-> is not established whether the exported graph is wrong (and the CPU EP is being lenient) or
-> whether an upstream node yields different shapes under CUDA. If it is the former, the CPU EP
-> is tolerating something out of spec on the path we actually use. The Phase 5 numbers
-> reproduced exactly across two machines and OSes and are sane against the TabPFN oracle,
-> which is decent evidence they are fine — but it is evidence, not proof, and the question is
-> open rather than closed.
+> **The CPU path is not implicated, and this is now settled rather than assumed.** Reading the
+> shipped graph statically, `ScatterND`'s `indices` is `Unsqueeze(Slice(Range(0,T,1), 0, S))`
+> — length S — and its `updates` is `Min(rows, train)` — also S. They agree by construction,
+> so the export is correct and the CPU EP is not tolerating anything out of spec. (An earlier
+> revision of this note claimed the graph was out of spec. It is not; ONNX simply cannot infer
+> `min(T,S)` symbolically, which makes the operands *look* mismatched.) What goes wrong is
+> that under CUDA the value arriving at `indices` has length T instead of S. Our accuracy
+> numbers run entirely on the CPU EP and are unaffected.
+>
+> Worth recording because it cost a wrong hypothesis: a hand-built minimal graph carrying that
+> exact `Range`→`Slice` pattern runs **correctly** on CUDA, on ORT 1.26.0 and 1.28.0 alike. The
+> trigger needs the full ~4500-node graph — partitioning or folding — not the op pattern. Also:
+> when the CUDA EP fails to load, ORT silently falls back to CPU and a "CUDA" run reports a
+> clean pass, so `get_providers()` has to be asserted, not assumed.
 >
 > Separately, and unrelated to accuracy: ORT 1.26.0 was initially thought incompatible with
 > `anofox_tabfm`. It is not — that was an env-ordering bug on anofox's side, fixed in

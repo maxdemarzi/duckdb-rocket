@@ -486,7 +486,37 @@ One observation left unexplained rather than rationalised: the last attempt sust
 where `ItalyPowerDemand` on the same pod and settings ran at **1531%** — six times less
 parallelism, 5.9 MB of spill, no identified cause. That is where a retry should look first.
 
-The nine-dataset table stands on its own; ECG5000 is a gap, not a caveat on the others.
+### ECG5000, obtained on a GPU (2026-08-13)
+
+**Accuracy 0.9480**, in **18 m 39 s**. Five attempts, and the one that worked changed the device
+rather than the query.
+
+| | |
+|---|---|
+| accuracy | **0.9480** |
+| wall clock | **1108.2 s** (transform 70.1 s, classify 1035.0 s = 93.7%) |
+| per-group classify | min 25.0 s, median 25.8 s, max 27.3 s (1.1x median) |
+| row alignment | 4500/4500 ids, 180,000 group-rows, 40 groups per row |
+| device | A40 (sm_86), `anofox_tabfm_device = 'cuda'`, `--test-chunk 128` |
+| peak VRAM | ~42.3 GB of 46 GB |
+
+Archived as `reference/phase5_ECG5000_gpu.json`. **This closes Phase 5's tenth dataset.**
+
+Two things make it comparable to the nine CPU rows rather than a separate result. First,
+`GunPoint` was run on the same GPU, same build, same patched graph immediately before, and
+returned **0.9933 — identical to its recorded CPU accuracy** (`reference/phase5_GunPoint_gpu.json`).
+That is the control: the GPU path is not a different numerical pipeline. Second, the patched graph
+is bit-identical to the shipped one on CPU, verified separately.
+
+Note what did *not* fix it: chunking was already at 128, and the CPU attempts had 119 GB of host
+RAM. The wall was ONNX's own allocation and its speed, and both moved at once on a GPU — 42 GB of
+VRAM in place of ~44 GB of host RAM, and >5h46m becoming 18m39s. The 247% CPU anomaly above is
+therefore still unexplained; the GPU run routed around it rather than answering it.
+
+Cost: one A40 pod, about 70 minutes end to end, of which ~50 was building the two extensions
+because **no GPU build of `anofox_tabfm` is published for any platform**
+([anofox-tabfm#25](https://github.com/DataZooDE/anofox-tabfm/issues/25)) and the rocket extension
+is ours. The inference itself was 18 minutes.
 
 What the table *is* good for is a sanity check, and it passes one: these values sit where
 published ROCKET results sit on these datasets, including Beef being much the hardest — the

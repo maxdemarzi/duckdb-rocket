@@ -92,6 +92,32 @@ was three findings, all of which change how the next run should be set up.
 CPU-only ONNX Runtime despite the repository advertising CUDA/ROCm. The GPU sat idle for the
 whole run. **A CPU pod is the correct instance type**, and the tooling should support one.
 
+> **Amended 2026-08-13, and the reason is stronger than the original.** The community build
+> being CPU-only is a packaging choice and could change. It turns out not to matter: building
+> the `cuda` flavor from source and running it on an A40 (sm_86, CUDA 12.8), **`tabicl-v2` —
+> our backbone — cannot execute on CUDA at all.** It fails inside the graph at a `ScatterND`
+> node whose `updates` tensor is sized by the *train* rows while `indices` is sized by *all*
+> rows, which ONNX forbids. `mitra` runs fine on the same build and device, and `tabicl-v2`
+> runs fine on the CPU EP, so this is specific to that model on that provider. Zeroing the
+> test rows gets past the first such node and into a second one ~1500 nodes later, so there is
+> no shape we can feed it to avoid this.
+>
+> So "a CPU pod is the correct instance type" holds for a firmer reason than packaging: **for
+> `tabicl-v2` there is currently no GPU path to buy.** Reported upstream with the shape
+> breakdown in [anofox-tabfm#21](https://github.com/DataZooDE/anofox-tabfm/issues/21).
+>
+> Unresolved, and it touches every accuracy number below: the ONNX violation is real, but it
+> is not established whether the exported graph is wrong (and the CPU EP is being lenient) or
+> whether an upstream node yields different shapes under CUDA. If it is the former, the CPU EP
+> is tolerating something out of spec on the path we actually use. The Phase 5 numbers
+> reproduced exactly across two machines and OSes and are sane against the TabPFN oracle,
+> which is decent evidence they are fine — but it is evidence, not proof, and the question is
+> open rather than closed.
+>
+> Separately, and unrelated to accuracy: ORT 1.26.0 was initially thought incompatible with
+> `anofox_tabfm`. It is not — that was an env-ordering bug on anofox's side, fixed in
+> [anofox-tabfm#22](https://github.com/DataZooDE/anofox-tabfm/pull/22).
+
 **2. The cross-platform build works, and conformance holds.** The extension built cleanly under
 gcc 11 on an EPYC 7453 and reproduced the golden vectors at **the same 1.776e-15** as the
 Windows/MSVC build, with PPV differences of exactly 0. That is the one durable result of the

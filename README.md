@@ -63,8 +63,8 @@ checkpoint also needs running through their `convert_weights.py`. Details in
 | Pure-SQL ROCKET | correct, and ~**4×10⁵** slower than Python — a fallback, not an option |
 | Extension test suite | 12 assertions via DuckDB's sqllogictest runner |
 
-Accuracy on nine UCR/UEA datasets, G=40, e=1, through the DuckDB pipeline (TabICL v2), run on a
-pod:
+Accuracy on the full ten-dataset UCR/UEA subset, G=40, e=1, through the DuckDB pipeline
+(TabICL v2), run on pods:
 
 | Dataset | Test rows | Channels | Accuracy |
 |---|---|---|---|
@@ -76,6 +76,7 @@ pod:
 | FaceFour | 88 | 1 | 0.9773 |
 | ItalyPowerDemand | **1029** | 1 | 0.9718 |
 | OSULeaf | 242 | 1 | 0.9711 |
+| ECG5000 | **4500** | 1 | 0.9480 |
 | Beef | 30 | 1 | 0.7667 |
 
 Every dataset that had also been run locally reproduced its accuracy **exactly** on the pod —
@@ -85,7 +86,7 @@ Where the Python oracle (TabPFN v2.5, pinned fp32) has also been run, it agrees 
 of five datasets; the one difference is two test rows out of thirty on Beef, against a
 seed-to-seed sd of 0.0509 on that same dataset — so this subset cannot tell the two backbones
 apart. Do not read the mean against the paper's 0.900: that is 92 datasets over 30 resamples,
-this is one split of eight. Full detail and caveats in
+this is one split of ten. Full detail and caveats in
 [reference/RESULTS.md](reference/RESULTS.md).
 
 Accuracies above are from a pod; each report carries an `environment` block recording what it
@@ -93,6 +94,60 @@ observed, so provenance is measured rather than asserted. The `rocket_transform`
 in the table above are still local Windows numbers and are marked as such in
 [reference/RESULTS.md](reference/RESULTS.md) — the local box runs this pipeline roughly 1.8×
 slower than the pod, so its timings understate it in the direction that flatters it.
+
+## When to use this
+
+Training-free classification is a trade, not a free lunch. What you buy is that **there is no
+model**: no fit step, no artefact to store or version, no Python in the serving path. What you pay
+is that **every prediction pays full price** — there is nothing to amortise, and inference is
+**93.7%** of wall clock in the measured runs.
+
+### It fits well when
+
+- **You have no training pipeline and don't want one.** A new dataset is a `SELECT`, not a project.
+- **The data is already in DuckDB.** Features and classification are both SQL; nothing leaves the
+  database, and the composition is four lines.
+- **Test sets are small to moderate** — hundreds of rows, not tens of thousands. Coffee (28 test
+  rows) finishes in 64 s; GunPoint (150) in 185 s.
+- **Labelled examples are scarce.** In-context learning needs no gradient steps, so 28 training
+  rows is a normal amount rather than a problem.
+- **Series are short-to-medium and multivariate is fine.** BasicMotions (6 channels) scores 1.0000.
+- **You want a strong baseline fast**, to find out whether a problem is hard before investing in it.
+
+### It fits badly when
+
+- **The test set is large.** Cost is linear in test rows with no amortisation: ItalyPowerDemand's
+  1,029 rows took 1,010 s on 16 vCPU. ECG5000's 4,500 rows never finished on CPU at all — four
+  attempts, >5h46m, ~44 GB — and needed a GPU to land in 18m39s.
+- **The training context is large.** Memory scales with context rows × features and lives outside
+  DuckDB's `memory_limit`, so it cannot be bounded by configuration — only by `--test-chunk`, and
+  only for the test half. A 500-row context is already heavy.
+- **You will classify repeatedly.** A trained model turns training cost into near-free inference.
+  This does the opposite. If you are going to run it a thousand times, train something.
+- **You need low latency.** Per-call cost is seconds, not milliseconds.
+- **Licences matter.** The model weights are third-party and some are non-commercial; see below.
+
+### Against the alternatives
+
+**ROCKET + ridge regression** — the original 2020 pipeline — is the honest comparison, and for most
+production uses it is the better tool: it trains in seconds and then classifies for almost nothing.
+If you can run scikit-learn and you have labels, do that. This project is not faster and is not
+claiming to be more accurate.
+
+What it offers instead is the *shape*: no training step to run or schedule, no model artefact to
+store, version or serve, and no process boundary between your data and your predictions. That is
+worth something when the alternative is standing up a training pipeline for a question you might
+ask once.
+
+**A trained deep model** (InceptionTime, ROCKET+ridge at scale) will beat this on accuracy-per-
+dollar whenever you have enough labels and enough runs to amortise training. Nothing here competes
+with that.
+
+**Accuracy, stated plainly.** Mean **0.9630** over the ten-dataset subset, ranging from 1.0000 on
+four of them to **0.7667** on Beef. That is a subset chosen for spread rather than difficulty, and
+it is *not* comparable to the paper's 0.900 over 92 datasets — different datasets, different
+backbone, one split instead of 30 resamples. Treat it as evidence the pipeline works, not as a
+benchmark result.
 
 ## Try it
 

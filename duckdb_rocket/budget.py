@@ -83,6 +83,25 @@ def default_onnx_threads(duckdb_threads: int) -> int:
     DuckDB runs `duckdb_threads` classify calls concurrently and each builds its own session, so
     the product is what lands on the CPU. Oversubscribing a memory-bound workload costs
     throughput to contention rather than buying parallelism.
+
+    This formula was challenged and then measured (issue #1), because a TabFM graph's intra-op
+    parallelism saturates around 4-8 threads in isolation, which suggests spending leftover cores
+    on more concurrent calls instead. It does not hold. OSULeaf, arms at product == cores, two
+    passes in opposite order:
+
+        64 cores    16x4  295 s   <- this formula      16 cores    8x2  258 s
+                     8x8  317 s                                    4x4  300 s  <- this formula
+                     4x16 406 s                                    2x8  380 s
+
+    Same ordering at both core counts, monotonic: wider intra-op with fewer concurrent calls
+    wins. Concurrency is not free, which is the step the "same product" argument skips -- every
+    DuckDB task builds its own ONNX session, and tabfm_classify re-encodes the whole train
+    context on every call, so a second concurrent call duplicates that encode outright while a
+    wide intra-op pool merely wastes threads at the margin.
+
+    Do not "fix" this by trading intra-op width for concurrency without re-measuring. Accuracy is
+    not at stake either way: twelve runs across two core counts produced one accuracy value to
+    sixteen digits.
     """
     cores, _ = binding_cpu_count()
     return max(1, cores // max(1, duckdb_threads))

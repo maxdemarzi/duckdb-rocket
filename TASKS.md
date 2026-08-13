@@ -62,6 +62,33 @@ Reversed from the previous handoff, which recorded GPU as closed. It is reachabl
   the code path. Before any ROCm run, pin `fp32` and re-verify accuracy *before* believing a speed
   number.
 
+## Settled today
+
+**`default_onnx_threads` is correct; do not trade intra-op width for concurrency.** Issue #1
+argued the formula oversubscribes because a TabFM graph saturates at 4-8 intra-op threads.
+Measured at both core counts, arms at product == cores, two passes in opposite order:
+
+| | 64 cores | 16 cores |
+|---|---|---|
+| this formula | **16x4 — 295 s** | **4x4 — 300 s** |
+| more concurrency | 8x8 — 317 s | 2x8 — 380 s |
+| most concurrency | 4x16 — 406 s | — |
+| wider, less concurrent | — | 8x2 — 258 s |
+
+Monotonic in the same direction at both sizes. Concurrency is not free: every DuckDB task builds
+its own ONNX session and `tabfm_classify` re-encodes the whole train context per call, so a second
+concurrent call duplicates that outright. The archived Phase 5 timings at `16x4` are therefore
+near the best shape, not 2-4x pessimistic. Closed; the derivation is in `budget.py`.
+
+One unexplained observation kept rather than smoothed: `8x8` on 64 cores measured **1346.7 s then
+316.5 s** across passes, while `16x4` varied by 0.1 s in the same session. Either `8x8` is
+occasionally pathological or the host blipped during exactly that window. A third pass would say.
+
+**wasm was excluded for no reason** and now is not. All three targets build, along with both Linux
+arches, both macOS arches and Windows — nine platforms green on our own CI. The exclusion had been
+in `description.yml` since its first draft with nothing recorded to justify it, and it kept the
+extension out of duckdb-wasm entirely.
+
 ## Traps worth keeping
 
 **Container-blindness, four instances.** Every one presented as something else.

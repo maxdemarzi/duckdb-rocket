@@ -501,13 +501,25 @@ step.
       every one reproducing its local accuracy exactly. ECG5000 is the tenth; it needs a larger
       instance than the others, see below.
 - [ ] Expand toward the paper's 92-dataset / 30-resample protocol if timing permits
-- [ ] Compare wall-clock against the paper's ~30s/fold median. **Blocked on it not being a
-      like-for-like comparison, not on the measurement.** The paper's figure is ROCKET features
-      plus a linear classifier; this is ROCKET features plus in-context inference over 40 groups,
-      where the classify calls dominate and the transform is a rounding error. Pod timings are
-      64s–1010s per dataset, but quoting either number against 30s/fold would compare two
-      different pipelines. Splitting transform from classify time is what would make it
-      answerable, and that has not been measured per-run.
+- [x] Compare wall-clock against the paper's ~30s/fold median — **answerable now that transform
+      and classify are timed separately**, and the answer is that the two halves land on opposite
+      sides of it.
+
+      The paper's ~30s/fold covers ROCKET features **plus a ridge classifier**. Our ROCKET half,
+      for the same 10,000-kernel budget across all 40 groups, is **1.4 s (Coffee) to 13.9 s
+      (OSULeaf)** — comfortably under their whole-pipeline median, on a 16-vCPU-equivalent CPU
+      pod. So the in-database transform is not the slow part and is competitive with the paper's.
+
+      End-to-end is **72 s to 1074 s**, because in-context inference replaces the ridge classifier
+      and costs roughly two orders of magnitude more. Quoting *that* against 30 s/fold compares two
+      different pipelines and would be meaningless.
+
+      The honest one-line version: **ROCKET in DuckDB is as fast as the paper's ROCKET; the
+      foundation model is what makes this pipeline slow.** Neither number is hardware-matched to
+      the paper, so read it as an order-of-magnitude statement rather than a benchmark.
+
+      Full detail, and the two configuration levers worth more than either (thread budget 2.85–5.3×,
+      test chunking 2.18×), in `reference/RESULTS.md`.
 - [x] Every result archived with its environment tuple — reports now carry `threads`,
       `memory_limit`, `memory_budget_source` and `test_chunk` in `config`, alongside
       `doctor.json`. A timing is not comparable against a run given a different budget.

@@ -108,6 +108,21 @@ POD_NAME = "duckdb-rocket-gpu"
 # whichever script the author remembered. Here it belongs to `create`.
 DENY_REGIONS = ("SE",)
 
+# Specific machines that are broken, as opposed to regions that are unlucky.
+#
+# kldbzozpc4vi (community L40S, TW, 60.249.37.148) was rented three times on 2026-08-14 and CUDA
+# was dead on all three: `cuInit` returns 999 and `cudaGetDeviceCount` gives rc=999 count=-1, while
+# nvidia-smi reports a healthy L40S with driver 550.163.01 and `tabfm_devices()` cheerfully reports
+# `cuda:0 ... usable = true` -- that table is built from NVML, which never creates a CUDA context.
+# It kept coming back because it is the community L40S with stock in TW, so "just retry" retries
+# the same machine.
+#
+# A machine, not a region: TW is not denied, and the other TW/CA/US hosts have been fine. This is
+# checked from `machineId` on the create response, so it costs no ssh and no waiting -- unlike the
+# `cuInit` preflight in scripts/pod/anofox_cuda.sh, which is the general control for machines that
+# are not yet on this list and needs the pod to be reachable first.
+DENY_MACHINES = ("kldbzozpc4vi",)
+
 # Container disk holds the image (~20 GB) plus pip: vllm and its deps are another ~10 GB
 # and they land in site-packages, not on the volume.
 CONTAINER_DISK_GB = 60
@@ -279,8 +294,18 @@ def cmd_check(args: argparse.Namespace) -> int:
               + (f"  up {up // 60} min" if up else ""))
     running = [p for p in pods if p.get("desiredStatus") == "RUNNING"]
     if running:
-        print(f"\n  {len(running)} RUNNING and billing. These are not mine to stop -- "
-              f"confirm they are yours before terminating anything.")
+        # Split by name now that the name means something. This used to be a blanket "these are not
+        # mine to stop", which was the safe thing to print while every pod this project created was
+        # called black-swan-l40s -- but it also meant the warning carried no information, and a
+        # warning that fires identically whoever owns the pod is one you stop reading.
+        ours = [p for p in running if str(p.get("name", "")).startswith(POD_NAME.rsplit("-", 1)[0])]
+        theirs = [p for p in running if p not in ours]
+        print(f"\n  {len(running)} RUNNING and billing:")
+        for p in ours:
+            print(f"    {p['id']}  this project's -- safe to stop when you are done with it")
+        for p in theirs:
+            print(f"    {p['id']}  {p['name']} -- NOT this project's. This account is shared "
+                  f"(black_swan runs eval-*, pattern-arm-*, sft-*, harvest-*). Leave it alone.")
     return 0
 
 
@@ -455,16 +480,27 @@ def cmd_create(args: argparse.Namespace) -> int:
             print("REFUSING to continue: create returned no pod id")
             return 1
 
-        region = pod_region(pod_id, verbose=args.verbose)
-        if region in DENY_REGIONS and not args.allow_region:
+        # The machine check is first because it is free: machineId is already on the create
+        # response, while the region needs a second call and a poll.
+        machine_id = str(pod.get("machineId") or "")
+        region = None
+        reject = None
+        if machine_id in DENY_MACHINES and not args.allow_region:
+            reject = f"is on machine {machine_id}, which has dead CUDA on every pod so far"
+        else:
+            region = pod_region(pod_id, verbose=args.verbose)
+            if region in DENY_REGIONS and not args.allow_region:
+                reject = f"landed in {region}, which this account does not keep"
+
+        if reject:
             # Hand it straight back. Deliberately before printing the create body or the ssh hint,
             # so a rejected pod cannot be mistaken for the one to use.
-            print(f"attempt {attempt}/{args.attempts}: {pod_id} landed in {region}, which this "
-                  f"account does not keep -- terminating and retrying")
+            print(f"attempt {attempt}/{args.attempts}: {pod_id} {reject} -- terminating and retrying")
             _request(f"{REST}/pods/{pod_id}", method="DELETE", verbose=args.verbose)
             if attempt == args.attempts:
-                print(f"\nREFUSING: {args.attempts} attempts all landed in {DENY_REGIONS}. "
-                      f"Nothing is billing. Retry later, or pass --allow-region to override.")
+                print(f"\nREFUSING: all {args.attempts} attempts were rejected "
+                      f"(regions {DENY_REGIONS}, machines {DENY_MACHINES}). Nothing is billing. "
+                      f"Retry later, or pass --allow-region to override.")
                 return 1
             time.sleep(20)
             continue

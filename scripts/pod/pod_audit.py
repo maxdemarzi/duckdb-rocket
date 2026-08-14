@@ -9,7 +9,7 @@ inside. In one night that happened four times --
     a pod adopted after a misread list, leaving the original unwatched
     a training job that died on the pod while the list still said RUNNING for 175 minutes
 
--- and each was found by a person happening to look. `runpod_launch.py check` reports what
+-- and each was found by a person happening to look. `runpod_gpu.py check` reports what
 RunPod believes; this reports what is true on the machine.
 
 **Three questions per pod, over ssh:**
@@ -26,8 +26,8 @@ without `--terminate-idle`.
 people's work -- `tabicl-*`, `duckdb-rocket-*` -- and a cleanup tool that can reach those is
 worse than the leak it prevents. The default prefixes are this project's own.
 
-    python scripts/cloud/pod_audit.py
-    python scripts/cloud/pod_audit.py --terminate-idle
+    python scripts/pod/pod_audit.py
+    python scripts/pod/pod_audit.py --terminate-idle
 """
 
 from __future__ import annotations
@@ -41,7 +41,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import runpod_launch as rp  # noqa: E402
+import runpod_gpu as rp  # noqa: E402
+
+#: The launcher is re-invoked as a subprocess for `ssh` and `terminate`. Named once:
+#: a stale copy of this name is what made this file unrunnable.
+LAUNCHER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runpod_gpu.py")
 
 #: A pod younger than this is not judged: it is still pulling an image, installing wheels or
 #: downloading a base model, and none of that shows as GPU work. Calling it idle would
@@ -62,8 +66,7 @@ PROBE = (
 def ssh_probe(pod_id: str, timeout: int) -> dict | None:
     """Ask the pod what it is doing. None when it cannot be reached."""
     line = subprocess.run([sys.executable, "-X", "utf8",
-                           os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        "runpod_launch.py"), "ssh", pod_id],
+                           LAUNCHER, "ssh", pod_id],
                           capture_output=True, text=True, timeout=60).stdout
     ssh = next((l for l in line.splitlines() if l.startswith("ssh -p")), "")
     if not ssh:
@@ -155,9 +158,7 @@ def main() -> int:
     for name, pod_id in idle:
         print(f"  terminating {name} {pod_id}")
         subprocess.run([sys.executable, "-X", "utf8",
-                        os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                     "runpod_launch.py"),
-                        "terminate", pod_id, "--yes-destroy-the-volume"],
+                        LAUNCHER, "terminate", pod_id, "--yes-destroy-the-volume"],
                        capture_output=True, text=True, timeout=120)
     return 0
 

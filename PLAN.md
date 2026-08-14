@@ -569,6 +569,13 @@ All nine from one pod — 16 vCPU, Linux, `tabicl-v2`, e=1, G=40, `--test-chunk 
 `reference/pod_doctor.json`. Row alignment was exact on every row of every run, and `f0`
 collisions were zero across all 40 groups of all nine.
 
+> **That zero was not evidence.** The key was `f0` alone, and it read zero here, on ECG5000's 4500
+> rows included — then collided on two of the first six *hard* datasets tried. Widening it to 4 and
+> then to 16 did not settle it either. The key is now the whole 500-column feature vector, which
+> cannot collide between distinct series by construction; see RESULTS.md, "The id-recovery key:
+> three wrong answers, all of them the same wrong answer". These nine results stand — their
+> alignment was exact — but the zero above was a property of easy data, not of the key.
+
 | Dataset | Test rows | Accuracy | Seconds | Matches its local run |
 |---|---|---|---|---|
 | BasicMotions (multivariate) | 40 | 1.0000 | 78.7 | yes |

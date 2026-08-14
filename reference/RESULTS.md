@@ -205,6 +205,31 @@ Two process mistakes made this worse and are worth naming:
   message and the script reports a bare "FAILED after Ns". The harness hid the very thing it
   was meant to surface.
 
+### A rented GPU can be broken in a way every check we had said was fine (2026-08-14)
+
+Two consecutive community L40S pods, both on machine `kldbzozpc4vi`, ran no CUDA at all. Everything
+we normally trust said otherwise:
+
+    nvidia-smi              NVIDIA L40S, driver 550.163.01, CUDA Version 12.8
+    tabfm_devices()         cuda:0  CUDAExecutionProvider  sm_89  47.8 GB free  usable = true
+    cudaGetDeviceCount      rc=999  count=-1        <- plain ctypes, system libcudart
+    cuInit(0)               rc=999
+
+`tabfm_devices()` is built from NVML, which talks to `/dev/nvidiactl` and never creates a CUDA
+context, so it is perfectly happy on a host where no CUDA program can run. Our cache smoke test
+called exactly that function and passed the pod through to a run that died three minutes later
+inside ORT session creation, behind a 40-line C++ stack naming `cudaSetDevice` — which reads like
+our bug, and is not.
+
+`scripts/pod/anofox_cuda.sh --preflight` now calls `cuInit` through `libcuda.so.1` before the
+clone, the 110 MB checkpoint or any build. On the second bad pod it returned in about ten seconds
+rather than three minutes. A `SECURE`-cloud pod on a different machine passed it immediately and
+ran clean. Cost of the lesson: two pods, roughly $0.30.
+
+The general form is one this project keeps rediscovering: **a probe that answers from a different
+subsystem than the one you depend on is not a check.** NVML answering for CUDA is the same shape as
+`hardware_concurrency()` answering for a cgroup quota.
+
 ## Phase 2 — `anofox_tabfm` probe
 
 Full write-up in [PHASE2_FINDINGS.md](PHASE2_FINDINGS.md). Two results reshaped the design.
@@ -320,10 +345,16 @@ Of the 112 bake-off datasets, 13 have a best published accuracy below 0.75. Six 
 | **MiddlePhalanxTW** | **0.6104** | 0.5325 | 0.5130 | 0.539 | *0.578* |
 | RefrigerationDevices | 0.5573 | 0.5307 | 0.5173 | 0.512 | 0.600 |
 | Haptics | 0.5552 | 0.5357 | 0.5260 | 0.526 | 0.571 |
+| ScreenType | 0.5200 | — | — | 0.467 | 0.595 |
+| InlineSkate | 0.4909 | — | — | — | 0.544 |
 
-**Against ridge on the same features: 4 wins from 4, mean +0.035.** Against published ROCKET:
-+0.047, +0.071, +0.045, +0.029. On MiddlePhalanxTW the pipeline **beats the best published
-result** (0.6104 vs 0.578 across ROCKET, HC2, InceptionTime, Hydra-MR, 1NN-DTW and FreshPRINCE).
+**Against ridge on the same features: 4 wins from 4, mean +0.035** — the ridge and mr-hydra columns
+cover the first four only; ScreenType and InlineSkate were run for the pipeline alone. Against
+published ROCKET: +0.047, +0.071, +0.045, +0.029, and +0.053 on ScreenType, which is one of the
+datasets where ROCKET specifically trails the field. On MiddlePhalanxTW the pipeline **beats the
+best published result** (0.6104 vs 0.578 across ROCKET, HC2, InceptionTime, Hydra-MR, 1NN-DTW and
+FreshPRINCE). InlineSkate has no published ROCKET figure recorded here, so that cell is empty
+rather than filled with a guess.
 
 So the earlier "ridge ties it" finding was an artefact of testing on saturated problems. The
 in-context model does extract more from ROCKET features than a linear head — it just cannot show
@@ -332,26 +363,52 @@ that where a linear head already scores 0.99.
 `mr-hydra` splits 3-1 against the pipeline and wins Herring outright (0.7344 vs 0.6406), so a
 better *feature extractor* is competitive with a better *classifier*. Both beat ridge.
 
-**Two datasets are missing from that table and are not being reported.** ScreenType and
-InlineSkate both exited non-zero: the id-recovery join fanned out, scoring rows by up to 75 and 80
-groups instead of 40. The ensemble average over a duplicated group set is not a result. See below.
+The last two rows were held back for two days and three attempts at the id recovery, because both
+first came out of a run whose row alignment was wrong. They are reported now, at `rc=0`, with
+`min_groups_per_row = max_groups_per_row = 40` on both — 15,000 group-rows over 375 ids and 22,000
+over 550. `reference/phase5_ScreenType_gpu.json`, `reference/phase5_InlineSkate_gpu.json`.
 
-### The id-recovery key was one column, and one column was not enough
+### The id-recovery key: three wrong answers, all of them the same wrong answer
 
 `anofox_tabfm` echoes back only the target and the columns named in `features`, so a plain `id`
-column is dropped and scored rows are rejoined to their ids on a feature value. That key was `f0`
-alone. It measured **zero collisions across all ten datasets of the original subset**, ECG5000's
-4500 rows included — which is precisely why it survived — and then collided on two of the first six
-hard datasets tried.
+column is dropped and scored rows must be rejoined to their ids on feature values. The key was
+`f0` alone. It measured **zero collisions across all ten datasets of the original subset**,
+ECG5000's 4500 rows included — which is precisely why it survived — and then collided on two of the
+first six hard datasets tried, scoring rows by up to 75 and 80 groups instead of 40.
 
-The key is now `(f0, f1, f2, f3)`, and the collision guard counts distinct tuples of the same four.
-Four identical doubles means two identical series, which no join can disambiguate and which the
-guard still reports. Three tests pin the join, the source schema and the guard to the same key,
-because a guard measuring a narrower key than the join uses would miss exactly the case it exists
-for.
+Then it was widened to four columns, which fixed neither dataset. Then to sixteen, which fixed
+InlineSkate and left **five distinct ScreenType series still sharing a key**. Three guesses, each
+one the previous guess with a bigger number, and the third was still wrong.
 
-Worth noting what caught it: not the accuracy, which looked plausible. The row-alignment assertion
-counted 15,070 group-rows where 375 x 40 = 15,000 were expected.
+The key is now the **entire 500-column feature vector**, as a `DOUBLE[]`. That is not a fourth
+guess; it is the end of the question. Two rows share it only if they *are* the same feature vector,
+and identical vectors get identical predictions, so collapsing them (`any_value(proba)` under
+`GROUP BY grp, id`) is exact rather than merely tolerable. Verified on v1.5.5 at the real width
+before being relied on: a `DOUBLE[]` equality plans as a `HASH_JOIN` rather than a nested loop, the
+3890-byte key survives a `PREPARE`, and DuckDB holds `NaN = NaN` so a non-finite feature cannot
+silently drop a row out of the join.
+
+The two failure modes were never the same problem, which is why one fix kept not covering both:
+
+| | test rows | distinct series | cause |
+|---|---|---|---|
+| ScreenType | 375 | 375 | genuine feature collisions — quantised electricity data makes ROCKET's max/PPV coincide across *different* series |
+| InlineSkate | 550 | 521 | 29 byte-identical series — **no** key of any width can separate these, and none should |
+
+The collision column would now be a tautology, so it reports duplicate test series instead —
+descriptive, not asserted. It reads 29 on InlineSkate and **0 on ScreenType**, confirming after the
+fact that ScreenType's five were genuine key collisions and not duplicates. It is also `max()` and
+not `sum()`: every group writes the same count, so summing published InlineSkate's 29 as 1160.
+
+Worth noting what caught the original bug: not the accuracy, which looked plausible. The
+row-alignment assertion counted 15,070 group-rows where 375 x 40 = 15,000 were expected. And worth
+noting what *nearly* didn't — the assertion only checked `min_groups_per_row`, and the fan-out
+moved `max` (to 75 and 80) while `min` stayed at 40. The proxy collision count is what actually
+fired. `max_groups_per_row` is now checked directly.
+
+ScreenType's accuracy is **0.5200 both before and after** the fix. The five contaminated rows
+happened not to change the answer. The number was right by luck and is now right by construction,
+and the difference between those two is the entire point of the assertion.
 
 ## Phase 5 — the whole pipeline in DuckDB
 

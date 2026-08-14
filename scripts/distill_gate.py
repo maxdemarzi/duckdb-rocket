@@ -1,43 +1,51 @@
-"""The gate from docs/DISTILLATION_PLAN.md: arms A, C, T and B.
+"""Is the teacher good enough to teach? The gate from docs/DISTILLATION_PLAN.md, third design.
 
 Distillation only earns its place if a student trained on teacher-pseudo-labelled unlabelled data
-beats what you would have done with the real labels you already had.
+beats what you would have done with the labels you already had. That needs the teacher to be *better
+than the student* -- otherwise its pseudo-labels are no better than the student's own guesses.
 
-    context = the real train split          (real labels; what the teacher uses in-context)
-    pool    = half the test split           (labels discarded for arm B; kept for arm C)
-    holdout = the other half of the test    (labels used only for scoring)
+**Two earlier designs of this gate were wrong, in different ways, and both are worth stating because
+the shape of the mistake recurs.**
 
-    A  fit on context                       -> what you do WITHOUT the teacher
-    C  fit on context + pool, real labels    -> the ceiling arm B is chasing
-    T  the teacher itself, scored on holdout -> can it label the pool better than A can?
-    B  fit on context + pool, TEACHER labels -> the actual proposition
+*First design: it measured `C - A`* -- fit on context+pool with real labels, against fit on context
+alone. That is how much room exists, and says nothing about whether the teacher can reach any of it.
+On the saturated subset `C - A` was under a point and the gate said stop, correctly but by luck; on
+the hard datasets `C - A` is +0.09 and the same rule would have said go while the teacher was barely
+ahead of the student.
 
-**The first version of this gate measured `C - A` and called that the decision. That was the wrong
-quantity.** `C - A` says how much room there is; it says nothing about whether the teacher can
-reach any of it. A teacher no better than the student produces pseudo-labels no better than the
-student's own guesses, and then a large `C - A` is simply unreachable. On the saturated subset
-`C - A` was under 1 point and the gate correctly said stop -- but on the hard datasets `C - A` is
-+0.09 and the same gate would have said go, while the teacher beats arm A by only ~0.02. `T - A` is
-the quantity that decides it, and it was never computed.
+*Second design: it measured `T - A` on half a test set, against the better of two students.* Three
+faults compounded:
 
-So `T` is the gate now, and `B` is measured rather than inferred:
+* **Six datasets.** The same sample size that produced a feature "shortlist" indistinguishable from
+  noise elsewhere in this project.
+* **Halving the test set.** Herring's holdout was 32 rows, so one row is 3.1 accuracy points and its
+  -0.1250 against MultiRocketHydra was four rows. The teacher's own holdout accuracy differed from
+  its full-test accuracy by up to 5 points -- InlineSkate 0.4400 against 0.4909 -- pure noise.
+* **A max over two students.** The max of two noisy estimates exceeds either one's expectation, so
+  reducing the baseline to "the better learner" is biased in the baseline's favour by construction.
 
-    T - A <= 0    the teacher cannot label the pool better than the student already can -- stop
-    T - A >  0    there is something to inherit; B says how much of it survives the transfer
+Decomposed, the second design's verdict was almost entirely those artifacts:
 
-Arm T needs the real teacher (ROCKET features + `tabicl-v2` in-context), which lives in DuckDB and
-wants a GPU, so it is not recomputed here. It is read from the soft-label sidecar that
-`phase5_pipeline.py` writes next to its report (`--teacher DIR`). Those probabilities are also what
-arm B trains on, which is the point: a student fit on the teacher's *distribution* inherits its
-uncertainty, not just its decisions.
+    vs ridge      4/6 wins, mean +0.0115
+    vs mr-hydra   3/6 wins, mean -0.0129
+    vs max-of-two 2/6 wins, mean -0.0281   <- reported as "the teacher is behind on 4 of 6"
 
-Two learners per arm, because arm A has to be the *best* label-only option rather than a convenient
-one: ROCKET+ridge (the pipeline's own feature family) and MultiRocketHydra (aeon's stronger
-convolutional classifier, and the intended CPU student).
+On the *same datasets and models* scored on full test sets, the sign on mr-hydra flips: 6/6 and
++0.0328 against ridge, 3/4 and +0.0182 against mr-hydra.
 
-    uv run python scripts/distill_gate.py
-    uv run python scripts/distill_gate.py --datasets ECG5000 ItalyPowerDemand
-    uv run python scripts/distill_gate.py --datasets Haptics --teacher reference/
+**This design.** The gate question needs no pool at all -- both teacher and student train on the
+train split, and both are scored on the whole test set:
+
+    T   the teacher's accuracy on the FULL test split, read from its archived pipeline report
+    A   each student, trained on train, scored on the FULL test split
+    gate:  T - A, reported PER LEARNER, never as a max
+
+Only arm B -- the actual distillation -- needs unlabelled data, so it keeps a pool/holdout split, and
+it takes `--repeats` so per-dataset split noise is averaged rather than believed.
+
+    uv run python scripts/distill_gate.py --gate                       # T vs A, all archived teachers
+    uv run python scripts/distill_gate.py --gate --learners rocket+ridge
+    uv run python scripts/distill_gate.py --arm-b --teacher reference --repeats 5
 """
 
 from __future__ import annotations
@@ -50,7 +58,8 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 from sklearn.linear_model import RidgeClassifierCV  # noqa: E402
 from sklearn.model_selection import train_test_split  # noqa: E402
@@ -59,41 +68,56 @@ from sklearn.preprocessing import StandardScaler  # noqa: E402
 from duckdb_rocket.datasets import load  # noqa: E402
 from duckdb_rocket.rocket import generate_kernels, normalize_series, transform  # noqa: E402
 
-# pool/context ratio is what should drive any gain, so the candidates are ordered by it.
-# SyntheticControl is deliberately included at 0.5x as a control that should show ~nothing.
-CANDIDATES = ("ItalyPowerDemand", "ECG5000", "OSULeaf", "SyntheticControl")
+ALPHAS = np.logspace(-3, 3, 10)
 
 
-def rocket_ridge(xtr, ytr, xte, n_kernels: int = 10_000):
+def rocket_ridge(xtr, ytr, xte, n_kernels: int = 10_000, seed: int = 0):
     """The pipeline's own feature family, classified by ridge instead of an in-context model."""
     nch = xtr.shape[1] if xtr.ndim == 3 else 1
-    bank = generate_kernels(0, xtr.shape[-1], n_kernels, n_channels=nch)
+    bank = generate_kernels(seed, xtr.shape[-1], n_kernels, n_channels=nch)
     ftr, fte = transform(xtr, bank), transform(xte, bank)
     sc = StandardScaler().fit(ftr)
-    clf = RidgeClassifierCV(alphas=np.logspace(-3, 3, 10)).fit(sc.transform(ftr), ytr)
+    clf = RidgeClassifierCV(alphas=ALPHAS).fit(sc.transform(ftr), ytr)
     return clf.predict(sc.transform(fte))
 
 
-def mr_hydra(xtr, ytr, xte):
+def mr_hydra(xtr, ytr, xte, seed: int = 0):
     """aeon's MultiRocketHydra -- the intended CPU student, and the stronger label-only baseline."""
     from aeon.classification.convolution_based import MultiRocketHydraClassifier
 
-    # aeon wants (n, channels, timepoints); our univariate arrays are (n, timepoints).
     a = xtr[:, None, :] if xtr.ndim == 2 else xtr
     b = xte[:, None, :] if xte.ndim == 2 else xte
-    clf = MultiRocketHydraClassifier(random_state=0).fit(a, ytr)
-    return clf.predict(b)
+    return MultiRocketHydraClassifier(random_state=seed).fit(a, ytr).predict(b)
 
 
 LEARNERS = {"rocket+ridge": rocket_ridge, "mr-hydra": mr_hydra}
 
 
-def load_teacher(directory: Path, dataset: str) -> dict | None:
-    """The soft-label sidecar `phase5_pipeline.py` writes beside its report.
+def teacher_reports(directory: Path) -> dict[str, dict]:
+    """Archived pipeline reports, keyed by dataset: the teacher's FULL-test accuracy.
 
-    Arm T is the real pipeline -- ROCKET features through `tabicl-v2` in-context -- which needs
-    DuckDB, the anofox extension and (in practice) a GPU. It is not recomputed here; it is read.
+    A run that recorded failures is skipped rather than used -- an accuracy computed over a broken row
+    alignment is not the teacher's accuracy, and that is exactly the class of number this project has
+    had to retract before.
     """
+    out: dict[str, dict] = {}
+    for p in sorted(directory.glob("phase5_*.json")):
+        if p.name.endswith("_soft.json") or "_both" in p.name:
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        if "accuracy" not in d or "shape" not in d:
+            continue
+        if d.get("failures"):
+            print(f"  skipping {d['dataset']}: its run recorded {len(d['failures'])} failure(s)")
+            continue
+        out.setdefault(d["dataset"], d)
+    return out
+
+
+def load_soft(directory: Path, dataset: str) -> dict | None:
     for stem in (f"phase5_{dataset}_gpu_soft.json", f"phase5_{dataset}_soft.json"):
         p = directory / stem
         if p.exists():
@@ -101,16 +125,15 @@ def load_teacher(directory: Path, dataset: str) -> dict | None:
     return None
 
 
-def teacher_labels(teacher: dict, n_test: int) -> np.ndarray:
+def teacher_labels(soft: dict, n_test: int) -> np.ndarray:
     """Teacher argmax per test row, in the dataset's own test order.
 
-    The pipeline lays its id space out as arange(n_train + n_test) with the train rows first, so
-    test row k is id n_train + k. Recovering that offset by inspection would be the kind of guess
-    that produces a plausible wrong number, so the sidecar records `n_train` and this asserts on it.
+    The pipeline lays its ids out as arange(n_train + n_test) with train first, so test row k is id
+    n_train + k. The sidecar records n_train so that offset is asserted rather than rediscovered.
     """
-    off, mean_p = teacher["n_train"], teacher["mean_proba"]
-    if teacher["n_test"] != n_test:
-        raise ValueError(f"teacher ran on {teacher['n_test']} test rows, the loader gives {n_test}")
+    off, mean_p = soft["n_train"], soft["mean_proba"]
+    if soft["n_test"] != n_test:
+        raise ValueError(f"teacher ran on {soft['n_test']} test rows, the loader gives {n_test}")
     out = []
     for k in range(n_test):
         row = mean_p.get(str(off + k))
@@ -120,148 +143,199 @@ def teacher_labels(teacher: dict, n_test: int) -> np.ndarray:
     return np.asarray(out)
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--datasets", nargs="*", default=list(CANDIDATES))
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--teacher", type=Path,
-                    help="directory holding phase5_<dataset>[_gpu]_soft.json; enables arms T and B")
-    args = ap.parse_args()
+def sign_test(diffs: np.ndarray) -> float:
+    """Two-sided sign test on the paired differences: P(this many wins or more, if it were a coin).
 
-    print(f"{'dataset':18s} {'learner':13s} {'ctx':>5s} {'pool':>5s} {'hold':>5s} "
-          f"{'A':>7s} {'T':>7s} {'B':>7s} {'C':>7s} {'T-A':>7s} {'B-A':>7s} {'C-A':>7s} {'secs':>6s}")
-    rows = []
-    for name in args.datasets:
+    Distribution-free on purpose. Accuracy differences across datasets are not normal, not equally
+    variable -- a 30-row test set and a 4500-row one are not comparable draws -- and the question is
+    only "does the teacher win more often than not".
+    """
+    from math import comb
+
+    nz = diffs[diffs != 0]
+    n = len(nz)
+    if n == 0:
+        return 1.0
+    w = int((nz > 0).sum())
+    k = max(w, n - w)
+    tail = sum(comb(n, i) for i in range(k, n + 1)) / 2**n
+    return float(min(1.0, 2 * tail))
+
+
+def run_gate(args) -> int:
+    reports = teacher_reports(args.teacher)
+    names = [n for n in (args.datasets or sorted(reports)) if n in reports]
+    if not names:
+        print(f"no archived teacher reports in {args.teacher}")
+        return 1
+
+    learners = {k: v for k, v in LEARNERS.items() if k in args.learners}
+    print(f"gate: teacher vs student on the FULL test split, {len(names)} datasets, "
+          f"{len(learners)} learner(s)\n")
+    print(f"{'dataset':24s} {'n_test':>6s} {'teacher':>8s} "
+          + " ".join(f"{k:>13s}" for k in learners) + "   T-A per learner")
+
+    rows: list[dict] = []
+    for name in names:
+        rep = reports[name]
+        T, n_test = rep["accuracy"], rep["shape"]["n_test"]
         try:
             xtr, ytr = load(name, "train")
             xte, yte = load(name, "test")
         except Exception as e:  # noqa: BLE001
-            print(f"{name:18s} load failed: {str(e)[:50]}")
+            print(f"{name:24s} load failed: {str(e)[:44]}")
+            continue
+        if len(yte) != n_test:
+            print(f"{name:24s} SKIPPED: report says {n_test} test rows, loader gives {len(yte)}")
             continue
         xtr, xte = normalize_series(xtr), normalize_series(xte)
 
-        # Teacher labels are indexed by position in the test split, so the split has to be done on
-        # INDICES rather than on the arrays -- otherwise there is no way to say which teacher label
-        # belongs to which pooled row. The arrays are then taken by those indices, so arms A and C
-        # see exactly the same split they saw before this was added.
-        tlab = None
-        if args.teacher:
-            teacher = load_teacher(args.teacher, name)
-            if teacher is None:
-                print(f"{name:18s} no teacher sidecar in {args.teacher} -- T and B unavailable")
-            else:
-                tlab = teacher_labels(teacher, len(yte))
-
-        idx = np.arange(len(yte))
-        # Stratify so a class cannot land entirely in one half -- with heavily imbalanced sets
-        # (ECG5000) an unstratified split would make the arms incomparable rather than noisy.
-        try:
-            pool_i, hold_i = train_test_split(
-                idx, test_size=0.5, random_state=args.seed, stratify=yte)
-        except ValueError:
-            pool_i, hold_i = train_test_split(idx, test_size=0.5, random_state=args.seed)
-
-        pool_x, pool_y = xte[pool_i], yte[pool_i]
-        hold_x, hold_y = xte[hold_i], yte[hold_i]
-
-        ctx_x, ctx_y = xtr, ytr
-        both_x = np.concatenate([ctx_x, pool_x])
-        both_y = np.concatenate([ctx_y, pool_y])
-
-        # Arm T: the teacher's own accuracy on the holdout. Scored on the holdout and not on the
-        # pool, so it is directly comparable with A, B and C rather than nearly comparable.
-        #
-        # The sidecar comes from a run that scored the WHOLE test split, and slicing the holdout out
-        # of it afterwards is exact, not an approximation: an in-context learner treats each test
-        # row as an independent query against the train context, so a row's prediction cannot
-        # depend on which other rows shared its call. That was verified directly -- GunPoint,
-        # 150/150 rows identical across chunk sizes -- before the pipeline began chunking at all.
-        # It also means one pipeline run per dataset serves every arm here.
-        t_acc = float((tlab[hold_i] == hold_y).mean()) if tlab is not None else float("nan")
-        # How good the pseudo-labels arm B trains on actually are. Not a gate, a diagnostic: if
-        # B underperforms while this is high, the loss is in the transfer and not in the teacher.
-        t_pool = float((tlab[pool_i] == pool_y).mean()) if tlab is not None else float("nan")
-
-        for lname, fn in LEARNERS.items():
-            t0 = time.perf_counter()
+        accs, deltas = {}, {}
+        for lname, fn in learners.items():
             try:
-                a = float((fn(ctx_x, ctx_y, hold_x) == hold_y).mean())
-                c = float((fn(both_x, both_y, hold_x) == hold_y).mean())
-                if tlab is None:
-                    b = float("nan")
-                else:
-                    # Arm B: the real proposition. Same rows as C, teacher labels instead of real
-                    # ones on the pool half. Hard argmax labels -- see the note in the summary
-                    # below about what a soft-label student would add and why it is not measured
-                    # here.
-                    b = float((fn(both_x, np.concatenate([ctx_y, tlab[pool_i]]),
-                                  hold_x) == hold_y).mean())
+                accs[lname] = float((fn(xtr, ytr, xte, seed=args.seed) == yte).mean())
             except Exception as e:  # noqa: BLE001
-                print(f"{name:18s} {lname:13s} FAILED {str(e)[:44]}")
+                print(f"{name:24s} {lname} failed: {str(e)[:40]}")
                 continue
-            secs = time.perf_counter() - t0
-            print(f"{name:18s} {lname:13s} {len(ctx_y):5d} {len(pool_y):5d} {len(hold_y):5d} "
-                  f"{a:7.4f} {t_acc:7.4f} {b:7.4f} {c:7.4f} "
-                  f"{t_acc - a:+7.4f} {b - a:+7.4f} {c - a:+7.4f} {secs:6.1f}")
-            rows.append((name, lname, a, t_acc, b, c, t_pool))
+            deltas[lname] = T - accs[lname]
+        if not deltas:
+            continue
+        print(f"{name:24s} {n_test:6d} {T:8.4f} "
+              + " ".join(f"{accs.get(k, float('nan')):13.4f}" for k in learners)
+              + "   " + "  ".join(f"{k}: {v:+.4f}" for k, v in deltas.items()))
+        rows.append({"dataset": name, "n_test": n_test, "teacher": T,
+                     "students": accs, "delta": deltas})
 
     if not rows:
-        return 0
+        return 1
 
-    have_teacher = any(not np.isnan(r[3]) for r in rows)
+    print(f"\nTHE GATE -- per learner, no max over learners, full test sets:")
+    verdicts = {}
+    for lname in learners:
+        d = np.array([r["delta"][lname] for r in rows if lname in r["delta"]])
+        if not len(d):
+            continue
+        p = sign_test(d)
+        verdicts[lname] = (len(d), int((d > 0).sum()), float(d.mean()), p)
+        print(f"  vs {lname:14s} {int((d > 0).sum()):3d}/{len(d)} wins   mean {d.mean():+.4f}   "
+              f"median {float(np.median(d)):+.4f}   sign test p = {p:.4f}")
 
-    print("\nheadroom (C - A), the most arm B could ever recover:")
-    for name, lname, a, _, _, c, _ in rows:
-        print(f"  {name:18s} {lname:13s} {c - a:+.4f}"
-              f"   {'room exists' if c - a >= 0.01 else 'no headroom'}")
-
-    if not have_teacher:
-        print("\nNO VERDICT. C - A alone does not decide this -- it says how much room there is,\n"
-              "not whether the teacher can reach any of it. Re-run with --teacher DIR to get T.")
-        return 0
-
-    print("\nthe gate (T - A): can the teacher label the pool better than the student already can?")
-    reachable = []
-    for name, lname, a, t, b, c, t_pool in rows:
-        ta = t - a
-        if ta <= 0:
-            note = "STOP -- the teacher is no better than this student; its labels add nothing"
-        elif ta < 0.01:
-            note = "marginal -- under 1 point of usable signal"
+    # The decision is per learner because a student the teacher cannot beat is a student not worth
+    # distilling INTO -- it is not evidence about the others, and collapsing them with a max was the
+    # previous design's central error.
+    print()
+    for lname, (n, wins, mean, p) in verdicts.items():
+        if mean > 0 and p < 0.05:
+            print(f"  {lname}: GO -- teacher ahead by {mean:+.4f} over {n} datasets, p={p:.4f}")
+        elif mean > 0:
+            print(f"  {lname}: teacher ahead by {mean:+.4f} but p={p:.4f} over {n} datasets; "
+                  f"underpowered, not a negative")
         else:
-            note = "go -- there is something to inherit"
-        print(f"  {name:18s} {lname:13s} T-A {ta:+.4f}  B-A {b - a:+.4f}  "
-              f"(teacher on pool {t_pool:.4f})  {note}")
-        if ta > 0:
-            reachable.append((name, lname, ta, b - a))
+            print(f"  {lname}: STOP -- teacher behind by {mean:+.4f} over {n} datasets, p={p:.4f}")
 
-    # The comparison that matters is against the BEST label-only option, not against a convenient
-    # one. A teacher that beats ridge and loses to mr-hydra has not earned a distillation pipeline,
-    # and reporting only the ridge column would hide that.
-    print("\nagainst the best label-only learner per dataset:")
-    for name in dict.fromkeys(r[0] for r in rows):
-        per = [r for r in rows if r[0] == name]
-        best_a = max(r[2] for r in per)
-        best_l = max(per, key=lambda r: r[2])[1]
-        t = per[0][3]
-        # Three ways, not two: a tie is not "behind". On a saturated dataset every arm reaches the
-        # same number and calling that a loss for the teacher misreads a ceiling as a defeat.
-        if t > best_a:
-            verdict = "teacher ahead"
-        elif t == best_a:
-            verdict = "tied -- nothing to distil either way"
-        else:
-            verdict = "TEACHER BEHIND"
-        print(f"  {name:18s} best A {best_a:.4f} ({best_l})  T {t:.4f}  T-A {t - best_a:+.4f}"
-              f"   {verdict}")
+    # Power, stated rather than assumed, because "no significant difference" at n=6 means nothing.
+    n = len(rows)
+    if n:
+        sd = float(np.std([r["delta"][list(verdicts)[0]] for r in rows], ddof=1)) if n > 1 else 0.0
+        det = 2.8 * sd / max(1, n) ** 0.5
+        print(f"\n  n={n}, sd of the paired difference {sd:.4f}, so this can detect a mean shift of "
+              f"about {det:.4f} at 80% power. A null result below that size is not evidence.")
 
-    if reachable:
-        print("\nArm B above uses the teacher's hard argmax. A soft-label student (KLDivLoss on the\n"
-              "distribution, which `phase5_pipeline.py` now writes) can exceed it, because equal\n"
-              "argmax accuracy still carries unequal uncertainty -- so a negative B - A here bounds\n"
-              "hard-label distillation, not distillation. Neither of the two learners here can take\n"
-              "soft targets; that needs the neural student (LITE / InceptionTimePlus).")
+    if args.out:
+        args.out.write_text(json.dumps(
+            {"design": "T vs A, full test split, per learner",
+             "n_datasets": len(rows), "rows": rows,
+             "verdicts": {k: {"n": v[0], "wins": v[1], "mean": v[2], "sign_p": v[3]}
+                          for k, v in verdicts.items()}}, indent=2), encoding="utf-8")
+        print(f"\nwrote {args.out}")
     return 0
+
+
+def run_arm_b(args) -> int:
+    """Arms A, B and C on a pool/holdout split -- the only part that needs unlabelled data.
+
+    Averaged over `--repeats` splits: one 50/50 split of a small test set is a very noisy estimate,
+    and believing a single one is what broke the previous design.
+    """
+    reports = teacher_reports(args.teacher)
+    names = [n for n in (args.datasets or sorted(reports)) if n in reports]
+    learners = {k: v for k, v in LEARNERS.items() if k in args.learners}
+    print(f"arms A/B/C over {args.repeats} split(s) per dataset\n")
+    print(f"{'dataset':22s} {'learner':13s} {'A':>7s} {'B':>7s} {'C':>7s} {'B-A':>8s} {'C-A':>8s}")
+
+    rows = []
+    for name in names:
+        soft = load_soft(args.teacher, name)
+        if soft is None:
+            continue
+        xtr, ytr = load(name, "train")
+        xte, yte = load(name, "test")
+        xtr, xte = normalize_series(xtr), normalize_series(xte)
+        try:
+            tlab = teacher_labels(soft, len(yte))
+        except ValueError as e:
+            print(f"{name:22s} {e}")
+            continue
+
+        for lname, fn in learners.items():
+            A, B, C = [], [], []
+            for rep in range(args.repeats):
+                idx = np.arange(len(yte))
+                try:
+                    pool_i, hold_i = train_test_split(
+                        idx, test_size=0.5, random_state=args.seed + rep, stratify=yte)
+                except ValueError:
+                    pool_i, hold_i = train_test_split(
+                        idx, test_size=0.5, random_state=args.seed + rep)
+                hx, hy = xte[hold_i], yte[hold_i]
+                bx = np.concatenate([xtr, xte[pool_i]])
+                A.append(float((fn(xtr, ytr, hx, seed=args.seed) == hy).mean()))
+                B.append(float((fn(bx, np.concatenate([ytr, tlab[pool_i]]), hx,
+                                   seed=args.seed) == hy).mean()))
+                C.append(float((fn(bx, np.concatenate([ytr, yte[pool_i]]), hx,
+                                   seed=args.seed) == hy).mean()))
+            a, b, c = float(np.mean(A)), float(np.mean(B)), float(np.mean(C))
+            print(f"{name:22s} {lname:13s} {a:7.4f} {b:7.4f} {c:7.4f} {b - a:+8.4f} {c - a:+8.4f}")
+            rows.append({"dataset": name, "learner": lname, "A": a, "B": b, "C": c})
+
+    if rows:
+        for lname in learners:
+            sub = [r for r in rows if r["learner"] == lname]
+            if not sub:
+                continue
+            ba = np.array([r["B"] - r["A"] for r in sub])
+            print(f"\n  {lname}: B-A {int((ba > 0).sum())}/{len(ba)} wins, mean {ba.mean():+.4f}, "
+                  f"sign test p = {sign_test(ba):.4f}")
+        print("\nArm B uses the teacher's hard argmax. A soft-label student can exceed it, so a "
+              "negative here bounds hard-label distillation and not distillation.")
+    if args.out and rows:
+        args.out.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+        print(f"wrote {args.out}")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--gate", action="store_true", help="T vs A on full test splits (the gate)")
+    ap.add_argument("--arm-b", action="store_true", help="arms A/B/C on pool/holdout splits")
+    ap.add_argument("--datasets", nargs="*", default=None)
+    ap.add_argument("--teacher", type=Path, default=ROOT / "reference",
+                    help="directory of archived pipeline reports and soft-label sidecars")
+    ap.add_argument("--learners", nargs="*", default=list(LEARNERS))
+    ap.add_argument("--repeats", type=int, default=5, help="pool/holdout splits to average (arm B)")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--out", type=Path)
+    args = ap.parse_args()
+
+    if not (args.gate or args.arm_b):
+        args.gate = True
+    t0 = time.perf_counter()
+    rc = run_gate(args) if args.gate else 0
+    if args.arm_b:
+        rc = run_arm_b(args) or rc
+    print(f"\n{(time.perf_counter() - t0) / 60:.1f} min")
+    return rc
 
 
 if __name__ == "__main__":

@@ -27,10 +27,25 @@ ORT_DIR="${ORT_DIR:-/workspace/onnxruntime-linux-x64-gpu-${ORT_VERSION}}"
 
 _plat="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m)"
 
+# The published asset name carries the key; the LOCAL file must not. DuckDB derives an
+# extension's entrypoint symbol from its FILENAME, so a file called
+# anofox_tabfm-cuda-<key>-linux_x86_64.duckdb_extension makes it look for
+# `anofox_tabfm-cuda-<key>-linux_x86_64_duckdb_cpp_init`, which does not exist:
+#
+#   IO Error: Extension '...' did not contain the expected entrypoint function 'a_duckdb_cpp_init'
+#
+# So the key lives in the directory and the file keeps its canonical name. The rocket shell cache
+# does not have this problem because a shell is a binary, not an extension.
 anofox_key() {
     local c
     c="$(git -C "$ANOFOX_DIR" rev-parse --short=12 HEAD 2>/dev/null)" || return 1
     echo "anofox_tabfm-${ANOFOX_FLAVOR}-${c}-${_plat}.duckdb_extension"
+}
+
+anofox_local_path() {
+    local c
+    c="$(git -C "$ANOFOX_DIR" rev-parse --short=12 HEAD 2>/dev/null)" || return 1
+    echo "${CACHE_ROOT:-/workspace/cache}/${ANOFOX_FLAVOR}-${c}-${_plat}/anofox_tabfm.duckdb_extension"
 }
 
 # ORT ships its own libs; we only ever cache the extension.
@@ -54,7 +69,8 @@ smoke_test() {
 anofox_fetch() {
     local shell_bin="$1" key dest
     key="$(anofox_key)" || { echo "  no anofox checkout at $ANOFOX_DIR"; return 1; }
-    dest="/workspace/$key"
+    dest="$(anofox_local_path)"
+    mkdir -p "$(dirname "$dest")"
     echo "looking for $key"
     curl -fsSL -o "$dest" "$PREBUILT_URL/$key" 2>/dev/null || { echo "  none published; build required"; return 1; }
     fetch_ort || { echo "  ORT fetch failed; build required"; return 1; }

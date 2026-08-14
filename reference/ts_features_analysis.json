@@ -1,0 +1,935 @@
+{
+  "n_datasets": 112,
+  "n_features": 116,
+  "top_k": 12,
+  "fdr": 0.05,
+  "null_mean_count": 11.586206896551724,
+  "features": [
+    {
+      "name": "fft_coefficient_6_abs",
+      "count": 32,
+      "stability": 0.17250000000000001,
+      "p": 6.881406711351832e-08,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_1_abs",
+      "count": 31,
+      "stability": 0.2167857142857143,
+      "p": 2.395199363883633e-07,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_5_abs",
+      "count": 30,
+      "stability": 0.18107142857142858,
+      "p": 7.988245324677333e-07,
+      "survives": true
+    },
+    {
+      "name": "number_peaks",
+      "count": 29,
+      "stability": 0.2035714285714286,
+      "p": 2.550863026210338e-06,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_3_abs",
+      "count": 29,
+      "stability": 0.1917857142857143,
+      "p": 2.550863026210338e-06,
+      "survives": true
+    },
+    {
+      "name": "permutation_entropy",
+      "count": 29,
+      "stability": 0.22142857142857145,
+      "p": 2.550863026210338e-06,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_1_real",
+      "count": 29,
+      "stability": 0.18357142857142858,
+      "p": 2.550863026210338e-06,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_3_imag",
+      "count": 27,
+      "stability": 0.18107142857142858,
+      "p": 2.275907022927805e-05,
+      "survives": true
+    },
+    {
+      "name": "binned_entropy",
+      "count": 26,
+      "stability": 0.22714285714285717,
+      "p": 6.348050335351793e-05,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_4_abs",
+      "count": 26,
+      "stability": 0.15285714285714286,
+      "p": 6.348050335351793e-05,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_5_real",
+      "count": 24,
+      "stability": 0.1582142857142857,
+      "p": 0.00042863067686848595,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_2_abs",
+      "count": 24,
+      "stability": 0.13857142857142857,
+      "p": 0.00042863067686848595,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_3_real",
+      "count": 22,
+      "stability": 0.16035714285714286,
+      "p": 0.002379678710490124,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_2_real",
+      "count": 22,
+      "stability": 0.16,
+      "p": 0.002379678710490124,
+      "survives": true
+    },
+    {
+      "name": "sample_entropy",
+      "count": 22,
+      "stability": 0.22892857142857143,
+      "p": 0.002379678710490124,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_8_abs",
+      "count": 21,
+      "stability": 0.14464285714285713,
+      "p": 0.005196003916801981,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_7_abs",
+      "count": 21,
+      "stability": 0.1442857142857143,
+      "p": 0.005196003916801981,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_2_imag",
+      "count": 21,
+      "stability": 0.1710714285714286,
+      "p": 0.005196003916801981,
+      "survives": true
+    },
+    {
+      "name": "longest_strike_above_mean",
+      "count": 21,
+      "stability": 0.1692857142857143,
+      "p": 0.005196003916801981,
+      "survives": true
+    },
+    {
+      "name": "fft_coefficient_8_imag",
+      "count": 20,
+      "stability": 0.14535714285714288,
+      "p": 0.010767429868418915,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_5_imag",
+      "count": 20,
+      "stability": 0.15392857142857144,
+      "p": 0.010767429868418915,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_7_real",
+      "count": 20,
+      "stability": 0.14035714285714287,
+      "p": 0.010767429868418915,
+      "survives": false
+    },
+    {
+      "name": "approximate_entropy",
+      "count": 19,
+      "stability": 0.21071428571428572,
+      "p": 0.02115144956318883,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_9_abs",
+      "count": 19,
+      "stability": 0.14071428571428574,
+      "p": 0.02115144956318883,
+      "survives": false
+    },
+    {
+      "name": "quantile_0.25",
+      "count": 18,
+      "stability": 0.14285714285714285,
+      "p": 0.03934189541147372,
+      "survives": false
+    },
+    {
+      "name": "ratio_beyond_r_sigma_1",
+      "count": 18,
+      "stability": 0.16821428571428573,
+      "p": 0.03934189541147372,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_4_real",
+      "count": 18,
+      "stability": 0.16,
+      "p": 0.03934189541147372,
+      "survives": false
+    },
+    {
+      "name": "quantile_0.75",
+      "count": 17,
+      "stability": 0.135,
+      "p": 0.069212522278131,
+      "survives": false
+    },
+    {
+      "name": "agg_linear_trend_stderr",
+      "count": 17,
+      "stability": 0.13785714285714287,
+      "p": 0.069212522278131,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_7_imag",
+      "count": 16,
+      "stability": 0.13107142857142856,
+      "p": 0.1150556371220981,
+      "survives": false
+    },
+    {
+      "name": "kurtosis",
+      "count": 16,
+      "stability": 0.16107142857142856,
+      "p": 0.1150556371220981,
+      "survives": false
+    },
+    {
+      "name": "percentage_of_reoccurring_values_to_all_values",
+      "count": 16,
+      "stability": 0.12250000000000003,
+      "p": 0.1150556371220981,
+      "survives": false
+    },
+    {
+      "name": "longest_strike_below_mean",
+      "count": 16,
+      "stability": 0.13714285714285715,
+      "p": 0.1150556371220981,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_6_real",
+      "count": 15,
+      "stability": 0.12392857142857143,
+      "p": 0.18059081160694454,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_1_imag",
+      "count": 15,
+      "stability": 0.12285714285714287,
+      "p": 0.18059081160694454,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_4_imag",
+      "count": 15,
+      "stability": 0.1457142857142857,
+      "p": 0.18059081160694454,
+      "survives": false
+    },
+    {
+      "name": "number_peaks_threshold_1",
+      "count": 15,
+      "stability": 0.12928571428571428,
+      "p": 0.18059081160694454,
+      "survives": false
+    },
+    {
+      "name": "count_unique",
+      "count": 14,
+      "stability": 0.09214285714285715,
+      "p": 0.2675252267399041,
+      "survives": false
+    },
+    {
+      "name": "ratio_value_number_to_length",
+      "count": 14,
+      "stability": 0.09357142857142857,
+      "p": 0.2675252267399041,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_9_imag",
+      "count": 14,
+      "stability": 0.12214285714285715,
+      "p": 0.2675252267399041,
+      "survives": false
+    },
+    {
+      "name": "minimum",
+      "count": 14,
+      "stability": 0.11642857142857145,
+      "p": 0.2675252267399041,
+      "survives": false
+    },
+    {
+      "name": "quantile_0.1",
+      "count": 13,
+      "stability": 0.16285714285714287,
+      "p": 0.3740711092597602,
+      "survives": false
+    },
+    {
+      "name": "first_value",
+      "count": 13,
+      "stability": 0.08142857142857143,
+      "p": 0.3740711092597602,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_0_abs",
+      "count": 13,
+      "stability": 0.10392857142857144,
+      "p": 0.3740711092597602,
+      "survives": false
+    },
+    {
+      "name": "median",
+      "count": 13,
+      "stability": 0.11392857142857145,
+      "p": 0.3740711092597602,
+      "survives": false
+    },
+    {
+      "name": "percentage_of_reoccurring_datapoints_to_all_datapoints",
+      "count": 13,
+      "stability": 0.12285714285714287,
+      "p": 0.3740711092597602,
+      "survives": false
+    },
+    {
+      "name": "first_location_of_minimum",
+      "count": 12,
+      "stability": 0.06714285714285714,
+      "p": 0.49411280356546483,
+      "survives": false
+    },
+    {
+      "name": "quantile_0.9",
+      "count": 12,
+      "stability": 0.12535714285714286,
+      "p": 0.49411280356546483,
+      "survives": false
+    },
+    {
+      "name": "mean_second_derivative_central",
+      "count": 12,
+      "stability": 0.09071428571428572,
+      "p": 0.49411280356546483,
+      "survives": false
+    },
+    {
+      "name": "benford_correlation",
+      "count": 12,
+      "stability": 0.11571428571428573,
+      "p": 0.49411280356546483,
+      "survives": false
+    },
+    {
+      "name": "number_peaks_threshold_2",
+      "count": 11,
+      "stability": 0.09392857142857143,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "maximum",
+      "count": 11,
+      "stability": 0.11964285714285716,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "lempel_ziv_complexity",
+      "count": 11,
+      "stability": 0.12571428571428572,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_8_real",
+      "count": 11,
+      "stability": 0.09214285714285715,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "cid_ce",
+      "count": 11,
+      "stability": 0.1442857142857143,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "agg_linear_trend_rvalue",
+      "count": 11,
+      "stability": 0.09178571428571429,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_9_real",
+      "count": 11,
+      "stability": 0.12464285714285715,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "last_location_of_minimum",
+      "count": 11,
+      "stability": 0.08714285714285716,
+      "p": 0.6177200927515369,
+      "survives": false
+    },
+    {
+      "name": "zero_crossing_rate",
+      "count": 10,
+      "stability": 0.09785714285714286,
+      "p": 0.7332484741476697,
+      "survives": false
+    },
+    {
+      "name": "c3_lag3",
+      "count": 9,
+      "stability": 0.10428571428571429,
+      "p": 0.8304568209534772,
+      "survives": false
+    },
+    {
+      "name": "skewness",
+      "count": 9,
+      "stability": 0.09,
+      "p": 0.8304568209534772,
+      "survives": false
+    },
+    {
+      "name": "linear_trend_r_squared",
+      "count": 9,
+      "stability": 0.11821428571428573,
+      "p": 0.8304568209534772,
+      "survives": false
+    },
+    {
+      "name": "sum_of_reoccurring_datapoints",
+      "count": 9,
+      "stability": 0.08535714285714284,
+      "p": 0.8304568209534772,
+      "survives": false
+    },
+    {
+      "name": "sum_of_reoccurring_values",
+      "count": 9,
+      "stability": 0.09107142857142858,
+      "p": 0.8304568209534772,
+      "survives": false
+    },
+    {
+      "name": "first_location_of_maximum",
+      "count": 9,
+      "stability": 0.0675,
+      "p": 0.8304568209534772,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_6_imag",
+      "count": 8,
+      "stability": 0.11214285714285714,
+      "p": 0.9033630810578327,
+      "survives": false
+    },
+    {
+      "name": "has_duplicate",
+      "count": 8,
+      "stability": 0.07785714285714286,
+      "p": 0.9033630810578327,
+      "survives": false
+    },
+    {
+      "name": "last_location_of_maximum",
+      "count": 8,
+      "stability": 0.07071428571428572,
+      "p": 0.9033630810578327,
+      "survives": false
+    },
+    {
+      "name": "time_reversal_asymmetry_stat_3",
+      "count": 8,
+      "stability": 0.08535714285714284,
+      "p": 0.9033630810578327,
+      "survives": false
+    },
+    {
+      "name": "last_value",
+      "count": 7,
+      "stability": 0.0675,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "large_standard_deviation",
+      "count": 7,
+      "stability": 0.07642857142857143,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag7",
+      "count": 7,
+      "stability": 0.0842857142857143,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "ratio_beyond_r_sigma_3",
+      "count": 7,
+      "stability": 0.07285714285714286,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "variation_coefficient",
+      "count": 7,
+      "stability": 0.046071428571428576,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "spectral_variance",
+      "count": 7,
+      "stability": 0.11321428571428571,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "range",
+      "count": 7,
+      "stability": 0.08928571428571429,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag2",
+      "count": 7,
+      "stability": 0.08642857142857142,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag8",
+      "count": 7,
+      "stability": 0.09928571428571428,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "c3_lag1",
+      "count": 7,
+      "stability": 0.09,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "absolute_sum_of_changes",
+      "count": 7,
+      "stability": 0.052857142857142866,
+      "p": 0.951504357571185,
+      "survives": false
+    },
+    {
+      "name": "c3_lag2",
+      "count": 6,
+      "stability": 0.06892857142857144,
+      "p": 0.9790569120536696,
+      "survives": false
+    },
+    {
+      "name": "ratio_beyond_r_sigma_2",
+      "count": 6,
+      "stability": 0.09464285714285714,
+      "p": 0.9790569120536696,
+      "survives": false
+    },
+    {
+      "name": "partial_autocorrelation_lag5",
+      "count": 6,
+      "stability": 0.02642857142857143,
+      "p": 0.9790569120536696,
+      "survives": false
+    },
+    {
+      "name": "mean_abs_change",
+      "count": 6,
+      "stability": 0.05142857142857143,
+      "p": 0.9790569120536696,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag6",
+      "count": 6,
+      "stability": 0.07499999999999998,
+      "p": 0.9790569120536696,
+      "survives": false
+    },
+    {
+      "name": "time_reversal_asymmetry_stat_2",
+      "count": 5,
+      "stability": 0.06928571428571428,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag1",
+      "count": 5,
+      "stability": 0.04642857142857143,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "has_duplicate_min",
+      "count": 5,
+      "stability": 0.05,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag5",
+      "count": 5,
+      "stability": 0.07250000000000001,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag3",
+      "count": 5,
+      "stability": 0.08464285714285714,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag9",
+      "count": 5,
+      "stability": 0.11142857142857143,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "linear_trend_intercept",
+      "count": 5,
+      "stability": 0.046071428571428576,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "mean_change",
+      "count": 5,
+      "stability": 0.04785714285714287,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "partial_autocorrelation_lag3",
+      "count": 5,
+      "stability": 0.027142857142857142,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "partial_autocorrelation_lag4",
+      "count": 5,
+      "stability": 0.027857142857142855,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "partial_autocorrelation_lag2",
+      "count": 5,
+      "stability": 0.024999999999999998,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "partial_autocorrelation_lag1",
+      "count": 5,
+      "stability": 0.04392857142857143,
+      "p": 0.9924469385311387,
+      "survives": false
+    },
+    {
+      "name": "linear_trend_slope",
+      "count": 4,
+      "stability": 0.045714285714285714,
+      "p": 0.9978194800190122,
+      "survives": false
+    },
+    {
+      "name": "autocorrelation_lag4",
+      "count": 4,
+      "stability": 0.07857142857142858,
+      "p": 0.9978194800190122,
+      "survives": false
+    },
+    {
+      "name": "has_duplicate_max",
+      "count": 4,
+      "stability": 0.032499999999999994,
+      "p": 0.9978194800190122,
+      "survives": false
+    },
+    {
+      "name": "agg_linear_trend_intercept",
+      "count": 4,
+      "stability": 0.062142857142857146,
+      "p": 0.9978194800190122,
+      "survives": false
+    },
+    {
+      "name": "agg_linear_trend_slope",
+      "count": 4,
+      "stability": 0.06214285714285715,
+      "p": 0.9978194800190122,
+      "survives": false
+    },
+    {
+      "name": "spectral_centroid",
+      "count": 3,
+      "stability": 0.022857142857142857,
+      "p": 0.9995281782292228,
+      "survives": false
+    },
+    {
+      "name": "time_reversal_asymmetry_stat_1",
+      "count": 2,
+      "stability": 0.0625,
+      "p": 0.9999320523516362,
+      "survives": false
+    },
+    {
+      "name": "mean",
+      "count": 1,
+      "stability": 0.012142857142857141,
+      "p": 0.9999951197821632,
+      "survives": false
+    },
+    {
+      "name": "sum",
+      "count": 1,
+      "stability": 0.011785714285714285,
+      "p": 0.9999951197821632,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_0_real",
+      "count": 1,
+      "stability": 0.009285714285714286,
+      "p": 0.9999951197821632,
+      "survives": false
+    },
+    {
+      "name": "variance",
+      "count": 0,
+      "stability": 0.0,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "length",
+      "count": 0,
+      "stability": 0.0,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "percentage_above_mean",
+      "count": 0,
+      "stability": 0.007142857142857143,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "standard_deviation",
+      "count": 0,
+      "stability": 0.0,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "root_mean_square",
+      "count": 0,
+      "stability": 0.0,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "count_above_mean",
+      "count": 0,
+      "stability": 0.007142857142857143,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "count_below_mean",
+      "count": 0,
+      "stability": 0.0071428571428571435,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "fft_coefficient_0_imag",
+      "count": 0,
+      "stability": 0.0,
+      "p": 1.0,
+      "survives": false
+    },
+    {
+      "name": "abs_energy",
+      "count": 0,
+      "stability": 0.0,
+      "p": 1.0,
+      "survives": false
+    }
+  ],
+  "datasets": [
+    "ACSF1",
+    "Adiac",
+    "ArrowHead",
+    "Beef",
+    "BeetleFly",
+    "BirdChicken",
+    "BME",
+    "Car",
+    "CBF",
+    "Chinatown",
+    "ChlorineConcentration",
+    "CinCECGTorso",
+    "Coffee",
+    "Computers",
+    "CricketX",
+    "CricketY",
+    "CricketZ",
+    "Crop",
+    "DiatomSizeReduction",
+    "DistalPhalanxOutlineAgeGroup",
+    "DistalPhalanxOutlineCorrect",
+    "DistalPhalanxTW",
+    "Earthquakes",
+    "ECG200",
+    "ECG5000",
+    "ECGFiveDays",
+    "ElectricDevices",
+    "EOGHorizontalSignal",
+    "EOGVerticalSignal",
+    "EthanolLevel",
+    "FaceAll",
+    "FaceFour",
+    "FacesUCR",
+    "FiftyWords",
+    "Fish",
+    "FordA",
+    "FordB",
+    "FreezerRegularTrain",
+    "FreezerSmallTrain",
+    "GunPoint",
+    "GunPointAgeSpan",
+    "GunPointMaleVersusFemale",
+    "GunPointOldVersusYoung",
+    "Ham",
+    "HandOutlines",
+    "Haptics",
+    "Herring",
+    "HouseTwenty",
+    "InlineSkate",
+    "InsectEPGRegularTrain",
+    "InsectEPGSmallTrain",
+    "InsectWingbeatSound",
+    "ItalyPowerDemand",
+    "LargeKitchenAppliances",
+    "Lightning2",
+    "Lightning7",
+    "Mallat",
+    "Meat",
+    "MedicalImages",
+    "MiddlePhalanxOutlineAgeGroup",
+    "MiddlePhalanxOutlineCorrect",
+    "MiddlePhalanxTW",
+    "MixedShapesRegularTrain",
+    "MixedShapesSmallTrain",
+    "MoteStrain",
+    "NonInvasiveFetalECGThorax1",
+    "NonInvasiveFetalECGThorax2",
+    "OliveOil",
+    "OSULeaf",
+    "PhalangesOutlinesCorrect",
+    "Phoneme",
+    "PigAirwayPressure",
+    "PigArtPressure",
+    "PigCVP",
+    "Plane",
+    "PowerCons",
+    "ProximalPhalanxOutlineAgeGroup",
+    "ProximalPhalanxOutlineCorrect",
+    "ProximalPhalanxTW",
+    "RefrigerationDevices",
+    "Rock",
+    "ScreenType",
+    "SemgHandGenderCh2",
+    "SemgHandMovementCh2",
+    "SemgHandSubjectCh2",
+    "ShapeletSim",
+    "ShapesAll",
+    "SmallKitchenAppliances",
+    "SmoothSubspace",
+    "SonyAIBORobotSurface1",
+    "SonyAIBORobotSurface2",
+    "StarLightCurves",
+    "Strawberry",
+    "SwedishLeaf",
+    "Symbols",
+    "SyntheticControl",
+    "ToeSegmentation1",
+    "ToeSegmentation2",
+    "Trace",
+    "TwoLeadECG",
+    "TwoPatterns",
+    "UMD",
+    "UWaveGestureLibraryAll",
+    "UWaveGestureLibraryX",
+    "UWaveGestureLibraryY",
+    "UWaveGestureLibraryZ",
+    "Wafer",
+    "Wine",
+    "WordSynonyms",
+    "Worms",
+    "WormsTwoClass",
+    "Yoga"
+  ]
+}

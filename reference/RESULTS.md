@@ -372,84 +372,104 @@ first came out of a run whose row alignment was wrong. They are reported now, at
 `min_groups_per_row = max_groups_per_row = 40` on both — 15,000 group-rows over 375 ids and 22,000
 over 550. `reference/phase5_ScreenType_gpu.json`, `reference/phase5_InlineSkate_gpu.json`.
 
-### 116 statistical features beat 10,000 ROCKET features on half of them (2026-08-14)
+### The second feature family, measured on all 112 datasets (2026-08-14)
 
 `anofox_forecast` -- the same vendor's forecasting extension -- exposes `ts_features_by(table, group,
 time, value)`, which returns one row per series with **116 numeric feature columns**: the tsfresh
 catalogue of statistics, computed in-database. (`ts_features_list()` has 117 rows, but those are
-feature *definitions* -- some parameterised -- and the emitted table carries 116. The screen and
-everything below use the 116 that actually exist, read from `DESCRIBE`; an earlier draft of this
-section said 117 throughout.) That is exactly the shape our classifier path already
-consumes, so it is a second feature family for the cost of an `unnest ... WITH ORDINALITY`.
+feature *definitions*, some parameterised; the emitted table carries 116, read from `DESCRIBE`.) That
+is exactly the shape our classifier path consumes, so it is a second feature family for the cost of
+an `unnest ... WITH ORDINALITY`.
 
 Same head (`RidgeClassifierCV`) throughout, so the features are the only variable.
-`scripts/ts_features_screen.py`, `reference/ts_features_screen.json`.
+`scripts/ts_features_screen.py`, records in `reference/ts_screen/`, analysis in
+`reference/ts_features_analysis.json`. 112 equal-length univariate UCR datasets, 32 vCPU, 53 minutes,
+0 failures.
 
-| dataset | ts (116) | rocket (10,000) | both | ts − rocket | **pipeline** |
-|---|---|---|---|---|---|
-| MiddlePhalanxTW | 0.6039 | 0.5325 | 0.5390 | **+0.0714** | 0.6104 |
-| RefrigerationDevices | **0.6027** | 0.5307 | 0.5360 | **+0.0720** | 0.5573 |
-| ScreenType | **0.5467** | 0.4773 | 0.4827 | **+0.0693** | 0.5200 |
-| Herring | 0.6094 | 0.6250 | 0.6250 | −0.0156 | 0.6406 |
-| Haptics | 0.4610 | 0.5357 | 0.5325 | −0.0747 | 0.5552 |
-| InlineSkate | 0.3691 | 0.4764 | 0.4727 | −0.1073 | 0.4909 |
+**This section replaces a six-dataset version that was wrong in its headline.** That screen reported
+"3 wins from 6, mean +0.0025" and I described the two families as complementary. Six datasets chosen
+for being hard is a sample selected for the regime where the statistics do well:
 
-**3 wins from 6, mean +0.0025** -- and that mean is the least informative number in the table. There
-is no wash here: where the statistics win they win by about +0.07, where they lose they lose by
-−0.07 to −0.11. The families are strongly complementary *by dataset*, with 85x fewer features on
-one side.
+| | 6 hard datasets | **all 112** |
+|---|---|---|
+| ts vs rocket | 3 wins, mean **+0.0025** | **12 wins of 112**, mean **-0.0795**, median **-0.0488** |
 
-Two results worth stating plainly:
+At archive scale the 116 statistics **lose to 10,000 ROCKET features by about 8 accuracy points on
+average**, with losses reaching -0.70 (`PigCVP`: 0.2308 against 0.9327). The wins are real but rare
+-- RefrigerationDevices +0.0720, MiddlePhalanxTW +0.0714, ScreenType +0.0693, and interestingly
+`PowerCons` +0.0611 and `FordA` +0.0591 -- twelve datasets out of a hundred and twelve.
 
-* **On RefrigerationDevices, 116 features and a linear model beat the entire GPU pipeline** --
-  0.6027 against 0.5573 -- and land on the best published accuracy for the dataset (0.600, +0.0027).
-* On ScreenType they also beat the pipeline, 0.5467 against 0.5200. On MiddlePhalanxTW they come
-  within 0.0065 of it while still clearing the best published result (0.578).
+**And the mechanism I proposed for those wins is wrong.** I claimed the statistics help where ROCKET
+is weak, because max/PPV pooling cannot express repetitiveness and the winning datasets were
+quantised appliance traces. Measured:
 
-**And naive concatenation does not capture any of it.** `both` moves +0.0017 on average and never
-more than +0.0065: 500 standardised random features per group drown 116 statistics in a ridge. That
-is a fact about the *ridge*, not necessarily about the in-context model, and 500 + 116 = 616 fits
-under the `anofox_tabfm_max_features` we already raise -- so whether `tabfm_classify` can use both
-is a separate question -- the plumbing is in (`--features both`, 616 columns end to end) and
-the pod run is what remains.
+    corr(rocket accuracy, ts - rocket) = +0.015
 
-**The shortlist I drew from this is noise, and that is worth recording as a result.** The rule was
-"top 12 per dataset by ridge coefficient magnitude, keep anything appearing in more than one list",
-which produced 11 features and looked like a finding. Six datasets choosing 12 of 116 features
-produces about 14 such features *by chance*:
+No relationship at all. Broken out, the hard end is where the statistics do *least badly* rather
+than best, and two of their largest wins are on datasets where ROCKET already scored 0.93 and 0.94:
 
-| | observed | uniform-random null | P(null >= observed) |
+| ROCKET accuracy band | n | mean ts - rocket | mean both - rocket |
 |---|---|---|---|
-| in >= 2 of the 6 top-12 lists | **11** | **14.0** | 0.944 |
-| in >= 3 of 6 | **2** | **2.0** | 0.631 |
-| in >= 4 of 6 | 0 | 0.2 | — |
+| < 0.60 (hard) | 10 | -0.0425 | +0.0009 |
+| 0.60 - 0.80 | 19 | -0.0861 | +0.0029 |
+| 0.80 - 0.95 | 43 | **-0.1014** | +0.0024 |
+| >= 0.95 (saturated) | 40 | -0.0621 | +0.0001 |
 
-Analytic and 20,000-draw Monte Carlo agree, and the observed overlap is *below* the null mean. So
-the eleven names carry no information about which statistics matter, and the two that reached 3/6
-(`permutation_entropy`, `number_peaks`) are exactly the two chance predicts. An earlier version of
-this section listed them as "the reimplement shortlist" and drew a story from them being mostly
-complexity and entropy measures. That story may still be true -- the two datasets where the family
-wins outright are both quantised appliance power traces, and max/PPV pooling genuinely cannot express
-repetitiveness -- but nothing here is evidence for it, and it must not be the basis for choosing what
-to write in C++.
+#### Selection works at 112 and did not at 6
 
-What survives is at the *family* level, not the feature level: the 116 statistics beat 10,000 ROCKET
-features on three of six datasets by about 7 points, and lose by 7-11 on the other three. Those are
-measured accuracies, not a selection artifact.
+The point of widening was to make feature selection possible. The null is unchanged -- if a dataset's
+top-K were K names drawn uniformly from N, each feature appears in Binomial(D, K/N) of the D lists --
+but its power comes entirely from D. At D=6 the null mean was 14 of 116 features at ">= 2 lists" and
+the screen produced 11, below chance. At D=112 the null mean is 11.6 appearances per feature, and
+**19 of 116 clear Benjamini-Hochberg at FDR 0.05** (BH across all 116, because 116 hypotheses at 0.05
+buys about six free winners on their own):
 
-Identifying individual features needs a design this screen does not have -- far more datasets, or
-stability selection over bootstrap resamples, or leave-one-family-out ablation. Ablation is the
-cheap one and the only one that tests the entropy story directly: group the 116 into a handful of
-families (complexity/entropy, FFT, distributional, autocorrelation, peak-counting) and drop each in
-turn. Six or so families across six datasets is a multiple-comparisons problem small enough to mean
-something, where 116 features across six datasets is not.
+| feature | count | chance | p |
+|---|---|---|---|
+| `fft_coefficient_6_abs` | 32 | 11.6 | 5.5e-08 |
+| `fft_coefficient_1_abs` | 30 | 11.6 | 6.5e-07 |
+| `fft_coefficient_5_abs` | 30 | 11.6 | 6.5e-07 |
+| `number_peaks` | 29 | 11.6 | 2.1e-06 |
+| `permutation_entropy` | 29 | 11.6 | 2.1e-06 |
+| `binned_entropy` | 26 | 11.6 | 5.4e-05 |
+| `sample_entropy` | 22 | 11.6 | 2.1e-03 |
+| `longest_strike_above_mean` | 21 | 11.6 | 5.2e-03 |
+
+**14 of the 19 survivors are Fourier coefficients.** The entropy hypothesis is partly vindicated --
+`permutation_entropy`, `binned_entropy`, `sample_entropy` and `number_peaks` all survive -- but the
+dominant family is spectral, which the six-dataset story did not predict. BH controls false
+discoveries and not false negatives, so this is a shortlist worth implementing rather than a claim
+that the other 97 are useless; a feature that matters on three datasets of a hundred is invisible to
+this test at any D.
+
+#### Naive concatenation is the wrong combination rule
+
+`both` against rocket over 112 datasets: **30 wins, 56 exact ties, mean +0.0015, median 0.0000**. It
+almost never hurts (worst -0.0137 on `Lightning7`) and occasionally helps (+0.0561 on `FordA`), but
+the 56 *exact* ties are the tell: the ridge is usually ignoring the 116 columns outright.
+
+That is a fact about the ridge rather than about the features. A single global L2 penalty over 10,116
+standardised columns cannot shrink two blocks differently, and the statistics are outnumbered 86 to
+1, so their coefficients are pushed to nothing before they can contribute. Through the in-context
+model on the six hard datasets the same concatenation gained +0.0089 (4 of 6), which is consistent
+with the drowning being the ridge's doing.
+
+So the open question is not "do the two families combine" but "does any combination rule let the
+smaller block contribute". Rules worth testing, all cheap once the features exist: per-block scaling
+so each family's total variance is comparable, a separate penalty per block, and stacking two
+independently-tuned heads and combining their decision values.
 
 **Licence, and why nothing depends on this.** `anofox_forecast` is BSL 1.1; its Additional Use Grant
 permits production use but forbids offering the work "to third parties on a hosted or embedded
 basis", converting to MPL 2.0 after five years. So it is used strictly as a black box to find out
-which statistics matter, and the shortlist above would be reimplemented from the tsfresh catalogue
-(MIT) or the underlying mathematics -- these are standard statistics, not DataZooDE's invention --
-rather than from reading their Rust. `rocket` must not depend on it.
+which statistics matter, and the 19 above would be reimplemented from the tsfresh catalogue (MIT) or
+the underlying mathematics -- these are standard statistics, not DataZooDE's invention -- rather than
+from reading their Rust. `rocket` must not depend on it.
+
+**What the 112-dataset result means for that work.** Implementing 19 features to buy +0.0015 mean
+under a ridge is not justified. What keeps it open is conditional rather than general: the
+combination never loses much, gains several points on a minority of datasets, and has not yet been
+tried with a combination rule that gives the smaller block a chance.
 
 ### The id-recovery key: three wrong answers, all of them the same wrong answer
 

@@ -123,6 +123,15 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               model: str = MODEL, anofox_extension: Path | None = None,
               register_dir: Path | None = None) -> str:
     n_features = config.features_per_group
+    # Width of the id-recovery key. Four was not enough: ScreenType's series are distinct but its
+    # quantised values make ROCKET's max/PPV features coincide, so it still fanned out at four.
+    # Sixteen doubles agreeing means the series are equal, which the dedup below then handles.
+    key_n = min(16, n_features)
+    key_cols = [f"f{j}" for j in range(key_n)]
+    key_decl = ", ".join(f"{c} DOUBLE" for c in key_cols)
+    key_from_list = ", ".join(f"f[{j + 1}]" for j in range(key_n))
+    key_join = " AND ".join(f"s.{c} = c.{c}" for c in key_cols)
+    key_tuple = ", ".join(f"f[{j + 1}]" for j in range(key_n))
     names = [f"f{j}" for j in range(n_features)]
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
     # DuckDB lists are 1-based, so feature j lives at f[j + 1].
@@ -227,13 +236,21 @@ CREATE OR REPLACE TABLE feat_cur (id BIGINT, split VARCHAR, label VARCHAR, f DOU
 CREATE OR REPLACE TABLE train_cur (y VARCHAR, {schema_cols});
 CREATE OR REPLACE TABLE test_cur ({schema_cols});
 -- Only the two columns the join reads (swan PERFORMANCE_TUNING.md 1).
--- Four key columns, not one. anofox_tabfm echoes back every column named in `features`, so the
--- id recovery can join on as many as it likes; joining on f0 alone made a single shared feature
--- value fan the join out. ScreenType and InlineSkate both did exactly that -- rows scored by up
--- to 80 groups instead of 40 -- while the ten-dataset subset never collided once, which is how a
--- one-column key survived this long. Four identical doubles means the two series are identical,
--- and the assertion below still reports it if that ever happens.
-CREATE OR REPLACE TABLE test_src_cur (id BIGINT, f0 DOUBLE, f1 DOUBLE, f2 DOUBLE, f3 DOUBLE);
+-- Id recovery: a {key_n}-column key AND a dedup, because the two failures have different causes.
+--
+-- anofox_tabfm echoes back only the target and the columns named in `features`, so a plain id is
+-- dropped and scored rows must be rejoined on feature values. A one-column key measured zero
+-- collisions across all ten datasets of the original subset and then fanned out on two of the
+-- first six hard ones. Widening it to four fixed neither:
+--
+--   ScreenType    375 test rows, 375 DISTINCT series -- genuine feature collisions. Quantised
+--                 electricity data makes ROCKET's max/PPV coincide across different series.
+--                 A wider key fixes this: distinct series differ somewhere in {key_n} features.
+--   InlineSkate   550 test rows, 521 distinct -- 29 series are byte-identical. No feature key
+--                 can ever separate them, however wide. But identical series get identical
+--                 predictions, so the GROUP BY below collapses the duplicates to one row per
+--                 (group, id), which is exactly right rather than merely tolerable.
+CREATE OR REPLACE TABLE test_src_cur (id BIGINT, {key_decl});
 -- MAP(VARCHAR, DOUBLE) is what anofox_tabfm bc6d8af returns, checked rather than assumed. A
 -- version that changes it fails loudly on the first INSERT rather than silently coercing.
 CREATE OR REPLACE TABLE all_groups (grp BIGINT, id BIGINT, proba MAP(VARCHAR, DOUBLE));
@@ -265,7 +282,7 @@ PREPARE fill_test AS
    WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
 
 PREPARE fill_src AS
-  INSERT INTO test_src_cur SELECT id, f[1], f[2], f[3], f[4] FROM feat_cur
+  INSERT INTO test_src_cur SELECT id, {key_from_list} FROM feat_cur
    WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
 
 -- Prime train_cur and test_cur too: tabfm_classify validates its context at BIND time, so
@@ -285,13 +302,17 @@ SELECT CASE
 
 -- test_cur omits the target: tabfm_classify unions train and test BY NAME, and a target present
 -- in both is a duplicate-name binder error naming neither cause (Phase 2).
+-- GROUP BY, not a bare join: byte-identical test series join many-to-many and would otherwise be
+-- counted once per pairing, inflating a row's group count without changing its average. Their
+-- predictions are identical by construction, so collapsing them is exact.
 PREPARE score AS
   INSERT INTO all_groups
-  SELECT CAST($1 AS BIGINT), s.id, c.proba
-  FROM tabfm_classify('train_cur', 'y', test := 'test_cur',
-                      model := '{model}', features := {feature_list}) c
-  JOIN test_src_cur s
-    ON s.f0 = c.f0 AND s.f1 = c.f1 AND s.f2 = c.f2 AND s.f3 = c.f3;
+  SELECT grp, id, any_value(proba) FROM (
+    SELECT CAST($1 AS BIGINT) AS grp, s.id AS id, c.proba AS proba
+    FROM tabfm_classify('train_cur', 'y', test := 'test_cur',
+                        model := '{model}', features := {feature_list}) c
+    JOIN test_src_cur s ON {key_join}
+  ) GROUP BY grp, id;
 
 -- f0_checks is filled by the loop below, which starts from group 0 again; nothing above wrote
 -- to it, so there is no priming row to remove.
@@ -308,7 +329,7 @@ DELETE FROM feat_cur;
 EXECUTE fill_feat({first_kernel});
 INSERT INTO timings VALUES ({g}, 'transform_done', current_timestamp);
 INSERT INTO f0_checks
-SELECT {g}, count(*) - count(DISTINCT (f[1], f[2], f[3], f[4])), sum(f[1])
+SELECT {g}, count(*) - count(DISTINCT ({key_tuple})), sum(f[1])
   FROM feat_cur WHERE split = 'test';
 DELETE FROM train_cur;
 EXECUTE fill_train;

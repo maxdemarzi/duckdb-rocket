@@ -252,24 +252,43 @@ def test_registration_precedes_every_classify_call():
 # alignment assertion happened to also fail.
 
 
-def test_id_recovery_joins_on_a_composite_key():
-    sql = build(50, 150, None)
-    # All four key columns must appear on both sides of the join, or the key is narrower than
-    # it looks and the collision it protects against comes back.
-    for c in ("f0", "f1", "f2", "f3"):
-        assert f"s.{c} = c.{c}" in sql, f"{c} missing from the id-recovery join"
+def _key_width(sql: str) -> int:
+    """How many columns the join actually uses. Derived, not assumed: the three places that must
+    agree are checked against each other rather than against a number written here, so widening
+    the key does not mean editing the tests."""
+    return len(re.findall(r"s\.f(\d+) = c\.f\1", sql))
 
 
-def test_id_source_table_carries_every_key_column():
+def test_id_recovery_joins_on_a_wide_composite_key():
     sql = build(50, 150, None)
-    assert "test_src_cur (id BIGINT, f0 DOUBLE, f1 DOUBLE, f2 DOUBLE, f3 DOUBLE)" in sql
-    # ...and is filled with them; a wider schema fed by a narrower SELECT would leave NULLs and
-    # join to nothing, which looks like "scored 0 of 40 groups" rather than like a bug here.
-    assert "SELECT id, f[1], f[2], f[3], f[4] FROM feat_cur" in sql
+    w = _key_width(sql)
+    # Four was measurably not enough: ScreenType's series are all distinct and it still fanned
+    # out, because quantised data makes ROCKET's max/PPV coincide across different series.
+    assert w >= 8, f"id-recovery key is only {w} columns wide"
+    for j in range(w):
+        assert f"s.f{j} = c.f{j}" in sql
+
+
+def test_id_source_table_and_fill_match_the_join_width():
+    sql = build(50, 150, None)
+    w = _key_width(sql)
+    # A schema wider than the fill leaves NULLs that join to nothing, which surfaces as "scored 0
+    # of 40 groups" and looks like a model problem rather than a plumbing one.
+    assert f"test_src_cur (id BIGINT, " + ", ".join(f"f{j} DOUBLE" for j in range(w)) + ")" in sql
+    assert "SELECT id, " + ", ".join(f"f[{j + 1}]" for j in range(w)) + " FROM feat_cur" in sql
 
 
 def test_collision_check_uses_the_same_key_as_the_join():
     sql = build(50, 150, None)
-    # A guard measuring f0 alone while the join uses four columns would report collisions that
-    # do not matter and miss the ones that do.
-    assert "count(DISTINCT (f[1], f[2], f[3], f[4]))" in sql
+    w = _key_width(sql)
+    # A guard measuring a narrower key than the join uses would miss exactly the case it exists
+    # for, and one measuring a wider key would cry wolf.
+    assert "count(DISTINCT (" + ", ".join(f"f[{j + 1}]" for j in range(w)) + "))" in sql
+
+
+def test_duplicate_series_are_collapsed_not_counted_twice():
+    sql = build(50, 150, None)
+    # InlineSkate has 29 byte-identical test series. No feature key can separate them, however
+    # wide; their predictions are identical, so the scoring insert must collapse them to one row
+    # per (group, id) instead of counting every pairing.
+    assert "any_value(proba)" in sql and "GROUP BY grp, id" in sql

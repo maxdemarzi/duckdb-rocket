@@ -1,0 +1,67 @@
+{
+  "dataset": "SemgHandGenderCh2",
+  "model": "tabicl-v2",
+  "device": "cpu",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "threads": 4,
+    "memory_limit": "41GB",
+    "memory_budget_source": "cgroup v2",
+    "test_chunk": 128,
+    "onnx_threads": 8,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "SemgHandGenderCh2",
+    "n_train": 300,
+    "n_test": 600,
+    "n_channels": 1,
+    "n_timepoints": 1500,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/SemgHandGenderCh2/raw.parquet"
+  },
+  "accuracy": 0.9466666666666667,
+  "row_alignment": {
+    "predicted_rows": 600,
+    "distinct_ids": 600,
+    "group_rows": 24000,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 58.22,
+    "classify_seconds": 507.24,
+    "classify_share": 0.897,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 11.588,
+      "classify_median": 12.697,
+      "classify_max": 14.427,
+      "max_over_median": 1.14
+    }
+  },
+  "failures": [],
+  "seconds": 568.7,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-101-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 192,
+    "containerised": true
+  },
+  "caveat": null
+}

@@ -1,0 +1,67 @@
+{
+  "dataset": "MedicalImages",
+  "model": "tabicl-v2",
+  "device": "cpu",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "threads": 4,
+    "memory_limit": "41GB",
+    "memory_budget_source": "cgroup v2",
+    "test_chunk": 128,
+    "onnx_threads": 8,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "MedicalImages",
+    "n_train": 381,
+    "n_test": 760,
+    "n_channels": 1,
+    "n_timepoints": 99,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/MedicalImages/raw.parquet"
+  },
+  "accuracy": 0.8184210526315789,
+  "row_alignment": {
+    "predicted_rows": 760,
+    "distinct_ids": 760,
+    "group_rows": 30400,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 6.95,
+    "classify_seconds": 718.52,
+    "classify_share": 0.9904,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 15.663,
+      "classify_median": 18.148,
+      "classify_max": 20.479,
+      "max_over_median": 1.13
+    }
+  },
+  "failures": [],
+  "seconds": 727.4,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-101-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 192,
+    "containerised": true
+  },
+  "caveat": null
+}

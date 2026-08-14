@@ -178,6 +178,113 @@ def bootstrap_stability(f, y, top_k: int, draws: int, seed: int) -> np.ndarray:
     return hits / done if done else np.zeros(f.shape[1])
 
 
+
+def _decide(clf, x) -> np.ndarray:
+    """Decision values as (n, k), so binary and multiclass can be combined by the same code."""
+    d = clf.decision_function(x)
+    return d.reshape(-1, 1) if d.ndim == 1 else d
+
+
+def _argmax_labels(clf, scores: np.ndarray) -> np.ndarray:
+    """Labels from combined decision values, matching sklearn's own convention.
+
+    Binary `decision_function` is signed distance to the boundary with classes_[1] positive, so the
+    threshold is 0; multiclass is one column per class and the rule is argmax. Getting this wrong
+    would silently invert every binary prediction.
+    """
+    if scores.shape[1] == 1:
+        return clf.classes_[(scores[:, 0] > 0).astype(int)]
+    return clf.classes_[np.argmax(scores, axis=1)]
+
+
+def _fit(f, y):
+    sc = StandardScaler().fit(f)
+    clf = RidgeClassifierCV(alphas=ALPHAS).fit(sc.transform(f), y)
+    return sc, clf
+
+
+def block_scaled_score(rtr, ttr, ytr, rte, tte, yte, weight: float) -> float:
+    """One ridge over both blocks, with the ts block multiplied by `weight`.
+
+    Each block is standardised first, then the ts block is rescaled. Scaling AFTER standardising is
+    what makes the weight mean "how much total variance this family gets", which is the quantity the
+    shared L2 penalty actually sees.
+    """
+    rs, ts_ = StandardScaler().fit(rtr), StandardScaler().fit(ttr)
+    xtr = np.hstack([rs.transform(rtr), ts_.transform(ttr) * weight])
+    xte = np.hstack([rs.transform(rte), ts_.transform(tte) * weight])
+    clf = RidgeClassifierCV(alphas=ALPHAS).fit(xtr, ytr)
+    return float((clf.predict(xte) == yte).mean())
+
+
+def _cv_folds(y, n_splits: int, seed: int):
+    """Stratified folds, or None when the rarest class cannot be split.
+
+    A dataset with a single-member class cannot be stratified, and falling back to unstratified folds
+    would quietly compare a tuned arm against an untuned one.
+    """
+    from sklearn.model_selection import StratifiedKFold
+
+    _, counts = np.unique(y, return_counts=True)
+    k = min(n_splits, int(counts.min()))
+    if k < 2:
+        return None
+    return list(StratifiedKFold(n_splits=k, shuffle=True, random_state=seed).split(np.zeros(len(y)), y))
+
+
+#: Block weights searched on the train split. 1.0 is naive concatenation and sqrt(10000/116) ~ 9.3 is
+#: the variance-equalising point, so the grid brackets both rather than assuming either.
+WEIGHTS = (0.5, 1.0, 2.0, 4.0, 9.3, 20.0, 50.0)
+
+
+def tuned_block_score(rtr, ttr, ytr, rte, tte, yte, folds, seed: int) -> tuple[float, float]:
+    """Pick the block weight on TRAIN, then score once on test. Returns (accuracy, chosen weight)."""
+    if folds is None:
+        w = float(np.sqrt(rtr.shape[1] / ttr.shape[1]))
+        return block_scaled_score(rtr, ttr, ytr, rte, tte, yte, w), w
+    best_w, best = 1.0, -1.0
+    for w in WEIGHTS:
+        acc = float(np.mean([
+            block_scaled_score(rtr[tr], ttr[tr], ytr[tr], rtr[va], ttr[va], ytr[va], w)
+            for tr, va in folds
+        ]))
+        if acc > best:
+            best, best_w = acc, w
+    return block_scaled_score(rtr, ttr, ytr, rte, tte, yte, best_w), best_w
+
+
+def stack_score(rtr, ttr, ytr, rte, tte, yte, folds, seed: int) -> tuple[float, float]:
+    """Two independently-tuned ridges, decision values combined as (1-a)*rocket + a*ts.
+
+    No shared penalty, so neither family can shrink the other away. The mixing weight is chosen on
+    train folds; a is searched including 0 and 1, so this arm can never do worse than the better of
+    its two parts by more than fold noise.
+    """
+    alphas = (0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0)
+
+    def one(rt, tt, yt, rv, tv, a):
+        rs, rc = _fit(rt, yt)
+        ts_, tc = _fit(tt, yt)
+        dr, dt = _decide(rc, rs.transform(rv)), _decide(tc, ts_.transform(tv))
+        # z-scored per column before mixing: the two heads' decision values are on unrelated
+        # scales, and mixing raw ones would make `a` mean nothing.
+        zr = (dr - dr.mean(0)) / (dr.std(0) + 1e-12)
+        zt = (dt - dt.mean(0)) / (dt.std(0) + 1e-12)
+        return _argmax_labels(rc, (1 - a) * zr + a * zt)
+
+    if folds is None:
+        best_a = 0.5
+    else:
+        best_a, best = 0.5, -1.0
+        for a in alphas:
+            acc = float(np.mean([
+                (one(rtr[tr], ttr[tr], ytr[tr], rtr[va], ttr[va], a) == ytr[va]).mean()
+                for tr, va in folds
+            ]))
+            if acc > best:
+                best, best_a = acc, a
+    return float((one(rtr, ttr, ytr, rte, tte, best_a) == yte).mean()), best_a
+
 def run_one(name: str, kernels: int, top_k: int, draws: int, shell: str,
             do_rocket: bool, seed: int) -> dict:
     """One dataset, start to finish."""
@@ -212,6 +319,20 @@ def run_one(name: str, kernels: int, top_k: int, draws: int, shell: str,
         rec["acc"]["rocket"] = fit_score(rtr, ytr, rte, yte)
         rec["acc"]["both"] = fit_score(np.hstack([rtr, ttr]), ytr, np.hstack([rte, tte]), yte)
         rec["n_rocket_features"] = int(rtr.shape[1])
+
+        # Combination rules. `both` above ties EXACTLY with rocket on half the archive, which is one
+        # global L2 penalty unable to shrink two blocks differently while the smaller is outnumbered
+        # 86 to 1. Every rule below is another ridge fit on features already computed.
+        sqrt_w = float(np.sqrt(rtr.shape[1] / ttr.shape[1]))
+        rec["acc"]["both_scaled"] = block_scaled_score(rtr, ttr, ytr, rte, tte, yte, sqrt_w)
+        folds = _cv_folds(ytr, 5, seed)
+        rec["cv_folds"] = 0 if folds is None else len(folds)
+        acc_t, w_t = tuned_block_score(rtr, ttr, ytr, rte, tte, yte, folds, seed)
+        rec["acc"]["both_tuned"] = acc_t
+        rec["chosen_block_weight"] = w_t
+        acc_s, a_s = stack_score(rtr, ttr, ytr, rte, tte, yte, folds, seed)
+        rec["acc"]["stack"] = acc_s
+        rec["chosen_stack_alpha"] = a_s
 
     rec["secs"] = round(time.perf_counter() - t0, 1)
     return rec
@@ -280,7 +401,9 @@ def main() -> int:
                 print(f"  skip   {name}: {rec['skipped']}", flush=True)
             else:
                 a = rec["acc"]
-                extra = f" rocket {a['rocket']:.4f} both {a['both']:.4f}" if "rocket" in a else ""
+                extra = ("".join(f" {k} {a[k]:.4f}" for k in
+                                 ("rocket", "both", "both_scaled", "both_tuned", "stack")
+                                 if k in a) if "rocket" in a else "")
                 print(f"  [{done + failed:3d}/{len(todo)}] {name:26s} ts {a['ts']:.4f}{extra}"
                       f"  {rec['secs']:6.1f}s", flush=True)
 

@@ -21,6 +21,14 @@ averaged.
 The paper's reference result is **0.900 mean accuracy across 92 UCR datasets** at a median of
 ~30 s per fold.
 
+Where that 92 comes from is worth knowing, because it bounds this project too. The standard UCR
+bake-off archive has **112** datasets; the tabular foundation models cap at **10 classes**
+(`max_classes: 10` in every `anofox_tabfm` model, and the exported graph's class head is literally
+10 wide). Filtering 112 to ≤10 classes leaves **exactly 92** — so the paper's protocol is not a
+curated selection, it is the subset that fits under the class ceiling. The 20 it excludes are the
+many-class datasets: ShapesAll (60), the three Pig sets (52), FiftyWords (50), Phoneme (39), Adiac
+(37), down to InsectWingbeatSound (11). Nobody's published 0.900 includes them either.
+
 ## Status
 
 The pipeline runs end to end, entirely inside DuckDB. Phases 1–5 of [PLAN.md](PLAN.md) are done:

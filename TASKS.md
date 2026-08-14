@@ -89,6 +89,25 @@ arches, both macOS arches and Windows — nine platforms green on our own CI. Th
 in `description.yml` since its first draft with nothing recorded to justify it, and it kept the
 extension out of duckdb-wasm entirely.
 
+## The reachable universe is exactly the paper's 92
+
+Measured, not assumed (`scratchpad` survey over aeon's published-results set): of the **112**
+bake-off datasets, **92 have ≤10 classes and 20 do not**. Every `anofox_tabfm` model declares
+`max_classes: 10` and the exported class head is 10 wide, so those 20 cannot be attempted at all.
+
+The paper reports 0.900 over 92. That is the same 92. Its protocol is defined by the same ceiling,
+so **"broaden Phase 5 to the paper's protocol" means running those 92** — there is no exclusion
+list to negotiate and no per-dataset discovery of what fails.
+
+Excluded, worst first: ShapesAll 60, PigCVP / PigAirwayPressure / PigArtPressure 52, FiftyWords 50,
+NonInvasiveFetalECGThorax1/2 42, Phoneme 39, Adiac 37, WordSynonyms 25, Crop 24, SwedishLeaf 15,
+FacesUCR / FaceAll 14, CricketX/Y/Z 12, EOGVertical/HorizontalSignal 12, InsectWingbeatSound 11.
+
+Phoneme is the loss that stings — best published accuracy across six strong methods is **0.367**,
+so it is exactly the sort of problem a foundation model might be expected to help with. A student
+distilled from a decomposed teacher would not inherit the cap (see `docs/DISTILLATION_PLAN.md`),
+which is the only route to it that does not need a differently-trained model.
+
 ## Traps worth keeping
 
 **Container-blindness, four instances.** Every one presented as something else.

@@ -833,7 +833,10 @@ def main() -> int:
             by_row.setdefault(int(r["id"]), {})[str(r["cls"])] = float(r["mean_p"])
         soft_path.write_text(json.dumps({
             "dataset": args.dataset,
-            "model": model,
+            # MODEL, not `model`: that name is a parameter of build_sql and does not exist in this
+            # scope. It cost two datasets on a rented pod, because this block only runs at the very
+            # end of a full run and nothing local reaches it.
+            "model": MODEL,
             "n_train": meta["n_train"],
             "n_test": meta["n_test"],
             "note": "test row k of the dataset's test split is id n_train + k",

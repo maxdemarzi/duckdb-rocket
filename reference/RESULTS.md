@@ -421,7 +421,7 @@ The point of widening was to make feature selection possible. The null is unchan
 top-K were K names drawn uniformly from N, each feature appears in Binomial(D, K/N) of the D lists --
 but its power comes entirely from D. At D=6 the null mean was 14 of 116 features at ">= 2 lists" and
 the screen produced 11, below chance. At D=112 the null mean is 11.6 appearances per feature, and
-**19 of 116 clear Benjamini-Hochberg at FDR 0.05** (BH across all 116, because 116 hypotheses at 0.05
+**22 of 116 clear Benjamini-Hochberg at FDR 0.05** (19 on the first 112-dataset run; the shortlist is stable under a 110/112 resample) (BH across all 116, because 116 hypotheses at 0.05
 buys about six free winners on their own):
 
 | feature | count | chance | p |
@@ -470,6 +470,81 @@ from reading their Rust. `rocket` must not depend on it.
 under a ridge is not justified. What keeps it open is conditional rather than general: the
 combination never loses much, gains several points on a minority of datasets, and has not yet been
 tried with a combination rule that gives the smaller block a chance.
+
+### Can a smarter combination rule stop ROCKET drowning the statistics? (2026-08-14)
+
+Naive concatenation tied *exactly* with ROCKET on 56 of 112 datasets, which is one global L2 penalty
+being unable to shrink two blocks differently while the smaller is outnumbered 86 to 1. Four rules,
+110 of 112 datasets (the two exceptions below), same `RidgeClassifierCV` head throughout:
+
+    both          naive concatenation
+    both_scaled   each block divided by sqrt(its column count) AFTER standardising, equalising the
+                  total variance each family contributes to the shared penalty
+    both_tuned    that block weight chosen by stratified 5-fold CV on the TRAIN split only
+    stack         two independently tuned ridges, decision values z-scored and mixed with a weight
+                  also chosen on train; no shared penalty, so neither block can drown the other
+
+| arm | wins | ties | losses | mean | median | best | **worst** |
+|---|---|---|---|---|---|---|---|
+| ts alone | 12 | 5 | 93 | −0.0792 | −0.0488 | +0.0720 | −0.7019 |
+| **both** | 28 | 56 | 26 | **+0.0013** | 0.0000 | +0.0561 | **−0.0137** |
+| both_scaled | 26 | 15 | 69 | −0.0100 | −0.0039 | +0.0960 | −0.1106 |
+| both_tuned | 28 | 49 | 33 | −0.0010 | 0.0000 | **+0.1120** | −0.1500 |
+| stack | 32 | 25 | 53 | −0.0112 | 0.0000 | +0.0717 | −0.1886 |
+
+**No smarter rule beats naive concatenation on average, and the naive one has by far the smallest
+downside.** What the smarter rules do is raise the ceiling: the best single gain goes from +0.0561 to
++0.1120, and `stack` wins on more datasets than any other arm (32) while also losing on more (53).
+
+**The drowning was mostly the ridge being right.** What CV picked is the clearest evidence:
+
+    block weight   0.5 on 54 of 110 datasets   (the FLOOR of the grid)
+    stack alpha    0.0 on 56 of 110            (literally "use ROCKET only")
+
+On half the archive the correct answer is to ignore the 116 statistics, and cross-validation on the
+training split finds that unaided. So the 56 exact ties were not a defect to be engineered away --
+they were the penalty doing approximately the right thing. Where the rules go wrong is the other
+half: CV sometimes picks a non-zero weight that does not survive the test split, which is how
+`both_tuned` reaches −0.1500 and `stack` −0.1886.
+
+**One of those failures is the harness's fault, not the method's.** The weight grid starts at 0.5 and
+CV chose that floor 54 times, so the optimum frequently lies *below* the grid -- and 0.0 is not on
+it, so `both_tuned` cannot switch the statistics off and fall back to ROCKET. Adding 0.0 would bound
+its worst case by ROCKET's own. `stack` does have 0.0 available and still reaches −0.1886, so that
+one is genuine CV overfitting on small training splits rather than a grid problem.
+
+#### Where this leaves the second feature family
+
+**19 of 110 datasets have some combination beating ROCKET by more than 0.02**, and the winning arm
+differs each time:
+
+| dataset | rocket | best arm | gain |
+|---|---|---|---|
+| ScreenType | 0.4773 | both_tuned 0.5893 | **+0.1120** |
+| CinCECGTorso | 0.8268 | both_scaled 0.9051 | +0.0783 |
+| OliveOil | 0.9000 | stack 0.9667 | +0.0667 |
+| PowerCons | 0.9333 | stack 0.9944 | +0.0611 |
+| FordA | 0.9409 | both_scaled 1.0000 | +0.0591 |
+| BeetleFly | 0.9000 | stack 0.9500 | +0.0500 |
+| ArrowHead | 0.8229 | stack 0.8686 | +0.0457 |
+
+Picking the best arm per dataset with an oracle gives **+0.0116 mean over ROCKET** (0.8710 against
+0.8593), and ROCKET alone is still the best arm on 57 of 110. That +0.0116 is the honest size of the
+prize, and it is only reachable with per-dataset model selection -- which is legitimate to do on the
+training split, and is what `both_tuned` and `stack` already attempt imperfectly.
+
+So the answer to "is there a smarter way to combine them" is **yes for a minority of datasets and no
+in general**. Naive concatenation is the right default: +0.0013 mean and a worst case of −0.0137. The
+gains live in per-dataset selection, not in a single better rule.
+
+**Two datasets are missing and the reason is a design flaw worth recording.** `Crop` (24,000 series,
+24 classes) and `ElectricDevices` (16,637 series) were still running after 85 minutes and the pod was
+terminated with 110 of 112 done. The CV arms fit 7 weights x 5 folds plus 7 alphas x 5 folds x 2
+heads -- around 105 ridge fits -- and `RidgeClassifierCV` on n≈8,000 by p=10,116 with 24 one-vs-rest
+problems is expensive enough that this multiplies into hours. The tuning cost should scale with
+`n_train * n_classes` and does not; a fold subsample or a coarser grid on large datasets would fix
+it. 110 of 112 does not change any conclusion above, but the two omitted are both large-n datasets
+and that is not a random 2% .
 
 ### The id-recovery key: three wrong answers, all of them the same wrong answer
 

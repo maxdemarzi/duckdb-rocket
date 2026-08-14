@@ -26,6 +26,7 @@ Only the third is a result. The other two are reported so the gap between "looks
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import math
 import sys
@@ -128,20 +129,37 @@ def main() -> int:
     # measured accuracies, and they were never the part at risk from a bad selection rule.
     have = [r for r in recs if "rocket" in r["acc"]]
     if have:
-        ts = np.array([r["acc"]["ts"] for r in have])
         rk = np.array([r["acc"]["rocket"] for r in have])
-        bo = np.array([r["acc"]["both"] for r in have])
-        print(f"\naccuracy over {len(have)} datasets with the rocket arm:")
-        print(f"  ts     vs rocket: {int((ts > rk).sum()):3d} wins, {int((ts == rk).sum()):3d} ties, "
-              f"mean {float((ts - rk).mean()):+.4f}, median {float(np.median(ts - rk)):+.4f}")
-        print(f"  both   vs rocket: {int((bo > rk).sum()):3d} wins, {int((bo == rk).sum()):3d} ties, "
-              f"mean {float((bo - rk).mean()):+.4f}, median {float(np.median(bo - rk)):+.4f}")
-        # The six-dataset screen found the ts arm bimodal -- big wins and big losses, not a wash.
-        # Whether that survives at scale is the question the mean alone hides.
-        d = ts - rk
-        print(f"  ts - rocket spread: min {d.min():+.4f}, p25 {np.percentile(d, 25):+.4f}, "
-              f"p75 {np.percentile(d, 75):+.4f}, max {d.max():+.4f}")
-        print(f"  |ts - rocket| > 0.05 on {int((np.abs(d) > 0.05).sum())} of {len(d)} datasets")
+        print(f"\naccuracy over {len(have)} datasets, every arm against rocket:")
+        print(f"  {'arm':13s} {'wins':>5s} {'ties':>5s} {'loss':>5s} {'mean':>9s} {'median':>8s} "
+              f"{'best':>8s} {'worst':>8s}")
+        # Worst-case matters as much as the mean here: the tuned and stacked arms buy their extra
+        # wins with much larger losses, and a mean alone hides that entirely.
+        for arm in ("ts", "both", "both_scaled", "both_tuned", "stack"):
+            if arm not in have[0]["acc"]:
+                continue
+            d = np.array([r["acc"][arm] for r in have]) - rk
+            print(f"  {arm:13s} {int((d > 0).sum()):5d} {int((d == 0).sum()):5d} "
+                  f"{int((d < 0).sum()):5d} {d.mean():+9.4f} {float(np.median(d)):+8.4f} "
+                  f"{d.max():+8.4f} {d.min():+8.4f}")
+
+        # What CV chose is the most informative number in the whole run: it says how often the
+        # correct answer is "ignore the statistics", which the accuracies only imply.
+        if "chosen_block_weight" in have[0]:
+            w = collections.Counter(round(r["chosen_block_weight"], 1) for r in have)
+            a = collections.Counter(r["chosen_stack_alpha"] for r in have)
+            print(f"  CV chose block weight {dict(sorted(w.items()))}")
+            print(f"  CV chose stack alpha  {dict(sorted(a.items()))}")
+
+        # The size of the prize, if the arm were chosen per dataset on the training split.
+        arms = ("rocket", "ts", "both", "both_scaled", "both_tuned", "stack")
+        present = [k for k in arms if k in have[0]["acc"]]
+        oracle = np.array([max(r["acc"][k] for k in present) for r in have])
+        best_of = collections.Counter(
+            max(present, key=lambda k: r["acc"][k]) for r in have) if present else {}
+        print(f"  oracle arm choice: mean {oracle.mean():.4f} vs rocket {rk.mean():.4f} "
+              f"({oracle.mean() - rk.mean():+.4f}) -- the headroom per-dataset selection could reach")
+        print(f"  best arm per dataset: {dict(best_of.most_common())}")
 
     if args.out:
         args.out.write_text(json.dumps({

@@ -20,16 +20,17 @@ history. What survives below is the traps, because those cost real time and will
    from the pinned commit `e325474`. Nothing to do but respond to review. Re-pin `ref` only if
    `src/`, `extension_config.cmake`, `CMakeLists.txt` or the duckdb submodule changes; doc and
    script commits do not alter what is built.
-2. **Prebuilt shell published**, so `scripts/pod/bootstrap.sh`'s caching path is now live:
-   `duckdb-rocket-02b8bf99750b-linux_x86_64` under the `prebuilt` release
-   (sha256 `e6f1136146…`, verified after upload by re-downloading through the exact URL
-   bootstrap uses). A pod at that commit now skips a 20-minute build.
+2. **Prebuilt shell published** and `scripts/pod/bootstrap.sh`'s caching path is live, verified
+   by re-downloading through the exact URL bootstrap builds and by a pod hitting it in anger
+   (`using the prebuilt shell for … -- skipping the build`).
 
-   **The key is the full commit, so it misses on any commit at all** — including a docs-only one,
-   even though the binary would be byte-identical. The shell depends only on `src/` and the duckdb
-   submodule; keying on those would hit far more often. Left as-is deliberately: the current scheme
-   cannot serve a stale binary, and that safety was the reason for it. Rebuild with the command in
-   the release notes.
+   **Keyed on build inputs, not HEAD.** The first version keyed on the commit and had to be
+   republished three times in one afternoon while nothing that compiles had changed. The key is
+   now a hash of `src/`, `CMakeLists.txt`, `extension_config.cmake` and the duckdb submodule
+   revision, so equal key means equal binary and a docs commit cannot invalidate it. It *did*
+   legitimately change when clang-format reformatted `src/` — whitespace-only, but not the same
+   source, so the old binary was not republished under the new key.
+
 3. **Upstream review is out of our hands**: [#22](https://github.com/DataZooDE/anofox-tabfm/pull/22)
    (Ort::Env ordering), [#23](https://github.com/DataZooDE/anofox-tabfm/pull/23) (ScatterND graph
    workaround), [#24](https://github.com/DataZooDE/anofox-tabfm/pull/24) (Windows CUDA discovery),

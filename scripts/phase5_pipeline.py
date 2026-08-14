@@ -387,6 +387,17 @@ GROUP BY p.id, r.label;
 .once '{(outdir / "predictions.json").as_posix()}'
 SELECT id, yhat, y FROM predictions ORDER BY id;
 
+.once '{(outdir / "soft_labels.json").as_posix()}'
+-- The averaged class probabilities, not only the argmax. Distillation wants these: a student
+-- trained on a hard argmax inherits the teacher's decisions, while one trained on the distribution
+-- inherits its uncertainty too, which is the part worth having on datasets where the teacher is
+-- only slightly better than the student (docs/DISTILLATION_PLAN.md).
+--
+-- Written for every run, not behind a flag. It is one row per (id, class) -- 375 x 3 on ScreenType
+-- -- so it costs nothing, and the alternative is discovering it was needed after the pod is gone.
+-- That has already happened once: six hard datasets had to be re-run because only accuracy was kept.
+SELECT id, cls, mean_p FROM per_class ORDER BY id, cls;
+
 .once '{(outdir / "timings.json").as_posix()}'
 -- Seconds spent computing ROCKET features, versus seconds spent in tabfm_classify. The gap
 -- between (transform_done -> classify_done) and the classify calls is the chunk fills and the
@@ -807,6 +818,33 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"\nwrote {out}")
+
+    # Soft labels go to a sidecar rather than into the report: the report is read by people and a
+    # few thousand probabilities would bury it, but they are the one artifact that cannot be
+    # reconstructed after the pod is gone. `n_train` is recorded with them because the id space is
+    # arange(n_train + n_test) with the train rows first, so test row k is id n_train + k -- a
+    # consumer that has to rediscover that offset will eventually get it wrong.
+    soft_path = out.with_name(out.stem + "_soft.json")
+    soft_src = workdir / "soft_labels.json"
+    if soft_src.exists():
+        soft = json.loads(soft_src.read_text(encoding="utf-8"))
+        by_row: dict[int, dict[str, float]] = {}
+        for r in soft:
+            by_row.setdefault(int(r["id"]), {})[str(r["cls"])] = float(r["mean_p"])
+        soft_path.write_text(json.dumps({
+            "dataset": args.dataset,
+            "model": model,
+            "n_train": meta["n_train"],
+            "n_test": meta["n_test"],
+            "note": "test row k of the dataset's test split is id n_train + k",
+            "classes": sorted({c for v in by_row.values() for c in v}),
+            "mean_proba": {str(k): by_row[k] for k in sorted(by_row)},
+        }, indent=2), encoding="utf-8")
+        print(f"wrote {soft_path}  ({len(by_row)} rows of soft labels)")
+    else:
+        # Loud, because a distillation run that silently has no teacher labels looks like a
+        # student that learned nothing.
+        print(f"WARNING: no soft labels at {soft_src}; distillation arms cannot use this run")
 
     if not args.keep_sql:
         script.unlink(missing_ok=True)

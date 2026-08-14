@@ -46,13 +46,20 @@ echo "PATH includes $(command -v uv)"
 
 log "repository"
 if [ ! -d "$WORKDIR/.git" ]; then
-    git clone --recurse-submodules "$REPO_URL" "$WORKDIR"
+    git clone -q --depth 1 "$REPO_URL" "$WORKDIR"
 fi
 cd "$WORKDIR"
 git pull --ff-only || true
 # The duckdb submodule is pinned to the tag that matches tools/duckdb; without it the extension
 # build has nothing to build against.
-git submodule update --init --depth 1
+#
+# `--recurse-submodules` on the clone above, and a bare `submodule update --init`, both pull
+# duckdb's entire 7.8 GB history to build one pinned commit -- ten minutes of a pod's life, every
+# pod. `--depth 1` on the update does not fix it: it shallow-fetches the submodule's default branch
+# tip, the pin is not the tip, and it fails. Fetching the commit by SHA takes 11 seconds and 102 MB.
+# shellcheck source=scripts/pod/shallow_clone.sh
+source "$(dirname "${BASH_SOURCE[0]}")/shallow_clone.sh"
+shallow_submodule duckdb || { echo "FATAL: could not obtain the duckdb submodule"; exit 1; }
 
 log "python environment"
 uv sync

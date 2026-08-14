@@ -136,6 +136,27 @@ class TestAssertions:
         assert "sum(duplicate_series)" not in sql
 
 
+class TestSoftLabels:
+    """The distillation arms need the teacher's distribution, not just its argmax."""
+
+    def test_soft_labels_are_dumped(self):
+        sql = build(50, 150, 128)
+        assert "soft_labels.json" in sql
+        assert "SELECT id, cls, mean_p FROM per_class ORDER BY id, cls;" in sql
+
+    def test_soft_labels_come_from_the_averaged_probabilities(self):
+        # per_class holds avg(proba) across groups. Dumping anything derived from `yhat_score`
+        # instead would look similar and be wrong: that is confidence in whichever class won, not
+        # P(class), and it once produced accuracy 1.0 alongside sub-chance AUROC.
+        sql = build(50, 150, 128)
+        # Comment lines are excluded on purpose: the generator carries a comment naming
+        # `yhat_score` as the thing not to use, and a bare substring check flags that warning as
+        # the offence it warns about.
+        code = [l for l in sql.splitlines() if not l.lstrip().startswith("--")]
+        assert not [l for l in code if "yhat_score" in l]
+        assert sql.index("CREATE OR REPLACE TABLE per_class") < sql.index("soft_labels.json")
+
+
 class TestTimingSplit:
     """Answers PLAN.md's "does inference dominate so the C++ transform is pointless?" risk."""
 

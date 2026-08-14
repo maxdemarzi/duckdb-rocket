@@ -1,6 +1,48 @@
 # The one-two punch: label with the teacher, serve with a student
 
-**Status: proposed, nothing built.** This is a plan with a kill criterion, not a roadmap.
+**Status: GATE FAILED. Not building it.** The plan below is kept as written, followed by the
+measurement that killed it, because a plan with a kill criterion is only worth anything if the
+criterion is actually applied when it fires.
+
+## Result: no headroom exists on this benchmark suite
+
+Arms A and C, `scripts/distill_gate.py`, stratified half/half split of each test set:
+
+| dataset | learner | context | pool | A | C | **C − A** |
+|---|---|---|---|---|---|---|
+| ItalyPowerDemand | rocket+ridge | 67 | 514 | 0.9650 | 0.9709 | +0.0058 |
+| ItalyPowerDemand | mr-hydra | 67 | 514 | 0.9670 | 0.9767 | +0.0097 |
+| ECG5000 | rocket+ridge | 500 | 2250 | 0.9471 | 0.9498 | +0.0027 |
+| ECG5000 | mr-hydra | 500 | 2250 | 0.9444 | 0.9507 | +0.0062 |
+| OSULeaf | rocket+ridge | 200 | 121 | 0.9587 | 0.9669 | +0.0083 |
+| OSULeaf | mr-hydra | 200 | 121 | 0.9835 | 0.9835 | +0.0000 |
+| SyntheticControl (control) | both | 300 | 150 | 1.0000 | 1.0000 | +0.0000 |
+
+`C − A` is the headroom **using real labels on the pool**. It never reaches one point, and on the
+best-shaped candidate — ECG5000, 2,250 pool rows against a 500-row context — it is 0.0027 and
+0.0062. Arm B can only ever recover a fraction of that, because pseudo-labels are strictly worse
+than the real ones arm C was handed. There is nothing to distil.
+
+The control behaved as predicted (0.0000 at a 0.5× ratio), which is the reason to believe the rest.
+
+**Why, and what it does not say.** These datasets are small and near ceiling, and a ROCKET-family
+classifier already extracts nearly everything available from a few hundred labelled examples —
+`mr-hydra` reaches 0.9835 on OSULeaf from 200 rows, *better* than the teacher's 0.9711 on the same
+data. Adding labels to a saturated problem cannot help, whoever produced them.
+
+So this is not "distillation does not work". It is "UCR cannot demonstrate it". The idea still has
+a plausible home: a genuinely hard task, a large unlabelled pool, and a teacher whose pretrained
+knowledge exceeds what a linear model can learn from the labels on hand. None of those three hold
+here, and the honest move is to say so rather than to build the student and report the number that
+would have followed anyway.
+
+**Cost of finding out: about seven minutes of local CPU.** The gate was designed so the two arms
+that need no teacher run first, and that ordering is what stopped this from becoming a GPU
+distillation pipeline that measured nothing.
+
+---
+
+## The original plan, unedited
 
 ## The measurement that motivates it
 

@@ -147,11 +147,14 @@ store, version or serve, and no process boundary between your data and your pred
 worth something when the alternative is standing up a training pipeline for a question you might
 ask once.
 
-**The thing ridge cannot do is train without labels**, and that is where the two compose rather
-than compete: use this pipeline once to label an unlabelled pool, then distil into a cheap student
-that serves in milliseconds. The soft per-class probabilities needed for that already exist inside
-the pipeline (averaged over 40 kernel groups). Design, protocol and kill criteria in
-[docs/DISTILLATION_PLAN.md](docs/DISTILLATION_PLAN.md) — proposed, not built.
+**The thing ridge cannot do is train without labels**, which suggests composing them: label an
+unlabelled pool with this pipeline, then distil into a cheap student. That was designed, gated and
+**measured — and the gate failed**. Even handing a student *real* labels for the pool buys under
+one point over training on the context alone (ECG5000: +0.0027 with 2,250 extra labelled rows), so
+pseudo-labels have nothing to recover. These datasets are near ceiling and a ROCKET-family
+classifier already extracts what is there. Full numbers and what the result does *not* say in
+[docs/DISTILLATION_PLAN.md](docs/DISTILLATION_PLAN.md); `scripts/distill_gate.py` reproduces it in
+about seven minutes.
 
 **A trained deep model** (InceptionTime, ROCKET+ridge at scale) will beat this on accuracy-per-
 dollar whenever you have enough labels and enough runs to amortise training. Nothing here competes

@@ -663,6 +663,25 @@ def main() -> int:
             f"those rows were scored against each other. Byte-identical series are not "
             f"counted here -- they share a key legitimately and are collapsed in `score`."
         )
+    if facts["min_groups_per_row"] != config.n_groups:
+        failures.append(
+            f"a row was scored by only {facts['min_groups_per_row']} of {config.n_groups} "
+            f"groups; averaging a partial ensemble is silently wrong"
+        )
+    # The symmetric case, which was missing and is the one that actually happened: the
+    # id-recovery join fanned out and rows were scored 75 and 80 times against 40 groups. `min`
+    # stayed at 40 throughout, so only the collision count noticed, and that is a proxy for this
+    # rather than a test of it.
+    if facts["max_groups_per_row"] != config.n_groups:
+        failures.append(
+            f"a row was scored by {facts['max_groups_per_row']} of {config.n_groups} groups; "
+            f"the id recovery fanned out and that row's average counts some groups twice"
+        )
+
+    by_id = {int(r["id"]): r["yhat"] for r in predictions}
+    ordered_ids = sorted(by_id)
+    y_pred = np.asarray([by_id[i] for i in ordered_ids])
+    accuracy = float((y_pred == y_test).mean()) if len(y_pred) == n_test else float("nan")
 
     print(f"\n  accuracy ({MODEL}, e=1, G={config.n_groups}): {accuracy:.4f}")
     print(f"  row alignment: {facts['distinct_ids']}/{n_test} ids, "

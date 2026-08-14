@@ -345,16 +345,20 @@ Of the 112 bake-off datasets, 13 have a best published accuracy below 0.75. Six 
 | **MiddlePhalanxTW** | **0.6104** | 0.5325 | 0.5130 | 0.539 | *0.578* |
 | RefrigerationDevices | 0.5573 | 0.5307 | 0.5173 | 0.512 | 0.600 |
 | Haptics | 0.5552 | 0.5357 | 0.5260 | 0.526 | 0.571 |
-| ScreenType | 0.5200 | — | — | 0.467 | 0.595 |
-| InlineSkate | 0.4909 | — | — | — | 0.544 |
+| ScreenType | 0.5200 | 0.4773 | — | 0.467 | 0.595 |
+| InlineSkate | 0.4909 | 0.4764 | — | — | 0.544 |
 
-**Against ridge on the same features: 4 wins from 4, mean +0.035** — the ridge and mr-hydra columns
-cover the first four only; ScreenType and InlineSkate were run for the pipeline alone. Against
+**Against ridge on the same features: 6 wins from 6, mean +0.033.** Deltas +0.0156, +0.0779,
++0.0266, +0.0195, +0.0427, +0.0145. The mr-hydra column still covers the first four only. Against
 published ROCKET: +0.047, +0.071, +0.045, +0.029, and +0.053 on ScreenType, which is one of the
 datasets where ROCKET specifically trails the field. On MiddlePhalanxTW the pipeline **beats the
 best published result** (0.6104 vs 0.578 across ROCKET, HC2, InceptionTime, Hydra-MR, 1NN-DTW and
 FreshPRINCE). InlineSkate has no published ROCKET figure recorded here, so that cell is empty
 rather than filled with a guess.
+
+The ridge figures for ScreenType and InlineSkate arrived later than the rest, from the feature screen
+below, which needed the same baseline. That the in-context model wins all six on identical features
+is the claim the original ten-dataset subset could not make -- there, at 0.94-1.00, ridge tied it.
 
 So the earlier "ridge ties it" finding was an artefact of testing on saturated problems. The
 in-context model does extract more from ROCKET features than a linear head — it just cannot show
@@ -367,6 +371,68 @@ The last two rows were held back for two days and three attempts at the id recov
 first came out of a run whose row alignment was wrong. They are reported now, at `rc=0`, with
 `min_groups_per_row = max_groups_per_row = 40` on both — 15,000 group-rows over 375 ids and 22,000
 over 550. `reference/phase5_ScreenType_gpu.json`, `reference/phase5_InlineSkate_gpu.json`.
+
+### 117 statistical features beat 10,000 ROCKET features on half of them (2026-08-14)
+
+`anofox_forecast` -- the same vendor's forecasting extension -- exposes `ts_features_by(table, group,
+time, value)`, which returns one row per series with **117 numeric feature columns**: the tsfresh
+catalogue of statistics, computed in-database. That is exactly the shape our classifier path already
+consumes, so it is a second feature family for the cost of an `unnest ... WITH ORDINALITY`.
+
+Same head (`RidgeClassifierCV`) throughout, so the features are the only variable.
+`scripts/ts_features_screen.py`, `reference/ts_features_screen.json`.
+
+| dataset | ts (117) | rocket (10,000) | both | ts − rocket | **pipeline** |
+|---|---|---|---|---|---|
+| MiddlePhalanxTW | 0.6039 | 0.5325 | 0.5390 | **+0.0714** | 0.6104 |
+| RefrigerationDevices | **0.6027** | 0.5307 | 0.5360 | **+0.0720** | 0.5573 |
+| ScreenType | **0.5467** | 0.4773 | 0.4827 | **+0.0693** | 0.5200 |
+| Herring | 0.6094 | 0.6250 | 0.6250 | −0.0156 | 0.6406 |
+| Haptics | 0.4610 | 0.5357 | 0.5325 | −0.0747 | 0.5552 |
+| InlineSkate | 0.3691 | 0.4764 | 0.4727 | −0.1073 | 0.4909 |
+
+**3 wins from 6, mean +0.0025** -- and that mean is the least informative number in the table. There
+is no wash here: where the statistics win they win by about +0.07, where they lose they lose by
+−0.07 to −0.11. The families are strongly complementary *by dataset*, with 85x fewer features on
+one side.
+
+Two results worth stating plainly:
+
+* **On RefrigerationDevices, 117 features and a linear model beat the entire GPU pipeline** --
+  0.6027 against 0.5573 -- and land on the best published accuracy for the dataset (0.600, +0.0027).
+* On ScreenType they also beat the pipeline, 0.5467 against 0.5200. On MiddlePhalanxTW they come
+  within 0.0065 of it while still clearing the best published result (0.578).
+
+**And naive concatenation does not capture any of it.** `both` moves +0.0017 on average and never
+more than +0.0065: 500 standardised random features per group drown 117 statistics in a ridge. That
+is a fact about the *ridge*, not necessarily about the in-context model, and 500 + 117 = 617 fits
+under the `anofox_tabfm_max_features` we already raise -- so whether `tabfm_classify` can use both
+is a separate, untested question and the obvious next experiment.
+
+The shortlist -- statistics ranking highly on more than one dataset, by coefficient magnitude on
+standardised features, which is a screen and not a claim about importance in general:
+
+    3/6  permutation_entropy      2/6  zero_crossing_rate    2/6  lempel_ziv_complexity
+    3/6  number_peaks             2/6  count_unique          2/6  longest_strike_below_mean
+                                  2/6  quantile_0.1          2/6  ratio_value_number_to_length
+
+These are overwhelmingly **complexity and entropy** measures -- permutation entropy, sample and
+approximate entropy, Lempel-Ziv, binned entropy -- which is precisely what ROCKET's max/PPV pooling
+cannot express. ROCKET asks *does this shape occur*; these ask *how repetitive is this series*. The
+two datasets where they dominate, RefrigerationDevices and ScreenType, are both quantised appliance
+power traces.
+
+That is the same root cause as a bug from earlier in the day. ScreenType's id-recovery collisions
+happened because quantised values make ROCKET's max and PPV coincide across *different* series --
+which is to say ROCKET's features are close to degenerate on this data. The join collisions and
+ROCKET's weakness here are one phenomenon observed twice.
+
+**Licence, and why nothing depends on this.** `anofox_forecast` is BSL 1.1; its Additional Use Grant
+permits production use but forbids offering the work "to third parties on a hosted or embedded
+basis", converting to MPL 2.0 after five years. So it is used strictly as a black box to find out
+which statistics matter, and the shortlist above would be reimplemented from the tsfresh catalogue
+(MIT) or the underlying mathematics -- these are standard statistics, not DataZooDE's invention --
+rather than from reading their Rust. `rocket` must not depend on it.
 
 ### The id-recovery key: three wrong answers, all of them the same wrong answer
 

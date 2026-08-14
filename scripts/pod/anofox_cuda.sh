@@ -56,6 +56,46 @@ fetch_ort() {
     curl -fsSL "$url" | tar -xz --no-same-owner -C "$(dirname "$ORT_DIR")" || return 1
 }
 
+# Does the CUDA DRIVER work, as opposed to does NVML see a card? Those are different questions and
+# a rented host answered them differently: nvidia-smi listed an L40S, `tabfm_devices()` reported
+# `cuda:0 ... usable = true`, and every CUDA entry point returned 999 (unknown error).
+#
+#   cudaGetDeviceCount rc=999 count=-1        <- plain ctypes, system libcudart, no extension
+#
+# The device table is built from NVML, which talks to /dev/nvidiactl and never creates a context,
+# so it is happy on a machine where no CUDA program can run at all. The smoke test below inherited
+# that blind spot and passed the pod straight through to a run that died three minutes later
+# inside ORT session creation, with a 40-line C++ stack that named cudaSetDevice and not the host.
+#
+# cuInit is the lowest-level thing that has to work and libcuda.so.1 is present wherever nvidia-smi
+# is, so this needs no CUDA toolkit. Run it FIRST: a broken host should cost seconds, not a clone,
+# a 110 MB checkpoint download and a build.
+cuda_preflight() {
+    command -v nvidia-smi >/dev/null || { echo "  no nvidia-smi -- this is not a GPU host"; return 1; }
+    # Distinguish "CUDA is broken" from "the probe could not run". Both are non-zero, but only one
+    # of them means the pod should be thrown away, and a preflight that cries wolf gets deleted.
+    command -v python3 >/dev/null || { echo "  no python3 -- cannot preflight CUDA, not judging the host"; return 1; }
+    python3 - <<'PY'
+import ctypes, sys
+try:
+    lib = ctypes.CDLL("libcuda.so.1")
+except OSError as e:
+    print(f"  libcuda.so.1 will not load ({e}) -- the driver is not passed into this container")
+    sys.exit(1)
+rc = lib.cuInit(0)
+if rc:
+    print(f"  cuInit failed with CUDA error {rc}; NVML may still list the GPU but no CUDA "
+          f"program can run on this host. 999 means the driver stack is broken -- get another pod.")
+    sys.exit(1)
+n = ctypes.c_int(-1)
+rc = lib.cuDeviceGetCount(ctypes.byref(n))
+if rc or n.value < 1:
+    print(f"  cuDeviceGetCount rc={rc} count={n.value} -- no usable CUDA device")
+    sys.exit(1)
+print(f"  CUDA driver OK, {n.value} device(s)")
+PY
+}
+
 # Trust nothing that has not answered a query. A cached extension that loads but cannot see the
 # GPU would silently turn a "GPU run" into a CPU run, which is worse than a rebuild.
 smoke_test() {
@@ -68,6 +108,9 @@ smoke_test() {
 
 anofox_fetch() {
     local shell_bin="$1" key dest
+    # Before anything else: a host whose CUDA driver is dead cannot be fixed by rebuilding, so
+    # falling through to a build here would burn 30 minutes to reproduce the same failure.
+    cuda_preflight || { echo "  CUDA preflight failed -- this host cannot run the GPU path"; return 2; }
     key="$(anofox_key)" || { echo "  no anofox checkout at $ANOFOX_DIR"; return 1; }
     dest="$(anofox_local_path)"
     mkdir -p "$(dirname "$dest")"
@@ -95,7 +138,9 @@ anofox_publish() {
 }
 
 case "${1:-}" in
-    --publish) anofox_publish ;;
-    --key)     anofox_key ;;
-    *)         : ;;   # sourced: call anofox_fetch <shell> yourself
+    --publish)   anofox_publish ;;
+    --key)       anofox_key ;;
+    # Runnable on its own so a pod can be judged before anything is cloned or downloaded onto it.
+    --preflight) cuda_preflight ;;
+    *)           : ;;   # sourced: call anofox_fetch <shell> yourself
 esac

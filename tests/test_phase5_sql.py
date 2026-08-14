@@ -241,3 +241,35 @@ def test_registered_graph_is_bound_to_the_model_id_used_by_classify():
 def test_registration_precedes_every_classify_call():
     sql = build_device("cuda", Path("/x/ext"), Path("/models/tabicl"))
     assert sql.index("tabfm_register_model") < sql.index(f"model := '{p5.MODEL}'")
+
+
+# --- id recovery key ---------------------------------------------------------------------
+#
+# anofox_tabfm echoes back only the columns named in `features`, so a plain id column is dropped
+# and scored rows are rejoined on feature values. A single-column key held for all ten datasets of
+# the original subset and then fanned out on ScreenType and InlineSkate, scoring rows 75 and 80
+# times instead of 40 -- silent double-counting in the averaged ensemble, caught only because the
+# alignment assertion happened to also fail.
+
+
+def test_id_recovery_joins_on_a_composite_key():
+    sql = build(50, 150, None)
+    # All four key columns must appear on both sides of the join, or the key is narrower than
+    # it looks and the collision it protects against comes back.
+    for c in ("f0", "f1", "f2", "f3"):
+        assert f"s.{c} = c.{c}" in sql, f"{c} missing from the id-recovery join"
+
+
+def test_id_source_table_carries_every_key_column():
+    sql = build(50, 150, None)
+    assert "test_src_cur (id BIGINT, f0 DOUBLE, f1 DOUBLE, f2 DOUBLE, f3 DOUBLE)" in sql
+    # ...and is filled with them; a wider schema fed by a narrower SELECT would leave NULLs and
+    # join to nothing, which looks like "scored 0 of 40 groups" rather than like a bug here.
+    assert "SELECT id, f[1], f[2], f[3], f[4] FROM feat_cur" in sql
+
+
+def test_collision_check_uses_the_same_key_as_the_join():
+    sql = build(50, 150, None)
+    # A guard measuring f0 alone while the join uses four columns would report collisions that
+    # do not matter and miss the ones that do.
+    assert "count(DISTINCT (f[1], f[2], f[3], f[4]))" in sql

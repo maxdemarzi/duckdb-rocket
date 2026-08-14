@@ -305,6 +305,54 @@ Two bugs found on the way, both of which failed far from their cause: partial pr
 HUGEINT because two 32-bit factors reach 2^64 and wrap BIGINT into negatives, and three of the
 six SplitMix64 constants had been transcribed from hex incorrectly.
 
+## The hard datasets: where the in-context model actually earns its place (2026-08-14)
+
+The ten-dataset subset was chosen for *spread*, and nine of its ten sit at 0.94-1.00. At that
+altitude ROCKET+ridge ties this pipeline (0.9636 vs 0.9615, 3 wins to 4 with 3 ties) at ~14x less
+cost, which reads as "the model adds nothing". It was the wrong place to look.
+
+Of the 112 bake-off datasets, 13 have a best published accuracy below 0.75. Six of those are within
+`tabicl-v2`'s 10-class cap. On an A40, patched graph, G=40, e=1, `--test-chunk 128`:
+
+| dataset | **pipeline** | our ridge | our mr-hydra | published ROCKET | published best |
+|---|---|---|---|---|---|
+| Herring | 0.6406 | 0.6250 | **0.7344** | 0.594 | 0.734 |
+| **MiddlePhalanxTW** | **0.6104** | 0.5325 | 0.5130 | 0.539 | *0.578* |
+| RefrigerationDevices | 0.5573 | 0.5307 | 0.5173 | 0.512 | 0.600 |
+| Haptics | 0.5552 | 0.5357 | 0.5260 | 0.526 | 0.571 |
+
+**Against ridge on the same features: 4 wins from 4, mean +0.035.** Against published ROCKET:
++0.047, +0.071, +0.045, +0.029. On MiddlePhalanxTW the pipeline **beats the best published
+result** (0.6104 vs 0.578 across ROCKET, HC2, InceptionTime, Hydra-MR, 1NN-DTW and FreshPRINCE).
+
+So the earlier "ridge ties it" finding was an artefact of testing on saturated problems. The
+in-context model does extract more from ROCKET features than a linear head — it just cannot show
+that where a linear head already scores 0.99.
+
+`mr-hydra` splits 3-1 against the pipeline and wins Herring outright (0.7344 vs 0.6406), so a
+better *feature extractor* is competitive with a better *classifier*. Both beat ridge.
+
+**Two datasets are missing from that table and are not being reported.** ScreenType and
+InlineSkate both exited non-zero: the id-recovery join fanned out, scoring rows by up to 75 and 80
+groups instead of 40. The ensemble average over a duplicated group set is not a result. See below.
+
+### The id-recovery key was one column, and one column was not enough
+
+`anofox_tabfm` echoes back only the target and the columns named in `features`, so a plain `id`
+column is dropped and scored rows are rejoined to their ids on a feature value. That key was `f0`
+alone. It measured **zero collisions across all ten datasets of the original subset**, ECG5000's
+4500 rows included — which is precisely why it survived — and then collided on two of the first six
+hard datasets tried.
+
+The key is now `(f0, f1, f2, f3)`, and the collision guard counts distinct tuples of the same four.
+Four identical doubles means two identical series, which no join can disambiguate and which the
+guard still reports. Three tests pin the join, the source schema and the guard to the same key,
+because a guard measuring a narrower key than the join uses would miss exactly the case it exists
+for.
+
+Worth noting what caught it: not the accuracy, which looked plausible. The row-alignment assertion
+counted 15,070 group-rows where 375 x 40 = 15,000 were expected.
+
 ## Phase 5 — the whole pipeline in DuckDB
 
 `scripts/phase5_pipeline.py`. Raw series → `rocket_transform` → 500 scalar columns →

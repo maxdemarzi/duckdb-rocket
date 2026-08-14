@@ -227,7 +227,13 @@ CREATE OR REPLACE TABLE feat_cur (id BIGINT, split VARCHAR, label VARCHAR, f DOU
 CREATE OR REPLACE TABLE train_cur (y VARCHAR, {schema_cols});
 CREATE OR REPLACE TABLE test_cur ({schema_cols});
 -- Only the two columns the join reads (swan PERFORMANCE_TUNING.md 1).
-CREATE OR REPLACE TABLE test_src_cur (id BIGINT, f0 DOUBLE);
+-- Four key columns, not one. anofox_tabfm echoes back every column named in `features`, so the
+-- id recovery can join on as many as it likes; joining on f0 alone made a single shared feature
+-- value fan the join out. ScreenType and InlineSkate both did exactly that -- rows scored by up
+-- to 80 groups instead of 40 -- while the ten-dataset subset never collided once, which is how a
+-- one-column key survived this long. Four identical doubles means the two series are identical,
+-- and the assertion below still reports it if that ever happens.
+CREATE OR REPLACE TABLE test_src_cur (id BIGINT, f0 DOUBLE, f1 DOUBLE, f2 DOUBLE, f3 DOUBLE);
 -- MAP(VARCHAR, DOUBLE) is what anofox_tabfm bc6d8af returns, checked rather than assumed. A
 -- version that changes it fails loudly on the first INSERT rather than silently coercing.
 CREATE OR REPLACE TABLE all_groups (grp BIGINT, id BIGINT, proba MAP(VARCHAR, DOUBLE));
@@ -259,7 +265,7 @@ PREPARE fill_test AS
    WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
 
 PREPARE fill_src AS
-  INSERT INTO test_src_cur SELECT id, f[1] FROM feat_cur
+  INSERT INTO test_src_cur SELECT id, f[1], f[2], f[3], f[4] FROM feat_cur
    WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
 
 -- Prime train_cur and test_cur too: tabfm_classify validates its context at BIND time, so
@@ -284,7 +290,8 @@ PREPARE score AS
   SELECT CAST($1 AS BIGINT), s.id, c.proba
   FROM tabfm_classify('train_cur', 'y', test := 'test_cur',
                       model := '{model}', features := {feature_list}) c
-  JOIN test_src_cur s ON s.f0 = c.f0;
+  JOIN test_src_cur s
+    ON s.f0 = c.f0 AND s.f1 = c.f1 AND s.f2 = c.f2 AND s.f3 = c.f3;
 
 -- f0_checks is filled by the loop below, which starts from group 0 again; nothing above wrote
 -- to it, so there is no priming row to remove.
@@ -301,7 +308,8 @@ DELETE FROM feat_cur;
 EXECUTE fill_feat({first_kernel});
 INSERT INTO timings VALUES ({g}, 'transform_done', current_timestamp);
 INSERT INTO f0_checks
-SELECT {g}, count(*) - count(DISTINCT f[1]), sum(f[1]) FROM feat_cur WHERE split = 'test';
+SELECT {g}, count(*) - count(DISTINCT (f[1], f[2], f[3], f[4])), sum(f[1])
+  FROM feat_cur WHERE split = 'test';
 DELETE FROM train_cur;
 EXECUTE fill_train;
 """)
@@ -365,11 +373,16 @@ FROM t ORDER BY grp;
 .once '{(outdir / "assertions.json").as_posix()}'
 -- `f0_collisions` guards the one assumption the id recovery rests on. anofox_tabfm echoes back
 -- only the target and the columns named in `features`, so a plain id column is dropped and the
--- scored rows are rejoined to their ids on the feature value f0. Two test rows sharing an f0
--- would fan that join out and score both against each other's id. The row-alignment counts
--- below already fail in that case, but they report it as "a row was scored by only N of 40
--- groups", which names the symptom and not the cause. Measured 0 across all ten datasets in the
--- subset, ECG5000's 4500 rows included -- this is here so a future dataset says so directly.
+-- scored rows are rejoined to their ids on feature values. Rows sharing the whole key fan that
+-- join out and score against each other's ids. The row-alignment counts below already fail in
+-- that case, but they report it as "a row was scored by N of 40 groups", which names the symptom
+-- and not the cause.
+--
+-- The key is (f0, f1, f2, f3), not f0 alone. On f0 alone this measured 0 across all ten datasets
+-- of the original subset -- which is exactly why the weakness survived -- and then fanned out on
+-- ScreenType and InlineSkate, where rows reached 75 and 80 groups instead of 40. Four identical
+-- doubles means two identical series, which no join can disambiguate and which this still
+-- reports.
 SELECT (SELECT count(*) FROM predictions)          AS predicted_rows,
        (SELECT count(DISTINCT id) FROM all_groups) AS distinct_ids,
        (SELECT count(*) FROM all_groups)           AS group_rows,
@@ -618,8 +631,9 @@ def main() -> int:
         )
     if int(float(facts.get("f0_collisions") or 0)):
         failures.append(
-            f"{facts['f0_collisions']} test rows share an f0 with another row across the "
-            f"{config.n_groups} groups; ids are recovered by joining on f0, so those rows were "
+            f"{facts['f0_collisions']} test rows share their whole (f0,f1,f2,f3) key with "
+            f"another row across the {config.n_groups} groups; ids are recovered by joining on "
+            f"those columns, so those rows were "
             f"scored against each other's id"
         )
     if facts["min_groups_per_row"] != config.n_groups:

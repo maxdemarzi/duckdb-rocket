@@ -413,23 +413,36 @@ under the `anofox_tabfm_max_features` we already raise -- so whether `tabfm_clas
 is a separate question -- the plumbing is in (`--features both`, 616 columns end to end) and
 the pod run is what remains.
 
-The shortlist -- statistics ranking highly on more than one dataset, by coefficient magnitude on
-standardised features, which is a screen and not a claim about importance in general:
+**The shortlist I drew from this is noise, and that is worth recording as a result.** The rule was
+"top 12 per dataset by ridge coefficient magnitude, keep anything appearing in more than one list",
+which produced 11 features and looked like a finding. Six datasets choosing 12 of 116 features
+produces about 14 such features *by chance*:
 
-    3/6  permutation_entropy      2/6  zero_crossing_rate    2/6  lempel_ziv_complexity
-    3/6  number_peaks             2/6  count_unique          2/6  longest_strike_below_mean
-                                  2/6  quantile_0.1          2/6  ratio_value_number_to_length
+| | observed | uniform-random null | P(null >= observed) |
+|---|---|---|---|
+| in >= 2 of the 6 top-12 lists | **11** | **14.0** | 0.944 |
+| in >= 3 of 6 | **2** | **2.0** | 0.631 |
+| in >= 4 of 6 | 0 | 0.2 | — |
 
-These are overwhelmingly **complexity and entropy** measures -- permutation entropy, sample and
-approximate entropy, Lempel-Ziv, binned entropy -- which is precisely what ROCKET's max/PPV pooling
-cannot express. ROCKET asks *does this shape occur*; these ask *how repetitive is this series*. The
-two datasets where they dominate, RefrigerationDevices and ScreenType, are both quantised appliance
-power traces.
+Analytic and 20,000-draw Monte Carlo agree, and the observed overlap is *below* the null mean. So
+the eleven names carry no information about which statistics matter, and the two that reached 3/6
+(`permutation_entropy`, `number_peaks`) are exactly the two chance predicts. An earlier version of
+this section listed them as "the reimplement shortlist" and drew a story from them being mostly
+complexity and entropy measures. That story may still be true -- the two datasets where the family
+wins outright are both quantised appliance power traces, and max/PPV pooling genuinely cannot express
+repetitiveness -- but nothing here is evidence for it, and it must not be the basis for choosing what
+to write in C++.
 
-That is the same root cause as a bug from earlier in the day. ScreenType's id-recovery collisions
-happened because quantised values make ROCKET's max and PPV coincide across *different* series --
-which is to say ROCKET's features are close to degenerate on this data. The join collisions and
-ROCKET's weakness here are one phenomenon observed twice.
+What survives is at the *family* level, not the feature level: the 116 statistics beat 10,000 ROCKET
+features on three of six datasets by about 7 points, and lose by 7-11 on the other three. Those are
+measured accuracies, not a selection artifact.
+
+Identifying individual features needs a design this screen does not have -- far more datasets, or
+stability selection over bootstrap resamples, or leave-one-family-out ablation. Ablation is the
+cheap one and the only one that tests the entropy story directly: group the 116 into a handful of
+families (complexity/entropy, FFT, distributional, autocorrelation, peak-counting) and drop each in
+turn. Six or so families across six datasets is a multiple-comparisons problem small enough to mean
+something, where 116 features across six datasets is not.
 
 **Licence, and why nothing depends on this.** `anofox_forecast` is BSL 1.1; its Additional Use Grant
 permits production use but forbids offering the work "to third parties on a hosted or embedded

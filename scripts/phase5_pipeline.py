@@ -930,6 +930,15 @@ def main() -> int:
         # patched one. Without both, a GPU result is indistinguishable from a CPU result that
         # silently fell back -- and on CUDA the graph is not the shipped graph.
         "device": args.device,
+        # Which feature families the classifier actually saw, and how many columns that was.
+        # `config.features_per_group` is the ROCKET half alone, so on a --features both run it
+        # reads 500 while the model saw 616 -- and the first archived batch of those reports
+        # recorded the mode nowhere but in the filename. A number whose provenance lives in a
+        # filename is a number that will eventually be misread.
+        "features": args.features,
+        "n_feature_columns": (len(ts_names) if args.features == "ts"
+                              else config.features_per_group + len(ts_names)),
+        "ts_feature_source": ("anofox_forecast (BSL 1.1, experiment only)" if ts_names else None),
         "anofox_extension": (str(args.anofox_extension) if args.anofox_extension else None),
         "registered_graph": (str(args.register_model_dir) if args.register_model_dir else None),
         "config": {

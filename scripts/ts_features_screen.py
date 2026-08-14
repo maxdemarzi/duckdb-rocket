@@ -184,12 +184,21 @@ def main() -> int:
             for f in r["top_features"]:
                 tally[f] = tally.get(f, 0) + 1
         repeated = sorted((v, k) for k, v in tally.items() if v > 1)[::-1]
-        if repeated:
-            print("\nfeatures in the top list of more than one dataset -- the reimplement shortlist:")
-            for v, k in repeated:
-                print(f"  {v}/{len(rows)}  {k}")
-        else:
-            print("\nno feature ranks highly on more than one dataset; nothing to reimplement yet")
+        # NOT a shortlist. Measured against a uniform-random null this rule yields about 14
+        # features at >=2 of 6 by chance, and the real screen yielded 11 -- below the null mean,
+        # P(null >= observed) = 0.94. So the count is printed with the number chance predicts
+        # beside it: an earlier version called this "the reimplement shortlist" and it was
+        # believed. Identifying individual features needs many more datasets, stability
+        # selection over bootstraps, or family-level ablation. See reference/RESULTS.md.
+        n_feat, d = rows[0]["n_ts_features"], len(rows)
+        pk = args.top / n_feat
+        # max(0,...) because with one dataset the expression is degenerate and prints -0.0,
+        # which reads like a computed value rather than 'not applicable'.
+        exp2 = max(0.0, n_feat * (1 - (1 - pk) ** d - d * pk * (1 - pk) ** (d - 1)))
+        print(f"\nin the top-{args.top} of more than one dataset: {len(repeated)} features "
+              f"(uniform-random null gives {exp2:.1f} -- so this is NOT a shortlist)")
+        for v, name_ in repeated:
+            print(f"  {v}/{len(rows)}  {name_}")
 
     if args.out and rows:
         args.out.write_text(json.dumps(rows, indent=2), encoding="utf-8")

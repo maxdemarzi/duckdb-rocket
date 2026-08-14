@@ -1,0 +1,104 @@
+[
+  {
+    "dataset": "Herring",
+    "both": 0.65625,
+    "rocket": 0.6406,
+    "ts": 0.6094,
+    "published_best": 0.734,
+    "row_alignment": {
+      "predicted_rows": 64,
+      "distinct_ids": 64,
+      "group_rows": 2560,
+      "min_groups_per_row": 40,
+      "max_groups_per_row": 40,
+      "duplicate_test_series": 0,
+      "distinct_group_banks": 40
+    },
+    "failures": []
+  },
+  {
+    "dataset": "MiddlePhalanxTW",
+    "both": 0.5844155844155844,
+    "rocket": 0.6104,
+    "ts": 0.6039,
+    "published_best": 0.578,
+    "row_alignment": {
+      "predicted_rows": 154,
+      "distinct_ids": 154,
+      "group_rows": 6160,
+      "min_groups_per_row": 40,
+      "max_groups_per_row": 40,
+      "duplicate_test_series": 0,
+      "distinct_group_banks": 40
+    },
+    "failures": []
+  },
+  {
+    "dataset": "RefrigerationDevices",
+    "both": 0.5786666666666667,
+    "rocket": 0.5573,
+    "ts": 0.6027,
+    "published_best": 0.6,
+    "row_alignment": {
+      "predicted_rows": 375,
+      "distinct_ids": 375,
+      "group_rows": 15000,
+      "min_groups_per_row": 40,
+      "max_groups_per_row": 40,
+      "duplicate_test_series": 0,
+      "distinct_group_banks": 40
+    },
+    "failures": []
+  },
+  {
+    "dataset": "Haptics",
+    "both": 0.538961038961039,
+    "rocket": 0.5552,
+    "ts": 0.461,
+    "published_best": 0.571,
+    "row_alignment": {
+      "predicted_rows": 308,
+      "distinct_ids": 308,
+      "group_rows": 12320,
+      "min_groups_per_row": 40,
+      "max_groups_per_row": 40,
+      "duplicate_test_series": 0,
+      "distinct_group_banks": 40
+    },
+    "failures": []
+  },
+  {
+    "dataset": "ScreenType",
+    "both": 0.5546666666666666,
+    "rocket": 0.52,
+    "ts": 0.5467,
+    "published_best": 0.595,
+    "row_alignment": {
+      "predicted_rows": 375,
+      "distinct_ids": 375,
+      "group_rows": 15000,
+      "min_groups_per_row": 40,
+      "max_groups_per_row": 40,
+      "duplicate_test_series": 0,
+      "distinct_group_banks": 40
+    },
+    "failures": []
+  },
+  {
+    "dataset": "InlineSkate",
+    "both": 0.5145454545454545,
+    "rocket": 0.4909,
+    "ts": 0.3691,
+    "published_best": 0.544,
+    "row_alignment": {
+      "predicted_rows": 550,
+      "distinct_ids": 550,
+      "group_rows": 22000,
+      "min_groups_per_row": 40,
+      "max_groups_per_row": 40,
+      "duplicate_test_series": 21,
+      "distinct_group_banks": 40
+    },
+    "failures": []
+  }
+]

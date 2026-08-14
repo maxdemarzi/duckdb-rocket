@@ -123,16 +123,24 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               model: str = MODEL, anofox_extension: Path | None = None,
               register_dir: Path | None = None) -> str:
     n_features = config.features_per_group
-    # Width of the id-recovery key. Four was not enough: ScreenType's series are distinct but its
-    # quantised values make ROCKET's max/PPV features coincide, so it still fanned out at four.
-    # Sixteen doubles agreeing means the series are equal, which the dedup below then handles.
-    key_n = min(16, n_features)
-    key_cols = [f"f{j}" for j in range(key_n)]
-    key_decl = ", ".join(f"{c} DOUBLE" for c in key_cols)
-    key_from_list = ", ".join(f"f[{j + 1}]" for j in range(key_n))
-    key_join = " AND ".join(f"s.{c} = c.{c}" for c in key_cols)
-    key_tuple = ", ".join(f"f[{j + 1}]" for j in range(key_n))
     names = [f"f{j}" for j in range(n_features)]
+    # The id-recovery key is the WHOLE feature vector, not a prefix of it.
+    #
+    # A prefix is a bet on how many leading features it takes to separate two series, and the bet
+    # was lost twice. One column measured zero collisions across all ten datasets of the original
+    # subset -- which is exactly why the weakness survived -- and then fanned rows out to 75 and 80
+    # groups of 40 on ScreenType and InlineSkate. Widening to four fixed neither. Sixteen fixed
+    # InlineSkate and left five distinct ScreenType series still sharing a key. Each widening was
+    # the same guess with a bigger number.
+    #
+    # The full vector ends the question by construction: two rows share this key only if they ARE
+    # the same feature vector, and identical vectors get identical predictions, so collapsing them
+    # (the GROUP BY in `score`) is exact rather than merely tolerable. Measured on v1.5.5 before
+    # being relied on -- a DOUBLE[] equality plans as a HASH_JOIN, not a nested loop, and DuckDB
+    # holds NaN = NaN, so a non-finite feature cannot silently drop a row out of the join.
+    key_decl = "k DOUBLE[]"
+    key_from_list = "f"
+    key_join = "s.k = [" + ", ".join(f"c.{n}" for n in names) + "]"
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
     # DuckDB lists are 1-based, so feature j lives at f[j + 1].
     projection = ", ".join(f"f[{j + 1}] AS f{j}" for j in range(n_features))
@@ -196,7 +204,8 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         # passes in that case: 40 groups per row, no collisions, an accuracy that looks fine.
         # Distinct fingerprints are what says the 40 groups really were 40 different kernel
         # banks. Cheap enough to be unconditional.
-        "CREATE OR REPLACE TABLE f0_checks (grp BIGINT, collisions BIGINT, fingerprint DOUBLE);",
+        "CREATE OR REPLACE TABLE f0_checks (grp BIGINT, duplicate_series BIGINT, "
+        "fingerprint DOUBLE);",
         # Where the wall clock actually goes. PLAN.md's risk table asks whether inference
         # dominates so completely that the C++ transform is pointless; that is answerable only by
         # splitting the two, and it is also what stops the paper's ~30s/fold median being
@@ -236,16 +245,15 @@ CREATE OR REPLACE TABLE feat_cur (id BIGINT, split VARCHAR, label VARCHAR, f DOU
 CREATE OR REPLACE TABLE train_cur (y VARCHAR, {schema_cols});
 CREATE OR REPLACE TABLE test_cur ({schema_cols});
 -- Only the two columns the join reads (swan PERFORMANCE_TUNING.md 1).
--- Id recovery: a {key_n}-column key AND a dedup, because the two failures have different causes.
+-- Id recovery: the full feature vector as the key, AND a dedup.
 --
 -- anofox_tabfm echoes back only the target and the columns named in `features`, so a plain id is
--- dropped and scored rows must be rejoined on feature values. A one-column key measured zero
--- collisions across all ten datasets of the original subset and then fanned out on two of the
--- first six hard ones. Widening it to four fixed neither:
+-- dropped and scored rows must be rejoined on feature values. The two datasets that broke the
+-- prefix keys broke them for different reasons, and only one of the two is a key problem at all:
 --
 --   ScreenType    375 test rows, 375 DISTINCT series -- genuine feature collisions. Quantised
---                 electricity data makes ROCKET's max/PPV coincide across different series.
---                 A wider key fixes this: distinct series differ somewhere in {key_n} features.
+--                 electricity data makes ROCKET's max/PPV coincide across different series, and
+--                 it kept doing so through a 16-wide key. Only the whole vector separates them.
 --   InlineSkate   550 test rows, 521 distinct -- 29 series are byte-identical. No feature key
 --                 can ever separate them, however wide. But identical series get identical
 --                 predictions, so the GROUP BY below collapses the duplicates to one row per
@@ -329,13 +337,15 @@ DELETE FROM feat_cur;
 EXECUTE fill_feat({first_kernel});
 INSERT INTO timings VALUES ({g}, 'transform_done', current_timestamp);
 INSERT INTO f0_checks
--- Harmful collisions only: DISTINCT series that share the key. `count(DISTINCT f)` counts
--- distinct full feature vectors and `count(DISTINCT (key))` counts distinct keys, so the
--- difference is exactly the number of distinct series the key fails to separate. Byte-identical
--- series (InlineSkate has 29) share a key legitimately and are collapsed by the GROUP BY in
--- `score`; counting those was a false alarm that fired 1160 times -- 29 duplicates x 40 groups --
--- on a run whose row alignment was perfect at 40-40.
-SELECT {g}, count(DISTINCT f) - count(DISTINCT ({key_tuple})), sum(f[1])
+-- Duplicate test series: reported, not asserted. Under a prefix key this column counted distinct
+-- series the key failed to separate, and that number could be non-zero -- it was 5 on ScreenType
+-- at a width of 16. It cannot be non-zero now: the key is the full vector, so distinct vectors
+-- have distinct keys by construction and the old expression would be a tautology dressed up as a
+-- check. What is worth recording instead is how many test series are byte-identical to another
+-- (InlineSkate: 29), because that is the reason the GROUP BY in `score` exists.
+--
+-- The failure the old column stood in for is covered directly by min/max groups per row.
+SELECT {g}, count(*) - count(DISTINCT f), sum(f[1])
   FROM feat_cur WHERE split = 'test';
 DELETE FROM train_cur;
 EXECUTE fill_train;
@@ -398,28 +408,27 @@ SELECT grp,
 FROM t ORDER BY grp;
 
 .once '{(outdir / "assertions.json").as_posix()}'
--- `f0_collisions` guards the one assumption the id recovery rests on. anofox_tabfm echoes back
--- only the target and the columns named in `features`, so a plain id column is dropped and the
--- scored rows are rejoined to their ids on feature values. Rows sharing the whole key fan that
--- join out and score against each other's ids. The row-alignment counts below already fail in
--- that case, but they report it as "a row was scored by N of 40 groups", which names the symptom
--- and not the cause.
+-- The row-alignment counts are the id-recovery test. anofox_tabfm echoes back only the target and
+-- the columns named in `features`, so a plain id column is dropped and scored rows are rejoined to
+-- their ids on feature values; rows sharing the join key fan that join out and score against each
+-- other's ids. `min_groups_per_row` and `max_groups_per_row` catch that directly -- both must be
+-- exactly {config.n_groups}. The fan-out that started this only ever moved `max` (to 75 and 80),
+-- so a run checking `min` alone passed while averaging a duplicated ensemble.
 --
--- The key is (f0, f1, f2, f3), not f0 alone. On f0 alone this measured 0 across all ten datasets
--- of the original subset -- which is exactly why the weakness survived -- and then fanned out on
--- ScreenType and InlineSkate, where rows reached 75 and 80 groups instead of 40. Four identical
--- doubles means two identical series, which no join can disambiguate and which this still
--- reports.
+-- `duplicate_test_series` is descriptive. Now that the key is the whole feature vector, distinct
+-- series cannot share a key, and what remains is byte-identical series -- which no key of any
+-- width could separate, and which `score` collapses exactly because their predictions are equal.
 SELECT (SELECT count(*) FROM predictions)          AS predicted_rows,
        (SELECT count(DISTINCT id) FROM all_groups) AS distinct_ids,
        (SELECT count(*) FROM all_groups)           AS group_rows,
        (SELECT min(n_groups_seen) FROM per_class)  AS min_groups_per_row,
        (SELECT max(n_groups_seen) FROM per_class)  AS max_groups_per_row,
-       -- CAST because sum() over BIGINT returns HUGEINT, and `.mode json` renders HUGEINT as a
-       -- *string* to avoid precision loss. "0" is truthy in Python, so the guard below fired on
-       -- every run while reporting zero collisions.
-       (SELECT CAST(coalesce(sum(collisions), 0) AS BIGINT)
-          FROM f0_checks)                         AS f0_collisions,
+       -- CAST because max() over BIGINT can widen to HUGEINT, and `.mode json` renders HUGEINT as
+       -- a *string* to avoid precision loss. "0" is truthy in Python, so a guard reading this
+       -- fired on every run while reporting zero.
+       -- max(), not sum(): every group reports the same count, so summing multiplied it by 40.
+       (SELECT CAST(coalesce(max(duplicate_series), 0) AS BIGINT)
+          FROM f0_checks)                         AS duplicate_test_series,
        (SELECT CAST(count(DISTINCT fingerprint) AS BIGINT)
           FROM f0_checks)                         AS distinct_group_banks;
 """)
@@ -656,13 +665,9 @@ def main() -> int:
             f"feature tables were not all refilled, so some groups were scored against another "
             f"group's features under their own label"
         )
-    if int(float(facts.get("f0_collisions") or 0)):
-        failures.append(
-            f"{facts['f0_collisions']} DISTINCT test series share their id-recovery key with "
-            f"another distinct series; ids are recovered by joining on those columns, so "
-            f"those rows were scored against each other. Byte-identical series are not "
-            f"counted here -- they share a key legitimately and are collapsed in `score`."
-        )
+    # No guard on duplicate_test_series. It is not a failure: byte-identical series get identical
+    # predictions and `score` collapses them, so the count is context for the reader rather than
+    # something to assert on. The assertion that matters is the pair below.
     if facts["min_groups_per_row"] != config.n_groups:
         failures.append(
             f"a row was scored by only {facts['min_groups_per_row']} of {config.n_groups} "

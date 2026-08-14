@@ -122,13 +122,18 @@ class TestAssertions:
         sql = build(50, 150, 128)
         assert sql.rindex("INSERT INTO f0_checks") < sql.index("distinct_group_banks")
 
-    def test_collision_and_bank_counts_are_cast_to_bigint(self):
-        # sum() over BIGINT returns HUGEINT, which `.mode json` renders as a *string* -- and
-        # every non-empty string is truthy, so "0" once fired the collision guard on zero
-        # collisions.
+    def test_counts_are_cast_to_bigint(self):
+        # An aggregate over BIGINT can widen to HUGEINT, which `.mode json` renders as a *string*
+        # -- and every non-empty string is truthy, so "0" once fired a guard on a count of zero.
         sql = build(50, 150, 128)
-        assert "CAST(coalesce(sum(collisions), 0) AS BIGINT)" in sql
+        assert "CAST(coalesce(max(duplicate_series), 0) AS BIGINT)" in sql
         assert "CAST(count(DISTINCT fingerprint) AS BIGINT)" in sql
+
+    def test_duplicate_series_are_maxed_not_summed(self):
+        # Every group writes the same count of duplicate test series, so sum() reports it 40 times
+        # over: InlineSkate's 29 duplicates would be published as 1160.
+        sql = build(50, 150, 128)
+        assert "sum(duplicate_series)" not in sql
 
 
 class TestTimingSplit:
@@ -249,41 +254,60 @@ def test_registration_precedes_every_classify_call():
 # and scored rows are rejoined on feature values. A single-column key held for all ten datasets of
 # the original subset and then fanned out on ScreenType and InlineSkate, scoring rows 75 and 80
 # times instead of 40 -- silent double-counting in the averaged ensemble, caught only because the
-# alignment assertion happened to also fail.
+# alignment assertion happened to also fail. Widening the prefix to 4 fixed neither dataset; 16
+# fixed InlineSkate and left 5 distinct ScreenType series still sharing a key.
+#
+# So the tests below no longer measure how WIDE the key is. Width was the wrong axis: every answer
+# on it was a guess, and two of the three guesses were wrong in production. They check instead
+# that the key is the entire feature vector, which is the only width that is not a guess.
 
 
-def _key_width(sql: str) -> int:
-    """How many columns the join actually uses. Derived, not assumed: the three places that must
-    agree are checked against each other rather than against a number written here, so widening
-    the key does not mean editing the tests."""
-    return len(re.findall(r"s\.f(\d+) = c\.f\1", sql))
+def _join_key_columns(sql: str) -> list[str]:
+    """The columns the id-recovery join actually reads, in order. Read out of the SQL rather than
+    assumed, so this still measures the real join if its shape changes again."""
+    m = re.search(r"JOIN test_src_cur s ON s\.k = \[([^\]]*)\]", sql)
+    assert m is not None, "no id-recovery join of the expected form in the generated SQL"
+    return [c.strip().removeprefix("c.") for c in m.group(1).split(",")]
 
 
-def test_id_recovery_joins_on_a_wide_composite_key():
+def _feature_names(sql: str) -> list[str]:
+    """The columns handed to the model as `features`, which is also every column it echoes back."""
+    m = re.search(r"features := \[([^\]]*)\]", sql)
+    assert m is not None, "no features := [...] argument in the generated SQL"
+    return [c.strip().strip("'") for c in m.group(1).split(",")]
+
+
+def test_id_recovery_joins_on_the_whole_feature_vector():
     sql = build(50, 150, None)
-    w = _key_width(sql)
-    # Four was measurably not enough: ScreenType's series are all distinct and it still fanned
-    # out, because quantised data makes ROCKET's max/PPV coincide across different series.
-    assert w >= 8, f"id-recovery key is only {w} columns wide"
-    for j in range(w):
-        assert f"s.f{j} = c.f{j}" in sql
+    # Not "wide enough" -- complete. Two rows can share this key only if they are the same feature
+    # vector, and identical vectors have identical predictions, so the dedup below is exact.
+    assert _join_key_columns(sql) == _feature_names(sql)
 
 
-def test_id_source_table_and_fill_match_the_join_width():
+def test_id_source_table_carries_the_vector_whole():
     sql = build(50, 150, None)
-    w = _key_width(sql)
-    # A schema wider than the fill leaves NULLs that join to nothing, which surfaces as "scored 0
-    # of 40 groups" and looks like a model problem rather than a plumbing one.
-    assert f"test_src_cur (id BIGINT, " + ", ".join(f"f{j} DOUBLE" for j in range(w)) + ")" in sql
-    assert "SELECT id, " + ", ".join(f"f[{j + 1}]" for j in range(w)) + " FROM feat_cur" in sql
+    # A schema narrower than the join leaves the key partly NULL and it joins to nothing, which
+    # surfaces as "scored 0 of 40 groups" and reads like a model problem rather than a plumbing
+    # one. Storing the list itself makes the two impossible to disagree.
+    assert "test_src_cur (id BIGINT, k DOUBLE[])" in sql
+    assert "INSERT INTO test_src_cur SELECT id, f FROM feat_cur" in sql
 
 
-def test_collision_check_uses_the_same_key_as_the_join():
+def test_no_prefix_of_the_vector_is_used_as_a_key_anywhere():
     sql = build(50, 150, None)
-    w = _key_width(sql)
-    # A guard measuring a narrower key than the join uses would miss exactly the case it exists
-    # for, and one measuring a wider key would cry wolf.
-    assert "count(DISTINCT (" + ", ".join(f"f[{j + 1}]" for j in range(w)) + "))" in sql
+    # The specific shape of all three historical bugs: a per-column equality between the source
+    # table and the classifier output. If one reappears, the key has silently become a prefix
+    # again, and prefixes fail on exactly the datasets nobody tests on.
+    assert not re.search(r"s\.f(\d+) = c\.f\1", sql)
+
+
+def test_duplicate_series_are_reported_but_not_asserted_on():
+    sql = build(50, 150, None)
+    # count(*) - count(DISTINCT f) is byte-identical series (InlineSkate: 29). Under a prefix key
+    # this column counted distinct series a too-narrow key merged, which was a real failure. It
+    # cannot be one now, so it is recorded for the reader and nothing branches on it.
+    assert "SELECT 0, count(*) - count(DISTINCT f), sum(f[1])" in sql
+    assert "count(DISTINCT (" not in sql
 
 
 def test_duplicate_series_are_collapsed_not_counted_twice():

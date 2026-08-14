@@ -117,13 +117,82 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
     )
 
 
+def ts_feature_names(shell: Path, raw_parquet: str) -> list[str]:
+    """The `ts_features_by` output columns, in table order, read from the database.
+
+    Ordered names are needed at SQL-generation time -- for the `features := [...]` argument, the
+    projection and the id-recovery key, which must agree -- and DESCRIBE is the only authority on
+    the order. `ts_features_list()` is not a substitute: it has 117 rows against the table's 116
+    columns -- those rows are feature *definitions*, some parameterised -- and its order is not
+    the column order, so reading it would both miscount and silently transpose.
+
+    Probed against two real rows of the actual dataset rather than a synthetic series, so a dataset
+    whose shape the extension rejects fails here, before a pod run rather than during one.
+    """
+    sql = f"""
+INSTALL anofox_forecast FROM community;
+LOAD anofox_forecast;
+CREATE TABLE probe_long AS
+  SELECT id, u.i AS ts, u.v AS v
+  FROM (SELECT id, values FROM read_parquet('{raw_parquet}') LIMIT 2),
+       unnest(values) WITH ORDINALITY AS u(v, i);
+SELECT column_name FROM (DESCRIBE SELECT * FROM ts_features_by('probe_long', id, ts, v));
+"""
+    r = subprocess.run([str(shell), "-noheader", "-list", "-c", sql],
+                       capture_output=True, text=True)
+    cols = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    names = [c for c in cols if c != "id"]
+    if not names:
+        raise RuntimeError(f"could not read ts feature names.\n{r.stdout[-600:]}\n{r.stderr[-600:]}")
+    return names
+
+
 def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               memory_limit: str, temp_dir: Path, test_chunk: int | None,
               onnx_threads: int, load_rocket: str = "", device: str = "cpu",
               model: str = MODEL, anofox_extension: Path | None = None,
-              register_dir: Path | None = None) -> str:
+              register_dir: Path | None = None, features: str = "rocket",
+              ts_names: list[str] | None = None) -> str:
+    # Which feature families the classifier sees. `rocket` is the 500 random-convolution features
+    # per group that every result so far uses. `ts` is anofox_forecast's 116 statistics, which beat
+    # 10,000 ROCKET features on three of six hard datasets under a ridge. `both` is the open
+    # question: concatenation gained nothing under a ridge (+0.0017 mean), but a ridge on 500
+    # standardised random features drowns 116 statistics, and an in-context model need not.
+    #
+    # 500 + 116 = 616 stays inside the max_features raised above.
+    if features not in ("rocket", "ts", "both"):
+        raise ValueError(f"features must be rocket, ts or both, not {features!r}")
+    ts_names = list(ts_names or [])
+    if features in ("ts", "both") and not ts_names:
+        raise ValueError(f"features={features} needs ts_names; probe them with ts_feature_names()")
+
     n_features = config.features_per_group
-    names = [f"f{j}" for j in range(n_features)]
+    use_rocket = features in ("rocket", "both")
+    use_ts = features in ("ts", "both")
+
+    rocket_names = [f"f{j}" for j in range(n_features)] if use_rocket else []
+    ts_only_names = list(ts_names) if use_ts else []
+
+    # Two forms of every name, because they are read in two ways and conflating them is a silent
+    # failure. `names` is what goes inside the string literals of `features := ['...']`; `quoted` is
+    # the identifier. They differ for the ts columns: those are the extension's own names, not ones
+    # we chose, and `quantile_0.1` contains a dot that DuckDB otherwise reads as a qualifier.
+    names = rocket_names + ts_only_names
+    quoted = rocket_names + [f'"{n}"' for n in ts_only_names]
+
+    # The ts features are computed once per SERIES, not per group -- they have no kernel bank and so
+    # no ensemble axis. With features=ts every one of the 40 groups would therefore see identical
+    # columns and score identically, which is 40x the cost of one group for none of the benefit.
+    #
+    # The rocket bank still runs in ts mode, cheaply, because it is what feeds the kernel-bank
+    # fingerprint and the id/split/label columns; only the classifier stops seeing it. So ts mode
+    # wants a SMALL --num-kernels as well as one group -- 10,000 over one group is 20,000 features
+    # per group, which RocketPFNConfig rejects against the feature cap, and the error would arrive
+    # sounding like a cap problem rather than a mode problem.
+    if features == "ts" and config.n_groups != 1:
+        raise ValueError("features=ts has no per-group variation; use --n-groups 1 "
+                         "(and a small --num-kernels, e.g. 500: the bank only feeds the "
+                         "integrity fingerprint in this mode)")
     # The id-recovery key is the WHOLE feature vector, not a prefix of it.
     #
     # A prefix is a bet on how many leading features it takes to separate two series, and the bet
@@ -139,12 +208,37 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     # being relied on -- a DOUBLE[] equality plans as a HASH_JOIN, not a nested loop, and DuckDB
     # holds NaN = NaN, so a non-finite feature cannot silently drop a row out of the join.
     key_decl = "k DOUBLE[]"
-    key_from_list = "f"
-    key_join = "s.k = [" + ", ".join(f"c.{n}" for n in names) + "]"
+    key_join = "s.k = [" + ", ".join(f"c.{n}" for n in quoted) + "]"
     feature_list = "[" + ", ".join(f"'{n}'" for n in names) + "]"
-    # DuckDB lists are 1-based, so feature j lives at f[j + 1].
-    projection = ", ".join(f"f[{j + 1}] AS f{j}" for j in range(n_features))
-    select_features = ", ".join(names)
+
+    # The projection that turns stored features into the named scalar columns the classifier takes.
+    # DuckDB lists are 1-based, so rocket feature j lives at r.f[j + 1].
+    #
+    # ts columns are guarded for finiteness. They are unbounded statistics on real data -- a
+    # near-constant series makes a variance-normalised one non-finite -- and the screen measured
+    # between 101 and 540 non-finite values per dataset. A NaN reaching the classifier is not a
+    # loud failure, it is a quietly worse number.
+    proj_parts = [f"r.f[{j + 1}] AS f{j}" for j in range(n_features)] if use_rocket else []
+    proj_parts += [f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END AS "{n}"'
+                   for n in ts_only_names]
+    projection = ", ".join(proj_parts)
+
+    # The id-recovery key must be the whole vector the classifier echoes back, in the same order as
+    # `features`. With ts columns that is the rocket list concatenated with the guarded ts values --
+    # `||` on LISTs -- and the order here and in key_join above are the one invariant that cannot
+    # drift, which is why a test compares them element by element rather than trusting this.
+    ts_key_list = ("[" + ", ".join(f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END'
+                                   for n in ts_only_names) + "]") if use_ts else ""
+    if use_rocket and use_ts:
+        key_from_list = f"r.f || {ts_key_list}"
+    elif use_ts:
+        key_from_list = ts_key_list
+    else:
+        key_from_list = "r.f"
+
+    # feat_cur holds the rocket features; tsfeat holds the per-series ts features. Every statement
+    # that reads features reads this same FROM clause, so the two can never fall out of step.
+    feat_from = "feat_cur r" + (" JOIN tsfeat t USING (id)" if use_ts else "")
 
     # `LOAD anofox_tabfm` takes the installed (community, CPU-only) extension. A GPU run needs a
     # self-built cuda flavor loaded from a path instead -- no GPU build is published for any
@@ -239,7 +333,33 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     #
     # PREPARE over a statement containing tabfm_classify, and EXECUTE re-reading the refilled
     # contents, were both verified against the real extension before this was written.
-    schema_cols = ", ".join(f"{n} DOUBLE" for n in names)
+    schema_cols = ", ".join(f"{n} DOUBLE" for n in quoted)
+
+    if use_ts:
+        # Computed ONCE for the whole dataset, before the group loop: these statistics depend on the
+        # raw series and not on the kernel bank, so recomputing them per group would be 40x the work
+        # for identical numbers.
+        #
+        # anofox_forecast is BSL 1.1 -- production use is permitted, offering it to third parties
+        # hosted or embedded is not -- so this is an opt-in experiment behind --features and never a
+        # dependency of the `rocket` extension. See reference/RESULTS.md on which of the 116 are
+        # worth reimplementing from the tsfresh catalogue instead.
+        #
+        # ts_features_by wants long format, one row per (series, timepoint), while `raw` holds one
+        # row per series with a LIST. WITH ORDINALITY supplies the time index; the values are
+        # already normalised, since write_raw_parquet normalises before writing.
+        parts.append(f"""
+INSTALL anofox_forecast FROM community;
+LOAD anofox_forecast;
+CREATE OR REPLACE TABLE ts_long AS
+  SELECT id, u.i AS ts, u.v AS v FROM raw, unnest(values) WITH ORDINALITY AS u(v, i);
+CREATE OR REPLACE TABLE tsfeat AS SELECT * FROM ts_features_by('ts_long', id, ts, v);
+
+-- One row per series or the joins below silently multiply the feature tables.
+SELECT CASE WHEN (SELECT count(*) FROM tsfeat) <> (SELECT count(*) FROM raw)
+            THEN CAST('tsfeat has a different row count than raw' AS BIGINT) ELSE 0 END AS ts_check;
+""")
+
     parts.append(f"""
 CREATE OR REPLACE TABLE feat_cur (id BIGINT, split VARCHAR, label VARCHAR, f DOUBLE[]);
 CREATE OR REPLACE TABLE train_cur (y VARCHAR, {schema_cols});
@@ -283,15 +403,15 @@ PREPARE fill_feat AS
 EXECUTE fill_feat({0});
 
 PREPARE fill_train AS
-  INSERT INTO train_cur SELECT label, {projection} FROM feat_cur WHERE split = 'train';
+  INSERT INTO train_cur SELECT r.label, {projection} FROM {feat_from} WHERE r.split = 'train';
 
 PREPARE fill_test AS
-  INSERT INTO test_cur SELECT {projection} FROM feat_cur
-   WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
+  INSERT INTO test_cur SELECT {projection} FROM {feat_from}
+   WHERE r.split = 'test' AND r.id >= CAST($1 AS BIGINT) AND r.id < CAST($2 AS BIGINT);
 
 PREPARE fill_src AS
-  INSERT INTO test_src_cur SELECT id, {key_from_list} FROM feat_cur
-   WHERE split = 'test' AND id >= CAST($1 AS BIGINT) AND id < CAST($2 AS BIGINT);
+  INSERT INTO test_src_cur SELECT r.id, {key_from_list} FROM {feat_from}
+   WHERE r.split = 'test' AND r.id >= CAST($1 AS BIGINT) AND r.id < CAST($2 AS BIGINT);
 
 -- Prime train_cur and test_cur too: tabfm_classify validates its context at BIND time, so
 -- preparing `score` against an empty train_cur fails with "target 'y' has no non-NULL rows to
@@ -345,8 +465,11 @@ INSERT INTO f0_checks
 -- (InlineSkate: 29), because that is the reason the GROUP BY in `score` exists.
 --
 -- The failure the old column stood in for is covered directly by min/max groups per row.
-SELECT {g}, count(*) - count(DISTINCT f), sum(f[1])
-  FROM feat_cur WHERE split = 'test';
+-- Counted on the actual join key, not on the rocket vector: under --features ts the key is the
+-- statistics and a duplicate count over `f` would describe columns the classifier never saw.
+-- The fingerprint stays r.f[1], which is the kernel bank and is what that column is for.
+SELECT {g}, count(*) - count(DISTINCT ({key_from_list})), sum(r.f[1])
+  FROM {feat_from} WHERE r.split = 'test';
 DELETE FROM train_cur;
 EXECUTE fill_train;
 """)
@@ -497,6 +620,19 @@ def main() -> int:
              "graph fails at a ScatterND node on CUDA (DataZooDE/anofox-tabfm#21).",
     )
     parser.add_argument(
+        "--features",
+        default="rocket",
+        choices=("rocket", "ts", "both"),
+        help="Which feature families the classifier sees. 'rocket' is the 500 "
+             "random-convolution features per group behind every result so far. 'ts' is "
+             "anofox_forecast's 116 in-database statistics, which beat 10,000 ROCKET features on "
+             "three of six hard datasets under a ridge -- univariate only, and it forces "
+             "--n-groups 1 because those statistics have no kernel bank and so no ensemble axis. "
+             "'both' is the open question: concatenation gained nothing under a ridge, but a ridge "
+             "drowns 116 statistics in 500 random features and an in-context model need not. "
+             "anofox_forecast is BSL 1.1, so ts and both are experiments, never a dependency.",
+    )
+    parser.add_argument(
         "--anofox-extension",
         type=Path,
         default=None,
@@ -558,11 +694,23 @@ def main() -> int:
     if args.anofox_extension and "-unsigned" not in shell_args:
         shell_args = [*shell_args, "-unsigned"]
 
+    ts_names: list[str] = []
+    if args.features in ("ts", "both"):
+        if meta["multivariate"]:
+            print(f"      --features {args.features} is univariate only: ts_features_by takes one "
+                  f"(group, time, value) triple and {args.dataset} has {meta['n_channels']} channels")
+            return 1
+        ts_names = ts_feature_names(shell, meta["raw_parquet"])
+        print(f"      + {len(ts_names)} anofox_forecast statistics per series "
+              f"({args.features}); BSL 1.1, so this is an experiment and not a dependency",
+              flush=True)
+
     sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
                     args.test_chunk, onnx_threads, load_rocket,
                     device=args.device, model=MODEL,
                     anofox_extension=args.anofox_extension,
-                    register_dir=args.register_model_dir)
+                    register_dir=args.register_model_dir,
+                    features=args.features, ts_names=ts_names)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")

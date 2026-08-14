@@ -1,14 +1,14 @@
-"""Screen `anofox_forecast`'s 117 statistical features: do they carry signal ROCKET misses?
+"""Screen `anofox_forecast`'s 116 statistical features: do they carry signal ROCKET misses?
 
 RESULTS.md's uncomfortable finding is that the *feature extractor* is the live lever, not the
 classifier -- MultiRocketHydra beat the whole in-context pipeline on Herring (0.7344 vs 0.6406) with
 a linear head on better features. So a second, orthogonal feature family is worth measuring, and
-`anofox_forecast` ships one in-database: `ts_features_by` returns one row per series with 117
+`anofox_forecast` ships one in-database: `ts_features_by` returns one row per series with 116
 numeric columns, which is exactly the shape our classifier path already consumes.
 
 **This script uses that extension as a BLACK BOX, on purpose.** anofox_forecast is BSL 1.1: its
 Additional Use Grant permits production use but forbids offering it "to third parties on a hosted or
-embedded basis", so `rocket` must never depend on it. The plan is to find which of the 117 features
+embedded basis", so `rocket` must never depend on it. The plan is to find which of the 116 features
 carry signal here and reimplement only those -- from the tsfresh catalogue (MIT) or the underlying
 mathematics, which is where these statistics come from in the first place, and NOT from reading
 DataZooDE's Rust. Screening with someone's binary is fine; deriving from their source is not the
@@ -16,9 +16,9 @@ same act.
 
 Three numbers per dataset, same head (RidgeClassifierCV) so the features are the only variable:
 
-    ts        117 statistical features
+    ts        116 statistical features
     rocket    10,000 ROCKET features -- the baseline already in reference/RESULTS.md
-    both      concatenated, which is the question worth asking: do 117 interpretable features
+    both      concatenated, which is the question worth asking: do 116 interpretable features
               add anything to 10,000 random convolutions?
 
     uv run python scripts/ts_features_screen.py --datasets Herring MiddlePhalanxTW
@@ -55,7 +55,7 @@ HARD = ("Herring", "MiddlePhalanxTW", "RefrigerationDevices", "Haptics", "Screen
 
 
 def ts_features(x: np.ndarray, shell: Path) -> tuple[np.ndarray, list[str], int]:
-    """The 117 features, computed by anofox_forecast, for one array of series.
+    """The 116 features, computed by anofox_forecast, for one array of series.
 
     Univariate only. `ts_features_by` takes long format -- (group, time, value) -- while our arrays
     are one series per row, so the series are unnested WITH ORDINALITY on the way in. Multivariate
@@ -161,7 +161,7 @@ def main() -> int:
               f"{a_ts - a_rk:+8.4f} {a_bo - a_rk:+10.4f} {bad_tr + bad_te:10d} {secs:6.1f}")
 
         # Which features to reimplement, if any. Coefficient magnitude on standardised features is
-        # a crude ranking and is reported as one: it is a screen to shorten a list of 117, not a
+        # a crude ranking and is reported as one: it is a screen to shorten a list of 116, not a
         # claim about which statistics matter in general.
         sc = StandardScaler().fit(ttr)
         clf = RidgeClassifierCV(alphas=np.logspace(-3, 3, 10)).fit(sc.transform(ttr), ytr)

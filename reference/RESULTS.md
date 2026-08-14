@@ -372,17 +372,20 @@ first came out of a run whose row alignment was wrong. They are reported now, at
 `min_groups_per_row = max_groups_per_row = 40` on both — 15,000 group-rows over 375 ids and 22,000
 over 550. `reference/phase5_ScreenType_gpu.json`, `reference/phase5_InlineSkate_gpu.json`.
 
-### 117 statistical features beat 10,000 ROCKET features on half of them (2026-08-14)
+### 116 statistical features beat 10,000 ROCKET features on half of them (2026-08-14)
 
 `anofox_forecast` -- the same vendor's forecasting extension -- exposes `ts_features_by(table, group,
-time, value)`, which returns one row per series with **117 numeric feature columns**: the tsfresh
-catalogue of statistics, computed in-database. That is exactly the shape our classifier path already
+time, value)`, which returns one row per series with **116 numeric feature columns**: the tsfresh
+catalogue of statistics, computed in-database. (`ts_features_list()` has 117 rows, but those are
+feature *definitions* -- some parameterised -- and the emitted table carries 116. The screen and
+everything below use the 116 that actually exist, read from `DESCRIBE`; an earlier draft of this
+section said 117 throughout.) That is exactly the shape our classifier path already
 consumes, so it is a second feature family for the cost of an `unnest ... WITH ORDINALITY`.
 
 Same head (`RidgeClassifierCV`) throughout, so the features are the only variable.
 `scripts/ts_features_screen.py`, `reference/ts_features_screen.json`.
 
-| dataset | ts (117) | rocket (10,000) | both | ts − rocket | **pipeline** |
+| dataset | ts (116) | rocket (10,000) | both | ts − rocket | **pipeline** |
 |---|---|---|---|---|---|
 | MiddlePhalanxTW | 0.6039 | 0.5325 | 0.5390 | **+0.0714** | 0.6104 |
 | RefrigerationDevices | **0.6027** | 0.5307 | 0.5360 | **+0.0720** | 0.5573 |
@@ -398,16 +401,17 @@ one side.
 
 Two results worth stating plainly:
 
-* **On RefrigerationDevices, 117 features and a linear model beat the entire GPU pipeline** --
+* **On RefrigerationDevices, 116 features and a linear model beat the entire GPU pipeline** --
   0.6027 against 0.5573 -- and land on the best published accuracy for the dataset (0.600, +0.0027).
 * On ScreenType they also beat the pipeline, 0.5467 against 0.5200. On MiddlePhalanxTW they come
   within 0.0065 of it while still clearing the best published result (0.578).
 
 **And naive concatenation does not capture any of it.** `both` moves +0.0017 on average and never
-more than +0.0065: 500 standardised random features per group drown 117 statistics in a ridge. That
-is a fact about the *ridge*, not necessarily about the in-context model, and 500 + 117 = 617 fits
+more than +0.0065: 500 standardised random features per group drown 116 statistics in a ridge. That
+is a fact about the *ridge*, not necessarily about the in-context model, and 500 + 116 = 616 fits
 under the `anofox_tabfm_max_features` we already raise -- so whether `tabfm_classify` can use both
-is a separate, untested question and the obvious next experiment.
+is a separate question -- the plumbing is in (`--features both`, 616 columns end to end) and
+the pod run is what remains.
 
 The shortlist -- statistics ranking highly on more than one dataset, by coefficient magnitude on
 standardised features, which is a screen and not a claim about importance in general:

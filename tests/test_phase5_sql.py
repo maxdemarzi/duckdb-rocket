@@ -288,7 +288,7 @@ def _join_key_columns(sql: str) -> list[str]:
     assumed, so this still measures the real join if its shape changes again."""
     m = re.search(r"JOIN test_src_cur s ON s\.k = \[([^\]]*)\]", sql)
     assert m is not None, "no id-recovery join of the expected form in the generated SQL"
-    return [c.strip().removeprefix("c.") for c in m.group(1).split(",")]
+    return [c.strip().removeprefix("c.").strip('"') for c in m.group(1).split(",")]
 
 
 def _feature_names(sql: str) -> list[str]:
@@ -311,7 +311,8 @@ def test_id_source_table_carries_the_vector_whole():
     # surfaces as "scored 0 of 40 groups" and reads like a model problem rather than a plumbing
     # one. Storing the list itself makes the two impossible to disagree.
     assert "test_src_cur (id BIGINT, k DOUBLE[])" in sql
-    assert "INSERT INTO test_src_cur SELECT id, f FROM feat_cur" in sql
+    # feat_cur is aliased `r` since --features gained a second family to join in.
+    assert "INSERT INTO test_src_cur SELECT r.id, r.f FROM feat_cur r" in sql
 
 
 def test_no_prefix_of_the_vector_is_used_as_a_key_anywhere():
@@ -327,8 +328,100 @@ def test_duplicate_series_are_reported_but_not_asserted_on():
     # count(*) - count(DISTINCT f) is byte-identical series (InlineSkate: 29). Under a prefix key
     # this column counted distinct series a too-narrow key merged, which was a real failure. It
     # cannot be one now, so it is recorded for the reader and nothing branches on it.
-    assert "SELECT 0, count(*) - count(DISTINCT f), sum(f[1])" in sql
-    assert "count(DISTINCT (" not in sql
+    assert "SELECT 0, count(*) - count(DISTINCT (r.f)), sum(r.f[1])" in sql
+
+
+# --- the second feature family ------------------------------------------------------------
+#
+# anofox_forecast's 117 statistics beat 10,000 ROCKET features on three of six hard datasets under
+# a ridge, and concatenating them gained nothing there (+0.0017 mean) -- which may be a fact about
+# the ridge rather than about the features, since 500 standardised random columns drown 117. These
+# pin the plumbing for the experiment that answers it.
+
+TS = ["mean", "standard_deviation", "quantile_0.1", "fft_coefficient_3_imag"]
+
+
+def build_features(mode: str, n_groups: int = 40, ts=TS, num_kernels: int | None = None) -> str:
+    cfg = RocketPFNConfig(num_kernels=num_kernels or (500 if n_groups == 1 else 10_000),
+                          n_groups=n_groups, seed=0, n_estimators=1)
+    cfg.validate()
+    meta = {"raw_parquet": "/tmp/raw.parquet", "n_train": 50, "n_test": 150,
+            "multivariate": False, "n_channels": 1}
+    return p5.build_sql(cfg, meta, WORKDIR, 4, "20GB", WORKDIR, 128, 16,
+                        features=mode, ts_names=ts)
+
+
+@pytest.mark.parametrize("mode", ["rocket", "ts", "both"])
+def test_the_join_key_matches_the_feature_list_in_every_mode(mode):
+    # THE invariant. The key is rebuilt from the classifier's echoed columns, so if its order ever
+    # diverges from `features := [...]` the join compares feature 3 against feature 7 -- which does
+    # not error, it silently recovers the wrong ids. Checked element by element, in order.
+    sql = build_features(mode, n_groups=1 if mode == "ts" else 40)
+    assert _join_key_columns(sql) == _feature_names(sql)
+
+
+def test_both_is_rocket_then_ts_and_nothing_dropped():
+    sql = build_features("both")
+    names = _feature_names(sql)
+    assert names == [f"f{j}" for j in range(500)] + TS
+    assert len(names) == 500 + len(TS)
+
+
+def test_ts_only_drops_the_rocket_columns():
+    sql = build_features("ts", n_groups=1)
+    assert _feature_names(sql) == TS
+
+
+def test_ts_features_are_guarded_for_finiteness():
+    # Unbounded statistics on real data: a near-constant series makes a variance-normalised feature
+    # non-finite, and the screen measured 101-540 of them per dataset. A NaN reaching the classifier
+    # is not a loud failure, it is a quietly worse number.
+    sql = build_features("both")
+    for n in TS:
+        assert f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END' in sql
+
+
+def test_ts_names_are_quoted_because_one_of_them_contains_a_dot():
+    # `quantile_0.1` unquoted reads as table `quantile_0` column `1`.
+    sql = build_features("both")
+    assert '"quantile_0.1"' in sql
+    assert re.search(r"[^\"]quantile_0\.1[^\"]", sql.replace("'quantile_0.1'", "")) is None
+
+
+def test_ts_features_are_computed_once_not_per_group():
+    # They depend on the raw series, not the kernel bank. Recomputing per group would be 40x the
+    # work for identical numbers.
+    sql = build_features("both")
+    assert sql.count("CREATE OR REPLACE TABLE tsfeat") == 1
+    assert sql.index("CREATE OR REPLACE TABLE tsfeat") < sql.index("-- Group 0:")
+
+
+def test_ts_row_count_is_checked_against_raw():
+    # A tsfeat with more than one row per series multiplies the feature tables through the join.
+    assert "ts_check" in build_features("both")
+
+
+def test_ts_alone_refuses_a_multi_group_ensemble():
+    # Every group would see identical columns and score identically.
+    with pytest.raises(ValueError, match="no per-group variation"):
+        build_features("ts", n_groups=40)
+
+
+def test_ts_modes_require_the_probed_names():
+    with pytest.raises(ValueError, match="needs ts_names"):
+        build_features("both", ts=[])
+
+
+def test_an_unknown_feature_mode_is_refused():
+    with pytest.raises(ValueError, match="rocket, ts or both"):
+        build_features("tsfresh")
+
+
+def test_rocket_mode_is_unchanged_by_the_new_plumbing():
+    # The mode behind every published number. Its SQL must not acquire a tsfeat join.
+    sql = build_features("rocket")
+    assert "tsfeat" not in sql and "anofox_forecast" not in sql
+    assert _feature_names(sql) == [f"f{j}" for j in range(500)]
 
 
 def test_duplicate_series_are_collapsed_not_counted_twice():

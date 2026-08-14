@@ -22,9 +22,11 @@ A pod with no process and an idle GPU is dead weight. A pod with a process but a
 and an old mtime is hung, which bills identically. Both are reported; neither is terminated
 without `--terminate-idle`.
 
-**Only pods whose name matches `--mine` can ever be terminated.** This account runs other
-people's work -- `tabicl-*`, `duckdb-rocket-*` -- and a cleanup tool that can reach those is
-worse than the leak it prevents. The default prefixes are this project's own.
+**Only pods whose name matches `--mine` can ever be terminated.** This account is shared: the
+black_swan project runs `eval-*`, `pattern-arm-*`, `sft-*` and `harvest-*` pods on it, and a
+cleanup tool that can reach those is worse than the leak it prevents. The default prefix is
+`duckdb-rocket-`, which is this project's own -- see the note on `--mine` below for why that
+sentence was false when it was first written.
 
     python scripts/pod/pod_audit.py
     python scripts/pod/pod_audit.py --terminate-idle
@@ -91,7 +93,15 @@ def ssh_probe(pod_id: str, timeout: int) -> dict | None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mine", default="pattern-arm-,eval-,sft-,harvest-",
+    # `pattern-arm-,eval-,sft-,harvest-` were the defaults here until 2026-08-14, ported with the
+    # rest of the file from black_swan. Those are BLACK_SWAN's arm prefixes. In this repo they named
+    # nothing at all, and pointed the one destructive flag squarely at the other project's pods:
+    # `--terminate-idle` would have read `eval-arctic8d`, a black_swan run that was live at the time,
+    # as ours and destroyed it. The guard written to protect other people's work was aimed at it.
+    #
+    # It never fired only because the file could not be imported (it named a module this repo does
+    # not have) and because --terminate-idle was never passed. Fixing that import armed it.
+    ap.add_argument("--mine", default="duckdb-rocket-",
                     help="comma-separated NAME PREFIXES this tool is allowed to touch. Pods "
                          "outside these are reported and never terminated: the account runs "
                          "other people's work and a cleanup that can reach it is worse than "

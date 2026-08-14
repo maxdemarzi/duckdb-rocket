@@ -38,6 +38,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 import tarfile
 import urllib.error
 import urllib.request
@@ -77,7 +78,35 @@ GPU = "NVIDIA L40S"
 # does not. gpuTypePriority=availability means RunPod walks this list rather than failing.
 GPU_ALTERNATES = ("NVIDIA RTX 6000 Ada Generation", "NVIDIA RTX A6000", "NVIDIA A40")
 
-POD_NAME = "black-swan-l40s"
+# The name is an ownership label on a SHARED account, not decoration.
+#
+# It read "black-swan-l40s" until 2026-08-14 -- the default carried over with this file from
+# black_swan, which still runs pods on this same account. So every pod this project created
+# announced itself as the other project's, with two consequences that both bite:
+#
+#   * pod_audit.py could not recognise this project's own pods, so a leak here was reported as
+#     "not mine, skipped" and left to bill;
+#   * there was no way to tell, from the pod list alone, which project owned a given pod -- and the
+#     safe reading of an ambiguous pod is "someone else's", which means never cleaning it up.
+#
+# Prefix, not exact name: pod_audit.py matches on `duckdb-rocket-` and both must move together.
+POD_NAME = "duckdb-rocket-gpu"
+
+# Regions RunPod may place a pod in that this account should not keep.
+#
+# Inherited from black_swan the hard way: every pod it allocated in SE died -- twice at the artefact
+# upload with `scp: Connection closed`, once mid-training with a connection reset -- while every CA
+# pod finished. The failure is transport, not compute, so it lands at the moment the results would
+# have come off the machine, which is the most expensive moment to lose.
+#
+# There is no region field on the create call: `dataCenterIds` is not part of the request this
+# script makes, and `--cloud COMMUNITY|SECURE` is the only placement lever the API offers here. The
+# single available move is to create, read `machine.location` back, and hand back a bad one. Twenty
+# seconds of a pod costs a fraction of a cent; discovering it at minute 60 costs the run.
+#
+# In black_swan this check lives copy-pasted in thirteen git-ignored wrapper scripts, so it protects
+# whichever script the author remembered. Here it belongs to `create`.
+DENY_REGIONS = ("SE",)
 
 # Container disk holds the image (~20 GB) plus pip: vllm and its deps are another ~10 GB
 # and they land in site-packages, not on the volume.
@@ -384,6 +413,26 @@ def cmd_payload(args: argparse.Namespace) -> int:
 # pod lifecycle
 # --------------------------------------------------------------------------- #
 
+def pod_region(pod_id: str, verbose: bool = False, tries: int = 10) -> str | None:
+    """The two-letter `machine.location` of a pod, once RunPod reports one.
+
+    Only the GraphQL view carries it -- the REST pod object does not -- which is why this is a
+    second call rather than a field read. It is polled because location is not populated the
+    instant `create` returns, and a `None` read would look exactly like an allowed region and let a
+    denied pod through.
+    """
+    for _ in range(tries):
+        pods = (gql("query { myself { pods { id machine { location } } } }",
+                    verbose=verbose).get("myself", {}) or {}).get("pods") or []
+        for p in pods:
+            if p.get("id") == pod_id:
+                loc = (p.get("machine") or {}).get("location")
+                if loc:
+                    return str(loc)
+        time.sleep(6)
+    return None
+
+
 def cmd_create(args: argparse.Namespace) -> int:
     if not args.yes_i_will_pay:
         cmd_plan(args)
@@ -397,11 +446,34 @@ def cmd_create(args: argparse.Namespace) -> int:
         print(f"REFUSING: {clash[0]['id']} is already RUNNING as '{args.name}'. "
               f"Use it, or pass --allow-duplicate.")
         return 1
-    pod = _request(REST + "/pods", method="POST", body=create_body(args), verbose=args.verbose)
-    print(json.dumps(pod, indent=2))
-    print(f"\ncreated {pod.get('id')} -- it is billing now. "
-          f"Next: {pathlib.Path(__file__).name} ssh {pod.get('id')}")
-    return 0
+    for attempt in range(1, args.attempts + 1):
+        pod = _request(REST + "/pods", method="POST", body=create_body(args),
+                       verbose=args.verbose)
+        pod_id = pod.get("id")
+        if not pod_id:
+            print(json.dumps(pod, indent=2))
+            print("REFUSING to continue: create returned no pod id")
+            return 1
+
+        region = pod_region(pod_id, verbose=args.verbose)
+        if region in DENY_REGIONS and not args.allow_region:
+            # Hand it straight back. Deliberately before printing the create body or the ssh hint,
+            # so a rejected pod cannot be mistaken for the one to use.
+            print(f"attempt {attempt}/{args.attempts}: {pod_id} landed in {region}, which this "
+                  f"account does not keep -- terminating and retrying")
+            _request(f"{REST}/pods/{pod_id}", method="DELETE", verbose=args.verbose)
+            if attempt == args.attempts:
+                print(f"\nREFUSING: {args.attempts} attempts all landed in {DENY_REGIONS}. "
+                      f"Nothing is billing. Retry later, or pass --allow-region to override.")
+                return 1
+            time.sleep(20)
+            continue
+
+        print(json.dumps(pod, indent=2))
+        print(f"\ncreated {pod_id} in {region or 'an unreported region'} -- it is billing now. "
+              f"Next: {pathlib.Path(__file__).name} ssh {pod_id}")
+        return 0
+    return 1
 
 
 def cmd_ssh(args: argparse.Namespace) -> int:
@@ -480,6 +552,10 @@ def main() -> int:
     add_recipe_flags(create)
     create.add_argument("--yes-i-will-pay", action="store_true")
     create.add_argument("--allow-duplicate", action="store_true")
+    create.add_argument("--attempts", type=int, default=6,
+                        help="how many times to retry when a pod lands in a denied region")
+    create.add_argument("--allow-region", action="store_true",
+                        help=f"keep a pod even if it lands in {DENY_REGIONS}")
     create.set_defaults(func=cmd_create)
 
     for name, func in (("ssh", cmd_ssh), ("stop", cmd_stop), ("terminate", cmd_terminate)):

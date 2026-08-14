@@ -42,6 +42,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -164,18 +165,58 @@ def cmd_plan(args) -> int:
     return 0
 
 
+def denied_placement(pod: dict) -> str | None:
+    """Why this pod should be handed straight back, or None to keep it.
+
+    The lists live in runpod_gpu.py and are IMPORTED rather than copied. black_swan has this same
+    check duplicated across thirteen git-ignored wrapper scripts, so it protects whichever script the
+    author happened to remember. One definition, two launchers.
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import runpod_gpu as rp
+    except Exception:  # noqa: BLE001
+        return None  # no deny list reachable: keep the pod rather than guess
+    machine = str(pod.get("machineId") or "")
+    if machine in rp.DENY_MACHINES:
+        return f"machine {machine} has had a dead CUDA stack on every pod so far"
+    region = rp.pod_region(str(pod.get("id")))
+    if region in rp.DENY_REGIONS:
+        return f"region {region}, where every pod this account allocated has died"
+    return None
+
+
 def cmd_create(args) -> int:
     if not args.yes_i_will_pay:
         print("REFUSING: this creates a billable pod. Pass --yes-i-will-pay if that is what "
               "you want.", file=sys.stderr)
         return 1
-    pod = request("/pods", method="POST", body=recipe(args))
-    pod_id = pod.get("id") or (pod.get("data") or {}).get("id")
-    print(json.dumps(pod, indent=2)[:1500])
-    print(f"\ncreated {pod_id} -- it is billing now. "
-          f"Next: runpod_cpu.py ssh {pod_id}")
-    print("Remember to terminate it; a forgotten pod is the expensive failure mode.")
-    return 0
+    for attempt in range(1, args.attempts + 1):
+        pod = request("/pods", method="POST", body=recipe(args))
+        pod_id = pod.get("id") or (pod.get("data") or {}).get("id")
+        if not pod_id:
+            print(json.dumps(pod, indent=2)[:1500])
+            print("REFUSING to continue: create returned no pod id")
+            return 1
+        reason = None if args.allow_region else denied_placement(pod)
+        if reason:
+            # Printed before anything that looks like success, so a rejected pod cannot be mistaken
+            # for the one to use.
+            print(f"attempt {attempt}/{args.attempts}: {pod_id} -- {reason}; "
+                  f"terminating and retrying")
+            request(f"/pods/{pod_id}", method="DELETE")
+            if attempt == args.attempts:
+                print(f"\nREFUSING: all {args.attempts} attempts landed somewhere denied. "
+                      f"Nothing is billing.")
+                return 1
+            time.sleep(20)
+            continue
+        print(json.dumps(pod, indent=2)[:1500])
+        print(f"\ncreated {pod_id} -- it is billing now. "
+              f"Next: runpod_cpu.py ssh {pod_id}")
+        print("Remember to terminate it; a forgotten pod is the expensive failure mode.")
+        return 0
+    return 1
 
 
 def cmd_ssh(args) -> int:
@@ -292,6 +333,10 @@ def main() -> int:
     create = subparsers.add_parser("create")
     add_recipe_flags(create)
     create.add_argument("--yes-i-will-pay", action="store_true")
+    create.add_argument("--attempts", type=int, default=6,
+                        help="retries when a pod lands in a denied region or on a denied machine")
+    create.add_argument("--allow-region", action="store_true",
+                        help="keep a pod even if its placement is on the deny list")
     create.set_defaults(func=cmd_create)
 
     for name, func in (("ssh", cmd_ssh), ("gate", cmd_gate),

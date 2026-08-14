@@ -1,10 +1,33 @@
 # The one-two punch: label with the teacher, serve with a student
 
-**Status: GATE FAILED. Not building it.** The plan below is kept as written, followed by the
-measurement that killed it, because a plan with a kill criterion is only worth anything if the
-criterion is actually applied when it fires.
+**Status: gate failed on the wrong datasets. Re-open before believing the negative.**
 
-## Result: no headroom exists on this benchmark suite
+The gate below fired and was honoured, and the measurement stands: on the ten-dataset subset there
+is no headroom to distil. But the subset was chosen for *spread*, and nine of its ten datasets sit
+at 0.94-1.00, where a ROCKET-family classifier has already extracted everything available. Testing
+"does more data help" on saturated problems answers a question nobody asked.
+
+The published UCR results say where the headroom actually is: of 112 datasets, **13 have a best
+published accuracy below 0.75 and 7 below 0.60** — Phoneme 0.367, InlineSkate 0.544,
+EOGVerticalSignal 0.558, Haptics 0.571, ScreenType 0.595, RefrigerationDevices 0.600. On several,
+ROCKET *specifically* trails the field (ScreenType 0.467 vs 0.595; Herring 0.594 vs 0.734). That is
+10-20 points of headroom against the <1 point that killed arm B here.
+
+**So the correct reading is "not demonstrated", not "disproved".** The gate should be re-run on the
+hard datasets before the student stack -- MultiRocketHydra on CPU, LITE/InceptionTimePlus with
+KLDivLoss and augmentation on GPU -- is abandoned.
+
+One hard constraint found while scoping that: **`tabicl-v2` caps at 10 classes** (`max_classes: 10`
+in its export report), so Phoneme (39) and EOGVerticalSignal (12) — two of the hardest datasets in
+the archive — are out of reach for the teacher entirely. Six of the hard set are reachable: Herring,
+MiddlePhalanxTW, ScreenType, RefrigerationDevices, Haptics, InlineSkate.
+
+The prerequisite question is sharper than the gate itself: on those datasets, does the pipeline beat
+ROCKET+ridge? Both use the same features. If it does, the in-context model is extracting more from
+them and distillation has something to inherit. If both are equally poor, the *features* are the
+ceiling and no student can fix that.
+
+## Result on the saturated subset: no headroom there
 
 Arms A and C, `scripts/distill_gate.py`, stratified half/half split of each test set:
 

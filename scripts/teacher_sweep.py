@@ -205,7 +205,12 @@ def main() -> int:
             ran += 1
             continue
         ran += 1
-        tail = [l for l in r.stdout.splitlines() if "accuracy" in l or "row alignment" in l]
+        # "FAILED" is in this filter because phase5 prints the one line that identifies a crash --
+        # "FAILED after 18.4s (exit -9)" -- to stdout, and a filter of accuracy/row-alignment drops
+        # exactly the runs that have neither. That turned a SIGKILL into "rc=1; last stderr: ['']"
+        # twice, and both times the visible evidence pointed somewhere else.
+        tail = [l for l in r.stdout.splitlines()
+                if "accuracy" in l or "row alignment" in l or "FAILED" in l]
         for l in tail:
             print("  " + l.strip(), flush=True)
         if r.returncode == 0:

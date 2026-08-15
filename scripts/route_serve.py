@@ -167,6 +167,34 @@ def group_seconds(workdir: Path) -> tuple[float, float, float] | None:
     return sum(float(r["transform_seconds"]) for r in t), sum(cl), (cl[-1] / med if med else 1.0)
 
 
+def steadiness(workdir: Path) -> tuple[float, float] | None:
+    """(spread of the repeated groups, group 0's warm-up factor) -- a contention detector.
+
+    The 40 groups are the same computation 40 times over, so on an idle box their times are nearly
+    identical: measured at +/-1% across the last five groups of every run here. Background load does
+    not arrive uniformly, so it shows up as scatter. That makes this the check `serve` used to say
+    it could not do -- it printed "this script cannot tell whether it is running clean" while
+    writing the evidence to timings.json.
+
+    Group 0 is excluded from the spread and reported separately: it carries the ONNX session
+    warm-up and ran 1.2-1.4x the rest on every clean run, so folding it in would make a clean run
+    look contended.
+    """
+    p = workdir / "timings.json"
+    if not p.exists():
+        return None
+    t = sorted(json.loads(p.read_text(encoding="utf-8")), key=lambda r: r["grp"])
+    if len(t) < 3:
+        return None
+    cl = [float(r["classify_seconds"]) for r in t]
+    rest = cl[1:]
+    mean = sum(rest) / len(rest)
+    if mean <= 0:
+        return None
+    var = sum((x - mean) ** 2 for x in rest) / len(rest)
+    return (var ** 0.5) / mean, cl[0] / mean
+
+
 def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
                wall_small: float, wall_big: float) -> None:
     """Split the teacher's cost into the part routing can avoid and the part it cannot.
@@ -272,8 +300,18 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int, seed: int, shell: 
         print(f"  the escalated {esc.mean():.0%} of rows took {t_teacher / total:.0%} of the time")
         print("  (--compare runs the teacher on every row too, which is the only honest way to "
               "state a cost ratio)")
-    print("\n  Timings mean nothing on a contended box. RESULTS.md measures ~1.8x inflation here "
-          "from background load alone, and this script cannot tell whether it is running clean.")
+    # Not "timings mean nothing on a contended box, and this cannot tell" -- it can, from the
+    # repeated groups it already timed.
+    st = steadiness(workdir)
+    if st is None:
+        print("\n  No per-group timings, so nothing here says whether the box was contended.")
+    else:
+        cv, warm = st
+        verdict = ("the box looks idle" if cv < 0.05 else
+                   "SOMETHING ELSE WAS RUNNING; treat these timings as upper bounds")
+        print(f"\n  Per-group spread {cv:.1%} (group 0 warm-up {warm:.2f}x): {verdict}.")
+        print("  The groups are the same computation repeated, so on a quiet box they land within "
+              "a percent or two of each other and background load shows up as scatter.")
     return 0
 
 

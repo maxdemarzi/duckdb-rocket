@@ -171,3 +171,26 @@ def test_cost_model_warns_when_one_group_stalled(tmp_path, capsys):
     (small / "timings.json").write_text(json.dumps(t), encoding="utf-8")
     cost_model(small, big, 14, 64, 40, 60.0, 82.0)
     assert "CAUTION" in capsys.readouterr().out
+
+
+def test_steadiness_reads_an_idle_run_as_idle(tmp_path):
+    """The real ScreenType/128 shape: a warm first group, then flat to a percent."""
+    from route_serve import steadiness
+    cl = [7.661] + [6.2, 6.25, 6.2, 6.21, 6.23, 6.29, 6.24, 6.26, 6.22]
+    (tmp_path / "timings.json").write_text(json.dumps(
+        [{"grp": g, "transform_seconds": 0.3, "classify_seconds": c} for g, c in enumerate(cl)]),
+        encoding="utf-8")
+    cv, warm = steadiness(tmp_path)
+    assert cv < 0.05, f"an idle run read as contended ({cv:.3f})"
+    assert 1.1 < warm < 1.5, "group 0's warm-up should be visible but modest"
+
+
+def test_steadiness_flags_scatter_and_ignores_the_warm_first_group(tmp_path):
+    """Background load arrives unevenly, so it shows up as scatter in the repeated groups."""
+    from route_serve import steadiness
+    cl = [7.6] + [6.2, 11.4, 6.3, 9.8, 6.2, 14.1, 6.3, 6.2, 10.9]
+    (tmp_path / "timings.json").write_text(json.dumps(
+        [{"grp": g, "transform_seconds": 0.3, "classify_seconds": c} for g, c in enumerate(cl)]),
+        encoding="utf-8")
+    cv, _ = steadiness(tmp_path)
+    assert cv > 0.05, f"a visibly contended run read as clean ({cv:.3f})"

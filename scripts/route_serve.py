@@ -130,16 +130,8 @@ def teacher_predict(dataset: str, idx: np.ndarray, workdir: Path, n_groups: int,
             "n_timepoints": int(xtr.shape[-1]), "multivariate": False,
             "raw_parquet": raw.as_posix()}
     # Not a hardcoded "8GB", which is what this was and which is an order of magnitude under
-    # phase5's own cgroup-aware default (44GB on the dev box, ~87GB on the 124GB pod).
-    #
-    # What is measured: SemgHandMovementCh2 -- the longest series here at 1500 timepoints -- scored
-    # group 1 of 40 in the full-batch arm and then died, with nothing on stderr but the usual ONNX
-    # schema noise, minutes after its own smaller escalated arm had succeeded. 578 rows against 474.
-    # What is inferred: that the limit was the cause. No OOM appeared in dmesg and the captured
-    # stdout was truncated to its last 800 characters, so this is the probable explanation rather
-    # than a proven one -- but a budget that is fine for the escalated call and fatal for the full
-    # one is exactly the shape that loses a --compare run only the arm it exists to measure, and
-    # there is no reason to run the teacher under a budget the rest of the codebase does not.
+    # phase5's own cgroup-aware default (44GB on the dev box, ~87GB on the 124GB pod). Worth
+    # matching the rest of the codebase regardless -- but note what it did NOT fix, below.
     sql = p5.build_sql(cfg, meta, workdir, 4, memory_limit or p5.default_memory_limit(),
                        workdir, 128, 4, device="cpu")
     (workdir / "serve.sql").write_text(sql, encoding="utf-8")
@@ -149,7 +141,18 @@ def teacher_predict(dataset: str, idx: np.ndarray, workdir: Path, n_groups: int,
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     pred_path = workdir / "predictions.json"
     if not pred_path.exists():
-        raise RuntimeError(f"the teacher produced no predictions.\n{r.stdout[-800:]}\n{r.stderr[-800:]}")
+        # The exit code, the group it reached, and the whole stdout on disk -- none of which this
+        # reported before, which is why an 8GB memory limit got diagnosed as the cause of a failure
+        # that recurred at 87GB. A negative code is a signal (-11 is SIGSEGV, -9 an OOM kill); a
+        # positive one is DuckDB refusing something and the message will be in the log.
+        crash = workdir / "crash.log"
+        crash.write_text(f"returncode={r.returncode}\n\n=== stdout ===\n{r.stdout}\n"
+                         f"\n=== stderr ===\n{r.stderr}", encoding="utf-8")
+        groups = r.stdout.count("] group ")
+        raise RuntimeError(
+            f"the teacher produced no predictions: the shell exited {r.returncode} after scoring "
+            f"{groups} of {cfg.n_groups} groups on {n_q} test rows. Full output in {crash}.\n"
+            f"{r.stdout[-800:]}\n{r.stderr[-800:]}")
     by_id = {int(p["id"]): str(p["yhat"])
              for p in json.loads(pred_path.read_text(encoding="utf-8"))}
     # Test row k is id n_train + k, asserted rather than assumed: the same offset that took three

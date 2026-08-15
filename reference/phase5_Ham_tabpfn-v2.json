@@ -1,0 +1,67 @@
+{
+  "dataset": "Ham",
+  "model": "tabpfn-v2",
+  "device": "cpu",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "threads": 4,
+    "memory_limit": "20GB",
+    "memory_budget_source": "cgroup v2",
+    "test_chunk": 128,
+    "onnx_threads": 4,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "Ham",
+    "n_train": 109,
+    "n_test": 105,
+    "n_channels": 1,
+    "n_timepoints": 431,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/Ham/raw.parquet"
+  },
+  "accuracy": 0.7333333333333333,
+  "row_alignment": {
+    "predicted_rows": 105,
+    "distinct_ids": 105,
+    "group_rows": 4200,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 6.54,
+    "classify_seconds": 240.87,
+    "classify_share": 0.9736,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 4.83,
+      "classify_median": 6.695,
+      "classify_max": 7.428,
+      "max_over_median": 1.11
+    }
+  },
+  "failures": [],
+  "seconds": 248.6,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-88-generic",
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "cpu_count": 192,
+    "containerised": true
+  },
+  "caveat": null
+}

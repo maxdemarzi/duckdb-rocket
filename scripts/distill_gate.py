@@ -802,6 +802,26 @@ def run_arm_b(args) -> int:
     return 0
 
 
+def most_confident_pick(softs: dict[str, dict], n_test: int) -> tuple[np.ndarray, np.ndarray]:
+    """Per row, the prediction of whichever model is most confident about it, and who was picked.
+
+    Averaging cannot reach complementary information: where exactly one model is right and the other
+    is confidently wrong, the mean lands on the wrong one. Selecting can, in principle -- so this is
+    the cheap test of whether the gap between "at least one right" and the average single model is
+    reachable by any rule that does not already know the answer.
+
+    The caveat is calibration. Confidences from different models are not on a common scale, and a
+    systematically bolder model wins every row regardless of being right, which is why the caller is
+    given the pick distribution rather than just the accuracy.
+    """
+    names = list(softs)
+    labs, confs = {}, {}
+    for m in names:
+        labs[m], confs[m] = teacher_label_conf(softs[m], n_test)
+    pick = np.vstack([confs[m] for m in names]).argmax(axis=0)
+    return np.array([labs[names[p]][i] for i, p in enumerate(pick)]), pick
+
+
 def error_overlap(wrong: dict[str, np.ndarray]) -> dict:
     """Do these labellers make the SAME mistakes? The question an ensemble lives or dies by.
 
@@ -852,7 +872,7 @@ def run_labellers(args) -> int:
     print(f"labeller accuracy on the full test split, {len(models)} model(s): {', '.join(models)}\n")
     print(f"{'dataset':30s} " + " ".join(f"{m:>12s}" for m in models)
           + f"{'ensemble':>12s}{'best single':>13s}")
-    rows, missing, overlaps = [], {m: 0 for m in models}, []
+    rows, missing, overlaps, picks = [], {m: 0 for m in models}, [], []
     for name in names:
         _, yte = load(name, "test")
         accs = {}
@@ -864,13 +884,19 @@ def run_labellers(args) -> int:
             accs[m] = float((teacher_labels(s, len(yte)) == yte).mean())
         ens = load_ensemble_soft(args.teacher, name, models) if len(accs) == len(models) else None
         ens_acc = float((teacher_labels(ens, len(yte)) == yte).mean()) if ens else float("nan")
+        conf_acc = float("nan")
         if len(accs) == len(models) and len(models) > 1:
-            wrong = {m: (teacher_labels(load_soft(args.teacher, name, m), len(yte)) != yte)
-                     for m in models}
+            softs = {m: load_soft(args.teacher, name, m) for m in models}
+            wrong = {m: (teacher_labels(softs[m], len(yte)) != yte) for m in models}
             overlaps.append({"dataset": name, **error_overlap(wrong)})
+            pred, pick = most_confident_pick(softs, len(yte))
+            conf_acc = float((pred == yte).mean())
+            picks.append({"dataset": name, "accuracy": conf_acc,
+                          "share": {m: float((pick == i).mean()) for i, m in enumerate(models)}})
         print(f"{name:30s} " + " ".join(f"{accs.get(m, float('nan')):12.4f}" for m in models)
               + f"{ens_acc:12.4f}{(max(accs.values()) if accs else float('nan')):13.4f}")
         rows.append({"dataset": name, "per_model": accs, "ensemble": ens_acc,
+                     "most_confident": conf_acc,
                      "best_single": max(accs.values()) if accs else None})
     for m, k in missing.items():
         if k:
@@ -910,13 +936,25 @@ def run_labellers(args) -> int:
         print(f"    at least one right on {anyr.mean():.1%}, against {single.mean():.1%} for the "
               f"average single model: {anyr.mean() - single.mean():+.1%} of complementary "
               f"information exists to be exploited")
+        if picks:
+            pa = np.array([p["accuracy"] for p in picks])
+            en = np.array([r["ensemble"] for r in rows if r["dataset"]
+                           in {p["dataset"] for p in picks}])
+            print(f"\n    picking the MORE CONFIDENT model per row: {pa.mean():.4f}, "
+                  f"against {en.mean():.4f} for averaging and {anyr.mean():.1%} for the oracle")
+            for m in models:
+                sh = np.array([p["share"][m] for p in picks])
+                print(f"      {m:12s} wins the confidence comparison on {sh.mean():.1%} of rows")
+            print("      Confidences are not on a common scale across models, so a systematically "
+                  "bolder model wins rows regardless of being right; the shares above are what "
+                  "makes that visible rather than assumed.")
         print("    A ratio near 1.0 means the errors are independent and an ensemble can average "
               "them away. Well above 1.0 means the models share a failure mode -- on these features, "
               "on these rows -- and a more accurate ensemble would still be wrong in the same "
               "places, which is the thing that closed hard-label distillation.")
     if args.out and rows:
         args.out.write_text(json.dumps({"models": models, "rows": rows,
-                                        "overlaps": overlaps}, indent=2), encoding="utf-8")
+                                        "overlaps": overlaps, "picks": picks}, indent=2), encoding="utf-8")
         print(f"\nwrote {args.out}")
     return 0
 

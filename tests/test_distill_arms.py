@@ -243,6 +243,36 @@ class TestErrorOverlap:
         assert o["all_wrong"] == 0.0
 
 
+class TestMostConfidentPick:
+    def _soft(self, rows, classes=("1", "2")):
+        s = _sidecar(0, len(rows), rows)
+        s["classes"] = list(classes)
+        return s
+
+    def test_takes_the_label_of_whichever_model_is_surer(self):
+        a = self._soft([{"1": 0.9, "2": 0.1}, {"1": 0.55, "2": 0.45}])
+        b = self._soft([{"1": 0.4, "2": 0.6}, {"1": 0.05, "2": 0.95}])
+        pred, pick = most_confident_pick_helper(a, b)
+        assert list(pred) == ["1", "2"]      # row 0 from a (0.9), row 1 from b (0.95)
+        assert pick.tolist() == [0, 1]
+
+    def test_one_model_is_the_identity(self):
+        a = self._soft([{"1": 0.6, "2": 0.4}, {"1": 0.3, "2": 0.7}])
+        pred, pick = dg.most_confident_pick({"a": a}, 2)
+        assert list(pred) == ["1", "2"] and pick.tolist() == [0, 0]
+
+    def test_confidence_is_renormalised_before_comparing(self):
+        # An unnormalised model would otherwise win every row on scale alone.
+        a = self._soft([{"1": 6.0, "2": 4.0}])            # really 0.6
+        b = self._soft([{"1": 0.3, "2": 0.7}])            # really 0.7, so b should win
+        pred, pick = most_confident_pick_helper(a, b)
+        assert list(pred) == ["2"] and pick.tolist() == [1]
+
+
+def most_confident_pick_helper(a, b):
+    return dg.most_confident_pick({"a": a, "b": b}, a["n_test"])
+
+
 class TestNoiseCurve:
     CURVE = [(0.0, 0.10), (0.10, 0.06), (0.20, 0.02), (0.40, -0.06)]
 

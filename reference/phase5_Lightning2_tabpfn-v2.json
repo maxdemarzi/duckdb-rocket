@@ -1,0 +1,67 @@
+{
+  "dataset": "Lightning2",
+  "model": "tabpfn-v2",
+  "device": "cpu",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "threads": 4,
+    "memory_limit": "20GB",
+    "memory_budget_source": "cgroup v2",
+    "test_chunk": 128,
+    "onnx_threads": 4,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "Lightning2",
+    "n_train": 60,
+    "n_test": 61,
+    "n_channels": 1,
+    "n_timepoints": 637,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/Lightning2/raw.parquet"
+  },
+  "accuracy": 0.8360655737704918,
+  "row_alignment": {
+    "predicted_rows": 61,
+    "distinct_ids": 61,
+    "group_rows": 2440,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 5.82,
+    "classify_seconds": 161.33,
+    "classify_share": 0.9652,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 3.957,
+      "classify_median": 4.002,
+      "classify_max": 4.627,
+      "max_over_median": 1.16
+    }
+  },
+  "failures": [],
+  "seconds": 179.3,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-88-generic",
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "cpu_count": 192,
+    "containerised": true
+  },
+  "caveat": null
+}

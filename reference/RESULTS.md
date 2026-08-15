@@ -467,6 +467,47 @@ flatters the random side. Correcting that bias made the effect larger, not small
 
 `reference/distill_armb.json`, `reference/distill_breakeven.json`.
 
+#### Routing works where distilling does not (2026-08-15)
+
+If a teacher's errors are systematic, the fix is not to make its labels better but to stop putting
+them in a training set. Route instead: run the cheap student on everything, sort by its decision
+margin, and hand only the rows it is least sure of to the teacher. A teacher error then costs one
+row instead of biasing every coefficient, and the requirement weakens from "the teacher's labels are
+right" to "the teacher is right where the student is unsure".
+
+`scripts/distill_gate.py --route`, the same 28 datasets, full test splits, escalation fraction fixed
+in advance rather than tuned:
+
+| escalate | rocket+ridge | mr-hydra |
+|---|---|---|
+| 10% | +0.0095 (20/28, p=0.0192) | +0.0083 (19/28, p=0.0290) |
+| **20%** | **+0.0200 (20/28, p=0.0041)** | **+0.0145 (19/28, p=0.0146)** |
+| 30% | +0.0223 (20/28, p=0.0192) | +0.0201 (19/28, p=0.0522) |
+| 50% | +0.0283 (21/28, p=0.0059) | +0.0230 (19/28, p=0.0522) |
+
+And the strict claim — the routed system beating **both** models alone, not just the student:
+
+    rocket+ridge   12/28   mean +0.0032   p = 0.0005
+    mr-hydra       20/28   mean +0.0084   p = 0.0000
+
+Set against distillation on the identical datasets — hard argmax +0.0011 (p=1.00), soft targets
++0.0119 (p=0.13) — **escalating 20% of rows beats every distillation arm, and does so significantly.**
+
+The economics are the point. The teacher costs roughly 14x the student per row, so escalating 20%
+costs about 3.6x a student-only system rather than 14x, and captures roughly two thirds of the
+teacher's full advantage (+0.0200 of the +0.0294 the gate measured for the teacher outright). On
+`mr-hydra` the routed system is better than running the teacher on everything, on 20 of 28 datasets.
+
+Two things this table does not claim. The `best` column in the per-dataset output selects the
+escalation fraction on the same test split it is scored on, so it is an oracle bound on what a tuned
+rule could reach and is labelled as such; the fixed budgets above are what a product could run. And
+`mr-hydra` exposes no usable confidence — aeon's `predict_proba` returns one-hot for a
+`RidgeClassifierCV` backbone — so its decision margin is recovered by reproducing its private
+transform pipeline, which is checked against `predict()` on every fit and raises if they disagree.
+A wrong reconstruction would return entirely plausible margins and route the wrong rows.
+
+`reference/distill_route.json`.
+
 #### What this leaves, and what it costs to find out
 
 An ensemble of labellers is the standard escape, and after `scripts/convert_model_weights.sh` there

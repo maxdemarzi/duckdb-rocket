@@ -24,8 +24,16 @@ TIMEOUT_MIN="${TIMEOUT_MIN:-60}"
 # only governs DuckDB (ONNX allocates outside it), so the shard count carries the rest of the
 # safety margin.
 SHARDS="${SHARDS:-2}"
-THREADS="${THREADS:-4}"
+THREADS="${THREADS:-1}"
 MEMLIMIT="${MEMLIMIT:-24GB}"
+# THREADS is the one that decides whether this survives, and it is not about CPU. DuckDB runs
+# `--threads` classify calls at once, and RESULTS.md ("The classify call's memory") measures each
+# one at 11.75GB for a 50-row train context and 28.7GB for a 500-row one -- allocated by ONNX,
+# OUTSIDE DuckDB's buffer manager, so --memory-limit does not bound it. 2 shards x 4 threads is
+# therefore up to 8 concurrent calls, ~160GB on a 124GB box, and the OOM killer took them in the
+# order they got big. Concurrency here must be counted in classify calls: SHARDS x THREADS.
+# These datasets are single-chunk at --test-chunk 128, so threads buy almost nothing anyway.
+ONNX_THREADS="${ONNX_THREADS:-8}"
 NPROC=$(nproc)
 
 log() { printf '\n=== %s  [%s]\n' "$*" "$(date -u +%H:%M:%S)"; }
@@ -79,7 +87,7 @@ sed -n '/batch of/,$p' "$OUT/timing_SemgHandMovementCh2.log" | head -30
 fi
 
 # ---------------------------------------------------------------------------------------------
-log "2/4 per-group cubes at G=40, ${SHARDS} shards x ${THREADS} duckdb threads, ${MEMLIMIT} each"
+log "2/4 per-group cubes at G=40, ${SHARDS} x ${THREADS} = $((SHARDS * THREADS)) concurrent classify calls"
 mapfile -t SHARD_LIST < <(uv run python - "$SHARDS" <<'PY'
 import json, sys
 shards = int(sys.argv[1])
@@ -102,7 +110,7 @@ for i in "${!SHARD_LIST[@]}"; do
     uv run python scripts/teacher_sweep.py --model tabicl-v2 \
         --datasets ${SHARD_LIST[$i]} \
         --out-dir "$OUT/pergroup" --device cpu --per-group-soft \
-        --threads "$THREADS" --onnx-threads 2 --memory-limit "$MEMLIMIT" --test-chunk 128 \
+        --threads "$THREADS" --onnx-threads "$ONNX_THREADS" --memory-limit "$MEMLIMIT" --test-chunk 128 \
         --budget-min "$BUDGET_MIN" --timeout-min "$TIMEOUT_MIN" \
         > "$OUT/shard_${i}.log" 2>&1 &
     PIDS+=($!)

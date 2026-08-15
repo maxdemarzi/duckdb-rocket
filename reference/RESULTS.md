@@ -491,18 +491,33 @@ the student knows what it does not know — the difference between the two colum
 the student's own uncertainty picks rows about three times better than chance, significantly, for
 both students and at every budget.
 
-And the strict claim — the routed system beating **both** models alone, not just the student:
-
-    rocket+ridge   12/28   mean +0.0032   p = 0.0005
-    mr-hydra       20/28   mean +0.0084   p = 0.0000
-
 Set against distillation on the identical datasets — hard argmax +0.0011 (p=1.00), soft targets
 +0.0119 (p=0.13) — **escalating 20% of rows beats every distillation arm, and does so significantly.**
 
-The economics are the point. The teacher costs roughly 14x the student per row, so escalating 20%
-costs about 3.6x a student-only system rather than 14x, and captures roughly two thirds of the
-teacher's full advantage (+0.0200 of the +0.0294 the gate measured for the teacher outright). On
-`mr-hydra` the routed system is better than running the teacher on everything, on 20 of 28 datasets.
+**What routing does not do is beat the teacher.** At the same fixed 20% budget, against running the
+teacher on every row:
+
+    rocket+ridge    6/28   mean -0.0116   p = 0.0227      significantly behind
+    mr-hydra       11/28   mean -0.0060   p = 0.8388      level
+
+So this is a cost trade, not a free win: it captures 63% of the teacher's advantage for ridge
+(+0.0200 of +0.0316) and 71% for `mr-hydra` (+0.0145 of +0.0205) for about a quarter of the marginal
+spend. The teacher costs ~14x the student per row (262 s against 3,741 s over ten datasets,
+`DISTILLATION_PLAN.md`), so a 20% escalation runs at ~3.6x a student-only system rather than 14x.
+
+The curve is concave, which is what makes a small budget worth having: the first 10% of escalated
+rows buys a third of the total gain and the last 50% buys almost none. On `mr-hydra` the 50% point is
+*above* running the teacher on everything (+0.0230 against +0.0205), because past some budget the
+escalation starts handing over rows the student was getting right.
+
+`docs/ROUTING.md` writes this up for both a user and an implementer.
+
+There is a figure in the per-dataset output that looks stronger — "beats both ends" on 12/28 and
+20/28 — and it should not be quoted as this one. It uses the `best` column, whose escalation
+fraction is chosen per dataset **on the same test split it is scored on**. That is an oracle bound on
+what a tuned rule could reach. It was labelled as an oracle in the output and then repeated in prose
+here as though it were achievable, which is the same mistake as the six-dataset feature shortlist,
+in a new place.
 
 Two things this table does not claim. The `best` column in the per-dataset output selects the
 escalation fraction on the same test split it is scored on, so it is an oracle bound on what a tuned

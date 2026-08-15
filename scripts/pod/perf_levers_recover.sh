@@ -23,7 +23,16 @@ TIMEOUT_MIN="${TIMEOUT_MIN:-60}"
 # of them -- exit -9 in 18 seconds, while the same dataset run alone finished in 598. The limit
 # only governs DuckDB (ONNX allocates outside it), so the shard count carries the rest of the
 # safety margin.
-SHARDS="${SHARDS:-2}"
+# SHARDS x THREADS is a count of concurrent tabfm_classify calls, and on a RunPod CPU pod the
+# budget for those is **the cgroup limit, not the host RAM**. This box reports 124GB to `free` and
+# is capped at 29.8 GiB; memory.max_usage_in_bytes sat exactly on the cap after every kill. One
+# call needs 11.75GB for a 50-row train context and 28.7GB for a 500-row one (RESULTS.md, "The
+# classify call's memory"), which is the same 29.8GB ceiling ECG5000 hit there.
+#
+# So the answer is 1. Two concurrent calls cannot fit whatever else is tuned, and datasets with a
+# ~600-row train context are expected to fail even alone -- the linear fit through those two
+# measured points puts them at ~32GB.
+SHARDS="${SHARDS:-1}"
 THREADS="${THREADS:-1}"
 MEMLIMIT="${MEMLIMIT:-24GB}"
 # THREADS is the one that decides whether this survives, and it is not about CPU. DuckDB runs

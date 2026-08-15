@@ -501,9 +501,13 @@ teacher on every row:
     mr-hydra       11/28   mean -0.0060   p = 0.8388      level
 
 So this is a cost trade, not a free win: it captures 63% of the teacher's advantage for ridge
-(+0.0200 of +0.0316) and 71% for `mr-hydra` (+0.0145 of +0.0205) for about a quarter of the marginal
-spend. The teacher costs ~14x the student per row (262 s against 3,741 s over ten datasets,
-`DISTILLATION_PLAN.md`), so a 20% escalation runs at ~3.6x a student-only system rather than 14x.
+(+0.0200 of +0.0316) and 71% for `mr-hydra` (+0.0145 of +0.0205). ~~The teacher costs ~14x the
+student per row (262 s against 3,741 s over ten datasets, `DISTILLATION_PLAN.md`), so a 20%
+escalation runs at ~3.6x a student-only system rather than 14x.~~ **Superseded — that cost claim is
+wrong; see "What routing actually costs" below.** It divided totals from different hardware by row
+counts, which assumes a per-row cost the teacher does not have. Measured, the ratio is 55-69x per
+row and a 20% escalation costs 25-83% of teacher-everywhere depending on test-set size, never the
+20% a per-row model predicts. The *accuracy* rows of this table are unaffected.
 
 The curve is concave, which is what makes a small budget worth having: the first 10% of escalated
 rows buys a third of the total gain and the last 50% buys almost none. On `mr-hydra` the 50% point is
@@ -528,6 +532,74 @@ transform pipeline, which is checked against `predict()` on every fit and raises
 A wrong reconstruction would return entirely plausible margins and route the wrong rows.
 
 `reference/distill_route.json`.
+
+#### What routing actually costs: the 3.6x above is wrong (2026-08-15)
+
+The paragraph above says the teacher costs ~14x the student per row, so a 20% escalation runs at
+~3.6x a student-only system. **Both halves are wrong, and the second is wrong in a way that matters
+more than the first.** They were assembled from per-dataset totals on different hardware and then
+divided by row counts, which assumes the teacher's cost is proportional to how many rows you send
+it. It is not.
+
+Measured properly for the first time: one rented AMD EPYC 4564P, 16 cores, 124 GB, nothing else
+running, all three arms in the same process invocation at the same moment
+(`scripts/route_serve.py serve --compare`).
+
+| | Herring | ScreenType |
+|---|---|---|
+| train rows (the teacher's context) | 64 | 375 |
+| student, per row | 23.3 ms | 30.3 ms |
+| teacher on the escalated rows | 63.2 s for 14 | 223.6 s for 22 |
+| teacher on the whole batch | 82.4 s for 64 | 267.9 s for 128 |
+| **teacher / student, per row** | **55x** | **69x** |
+| rows escalated | 22% | 17% |
+| **cost of escalating them** | **77%** | **83%** |
+
+Escalating a fifth of the rows costs four fifths of running the teacher on all of them. The reason
+is in `tabfm_classify`'s contract rather than in this pipeline: the teacher has **no trained weights
+for your task**, so every call re-encodes the labelled training context from scratch. Fitting
+`seconds_per_group = a + b*n` on the two batch sizes each run already produces:
+
+    Herring      1.398 s per group + 9.0 ms per query row   ->  55.9 s fixed over 40 groups
+    ScreenType   5.053 s per group + 9.7 ms per query row   -> 202.1 s fixed over 40 groups
+
+The fixed term is 71% and 80% of the respective full-batch costs, and routing does not touch it.
+Three independent estimates of the marginal term agree — 9.0 ms, 9.7 ms, and 9.3 ms from a
+regression of per-group seconds on `n_train` and `n_test` across 51 archived CPU runs — while the
+fixed term tracks the *training* set at roughly 14 ms per labelled row per group.
+
+Read off the per-group timings, not the wall clock, which is how it is known that DuckDB startup is
+0.5 s of a 63.2 s call rather than part of the fixed term.
+
+**So what routing saves is calls, not rows.** The context pass is paid once per group per
+`--test-chunk`, so escalation only saves anything when it drops the chunk count. Applying the fitted
+model across the 28 subgroup datasets at the 128-row chunk these runs use:
+
+| test-set size | datasets | escalating 20% costs, of teacher-everywhere |
+|---|---|---|
+| <= 128 rows | 7 | 77% |
+| 129-384 | 16 | 40% |
+| >= 385 | 5 | 25% |
+
+against the 20% that a per-row cost model predicts. Herring and ScreenType are both in the top row,
+so the two measured datasets are the **worst** case rather than the typical one — but no dataset
+reaches 20%, and the ~3.6x claim above is optimistic by roughly an order of magnitude on a small
+batch.
+
+Two consequences. **Batch the escalated rows**: everything above is per call, so a server that
+escalates one row at a time pays the entire fixed cost per request. And the fixed term is per
+*group*, exactly linear in `G` — verified rather than assumed, since after group 0's ONNX warm-up
+(1.22-1.36x) the remaining groups run flat to +/-1% on all four clean runs. That makes the group
+count the lever worth pulling and the student's kernel count nearly irrelevant on a routed path: the
+student is 1.7% of a routed ScreenType batch, so cutting its 10,000 kernels to 2,000 — a genuine 5x
+on the transform, which is exactly linear in kernels at 0.93 ms/row for 250 and 37.37 ms/row for
+10,000 — saves under 2% of the request. On a student-only path that same cut is the whole bill.
+
+Not established here: `SemgHandMovementCh2`'s full-batch arm failed on both attempts, dying after
+group 1 of 40 on 128 test rows while its 24-row escalated arm succeeded every time. An 8 GB DuckDB
+memory limit was blamed and then exonerated when the failure recurred at ~87 GB; `route_serve.py`
+now reports the shell's exit code and archives a `crash.log`, which is what should have been
+reported instead of a guess.
 
 #### What this leaves, and what it costs to find out
 

@@ -18,7 +18,14 @@ export PATH="$HOME/.local/bin:$PATH"
 OUT=/workspace/levers
 BUDGET_MIN="${BUDGET_MIN:-240}"
 TIMEOUT_MIN="${TIMEOUT_MIN:-60}"
-SHARDS="${SHARDS:-4}"
+# Two shards, not four, and an explicit memory budget each. phase5 sizes memory at 70% of the
+# BOX, so four concurrent shards asked for 280% of a 124GB pod and the OOM killer took every one
+# of them -- exit -9 in 18 seconds, while the same dataset run alone finished in 598. The limit
+# only governs DuckDB (ONNX allocates outside it), so the shard count carries the rest of the
+# safety margin.
+SHARDS="${SHARDS:-2}"
+THREADS="${THREADS:-4}"
+MEMLIMIT="${MEMLIMIT:-24GB}"
 NPROC=$(nproc)
 
 log() { printf '\n=== %s  [%s]\n' "$*" "$(date -u +%H:%M:%S)"; }
@@ -55,7 +62,13 @@ open("/workspace/levers/warm.json", "w").write(json.dumps({"ok": [n for n in wan
 PY
 
 # ---------------------------------------------------------------------------------------------
-log "1/4 the timing arm the 8GB budget killed -- idle box, nothing else started yet"
+log "1/4 the timing arm that died after group 1 -- idle box, nothing else started yet"
+# SKIP_TIMING=1 once it is known to fail: its escalated arm is already measured and the full-batch
+# arm has failed identically twice, so re-running it spends six minutes to reproduce a known bug
+# rather than to learn anything.
+if [ "${SKIP_TIMING:-0}" = "1" ]; then
+  echo "  skipped (SKIP_TIMING=1)"
+else
 # SemgHandMovementCh2 is the longest series measured here (1500 timepoints) and the one whose
 # full-batch arm died after group 1 of 40. It is first because it is the only stage whose answer is
 # a wall-clock number.
@@ -63,9 +76,10 @@ uv run python scripts/route_serve.py serve --dataset SemgHandMovementCh2 --batch
     > "$OUT/timing_SemgHandMovementCh2.log" 2>&1
 echo "  rc=$?"
 sed -n '/batch of/,$p' "$OUT/timing_SemgHandMovementCh2.log" | head -30
+fi
 
 # ---------------------------------------------------------------------------------------------
-log "2/4 per-group cubes at G=40, ${SHARDS} shards x 2 duckdb threads"
+log "2/4 per-group cubes at G=40, ${SHARDS} shards x ${THREADS} duckdb threads, ${MEMLIMIT} each"
 mapfile -t SHARD_LIST < <(uv run python - "$SHARDS" <<'PY'
 import json, sys
 shards = int(sys.argv[1])
@@ -88,7 +102,7 @@ for i in "${!SHARD_LIST[@]}"; do
     uv run python scripts/teacher_sweep.py --model tabicl-v2 \
         --datasets ${SHARD_LIST[$i]} \
         --out-dir "$OUT/pergroup" --device cpu --per-group-soft \
-        --threads 2 --onnx-threads 2 --test-chunk 128 \
+        --threads "$THREADS" --onnx-threads 2 --memory-limit "$MEMLIMIT" --test-chunk 128 \
         --budget-min "$BUDGET_MIN" --timeout-min "$TIMEOUT_MIN" \
         > "$OUT/shard_${i}.log" 2>&1 &
     PIDS+=($!)

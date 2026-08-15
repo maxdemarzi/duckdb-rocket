@@ -124,6 +124,13 @@ def main() -> int:
     # N x threads x onnx-threads lands near the vCPU count, not above it.
     ap.add_argument("--threads", type=int, help="DuckDB threads per phase5 run")
     ap.add_argument("--onnx-threads", type=int, help="ONNX intra-op threads per session")
+    # Memory has exactly the same trap as threads and cost more. phase5's default is 70% of the
+    # box, so N concurrent shards ask for 70N% of it: four shards on a 124GB pod were killed by the
+    # OOM killer (exit -9) in 18 seconds each, while a single run of the same dataset succeeded in
+    # 598. Note the limit only governs DuckDB -- ONNX allocates outside it -- so this bounds the
+    # part that can be bounded and the shard count has to do the rest.
+    ap.add_argument("--memory-limit", help="DuckDB memory_limit per phase5 run, e.g. '24GB'. "
+                                           "Set this whenever more than one sweep runs at once.")
     ap.add_argument("--per-group-soft", action="store_true",
                     help="archive each group's own probabilities, which makes the group-count "
                          "sweep exact from a single run (scripts/perf_levers.py --groups)")
@@ -180,6 +187,8 @@ def main() -> int:
             cmd += ["--threads", str(args.threads)]
         if args.onnx_threads:
             cmd += ["--onnx-threads", str(args.onnx_threads)]
+        if args.memory_limit:
+            cmd += ["--memory-limit", args.memory_limit]
         if args.per_group_soft:
             cmd += ["--per-group-soft"]
         if args.anofox_extension:

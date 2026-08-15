@@ -688,11 +688,187 @@ def run_arm_b(args) -> int:
     return 0
 
 
+def decision_margin(d: np.ndarray) -> np.ndarray:
+    """How far the student was from changing its mind: |distance| binary, top1 - top2 multiclass."""
+    if d.ndim == 1:
+        return np.abs(d)
+    s = np.sort(d, axis=1)
+    return s[:, -1] - s[:, -2]
+
+
+def rocket_ridge_scored(xtr, ytr, xte, n_kernels: int = 10_000, seed: int = 0):
+    nch = xtr.shape[1] if xtr.ndim == 3 else 1
+    bank = generate_kernels(seed, xtr.shape[-1], n_kernels, n_channels=nch)
+    sc = StandardScaler().fit(transform(xtr, bank))
+    clf = RidgeClassifierCV(alphas=ALPHAS).fit(sc.transform(transform(xtr, bank)), ytr)
+    F = sc.transform(transform(xte, bank))
+    return clf.predict(F), decision_margin(clf.decision_function(F))
+
+
+def mr_hydra_scored(xtr, ytr, xte, seed: int = 0):
+    """MultiRocketHydra's predictions and its ridge's decision margin.
+
+    aeon exposes no confidence: its `predict_proba` falls back to one-hot for a RidgeClassifierCV
+    backbone, which is exactly no information. The margin is reachable only by reproducing the
+    private transform pipeline, so the reconstruction is checked against `predict()` before its
+    margins are used -- a wrong reconstruction returns plausible confidences and would route the
+    wrong rows, which is the failure this whole file exists to avoid.
+    """
+    from aeon.classification.convolution_based import MultiRocketHydraClassifier
+
+    a = xtr[:, None, :] if xtr.ndim == 2 else xtr
+    b = xte[:, None, :] if xte.ndim == 2 else xte
+    m = MultiRocketHydraClassifier(random_state=seed).fit(a, ytr)
+    xt = np.concatenate((m._scale_hydra.transform(m._transform_hydra.transform(b)),
+                         m._scale_multirocket.transform(m._transform_multirocket.transform(b))),
+                        axis=1)
+    pred, direct = m.classifier.predict(xt), m.predict(b)
+    if not np.array_equal(pred, direct):
+        raise RuntimeError("the reconstructed mr-hydra pipeline disagrees with predict(); its "
+                           "internals have changed and the margins would be meaningless")
+    return direct, decision_margin(m.classifier.decision_function(xt))
+
+
+SCORERS = {"rocket+ridge": rocket_ridge_scored, "mr-hydra": mr_hydra_scored}
+
+
+def route_curve(spred, sconf, tpred, y, fracs) -> list[tuple[float, float]]:
+    """Accuracy when the student's least-confident `f` of the rows are handed to the teacher.
+
+    f=0 is the student alone and f=1 the teacher alone, so the curve only says something new if it
+    rises above both ends: that is the claim that the two models are wrong on different rows and
+    that the student knows which ones are its own.
+    """
+    order = np.argsort(sconf, kind="stable")
+    s = np.asarray(spred, dtype=object)
+    t = np.asarray(tpred, dtype=object)
+    truth = np.asarray(y, dtype=object)
+    out = []
+    for f in fracs:
+        pred = s.copy()
+        k = int(round(f * len(truth)))
+        if k:
+            pred[order[:k]] = t[order[:k]]
+        out.append((f, float((pred == truth).mean())))
+    return out
+
+
+def _route_worker(t):
+    name, learner, seed, teacher_dir, cache = t
+    try:
+        cp = Path(cache) / f"{name}__{learner.replace('+', '_')}__seed{seed}.json" if cache else None
+        if cp is not None and cp.exists():
+            d = json.loads(cp.read_text(encoding="utf-8"))
+            return name, learner, d["pred"], d["conf"], ""
+        xtr, ytr = load(name, "train")
+        xte, _ = load(name, "test")
+        pred, conf = SCORERS[learner](normalize_series(xtr), ytr, normalize_series(xte), seed=seed)
+        pred, conf = [str(p) for p in pred], [float(c) for c in conf]
+        if cp is not None:
+            cp.parent.mkdir(parents=True, exist_ok=True)
+            cp.write_text(json.dumps({"dataset": name, "learner": learner, "seed": seed,
+                                      "pred": pred, "conf": conf}), encoding="utf-8")
+        return name, learner, pred, conf, ""
+    except Exception as e:  # noqa: BLE001
+        return name, learner, None, None, f"{type(e).__name__}: {e}"[:140]
+
+
+def run_route(args) -> int:
+    """Route, do not distil: run the student, escalate only the rows it is unsure of.
+
+    Distillation needs the teacher's labels to be RIGHT, which on a hard dataset they mostly are not.
+    Routing needs something weaker and quite different -- that the teacher be right on the rows the
+    student gets wrong, and that the student know which those are. It also never contaminates a
+    training set, so a teacher error costs one row instead of biasing a fit.
+    """
+    reports = teacher_reports(args.teacher)
+    if args.from_gate:
+        wanted = gate_selection(args.from_gate, args.max_student)
+    else:
+        wanted = args.datasets or sorted(reports)
+    names = [n for n in wanted if n in reports and load_soft(args.teacher, n) is not None]
+    if not names:
+        print("no dataset has both a report and a soft-label sidecar")
+        return 1
+    learners = [k for k in SCORERS if k in args.learners]
+    fracs = [i / 20 for i in range(21)]
+    print(f"routing: {len(names)} datasets, {len(learners)} learner(s), "
+          f"escalating the least-confident 0..100% to the teacher\n")
+
+    jobs = sorted(((n, l, args.seed, str(args.teacher), str(args.route_cache))
+                   for n in names for l in learners),
+                  key=lambda j: -reports[j[0]]["shape"]["n_test"])
+    got: dict[tuple[str, str], tuple[list, list]] = {}
+    with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        for i, fut in enumerate(as_completed([ex.submit(_route_worker, j) for j in jobs]), start=1):
+            n, l, pred, conf, err = fut.result()
+            if pred is None:
+                print(f"  {n} {l} failed: {err}", flush=True)
+            else:
+                got[(n, l)] = (pred, conf)
+            if i % 10 == 0 or i == len(jobs):
+                print(f"  ... {i}/{len(jobs)} students scored", flush=True)
+
+    print(f"\n{'dataset':30s} {'learner':13s} {'student':>8s} {'teacher':>8s} {'best':>8s} "
+          f"{'at':>5s} {'gain':>8s}")
+    rows = []
+    for name in names:
+        soft = load_soft(args.teacher, name)
+        _, yte = load(name, "test")
+        tpred = teacher_labels(soft, len(yte))
+        for lname in learners:
+            if (name, lname) not in got:
+                continue
+            pred, conf = got[(name, lname)]
+            curve = route_curve(pred, np.asarray(conf), tpred, yte, fracs)
+            acc = [a for _, a in curve]
+            best_i = int(np.argmax(acc))
+            gain = acc[best_i] - max(acc[0], acc[-1])
+            print(f"{name:30s} {lname:13s} {acc[0]:8.4f} {acc[-1]:8.4f} {acc[best_i]:8.4f} "
+                  f"{fracs[best_i]:5.0%} {gain:+8.4f}")
+            rows.append({"dataset": name, "learner": lname, "student": acc[0], "teacher": acc[-1],
+                         "best": acc[best_i], "best_frac": fracs[best_i], "gain_over_both": gain,
+                         "curve": curve})
+
+    if not rows:
+        return 1
+    print("\nROUTING -- does escalating the student's least-confident rows beat either model alone?")
+    for lname in learners:
+        sub = [r for r in rows if r["learner"] == lname]
+        if not sub:
+            continue
+        g = np.array([r["gain_over_both"] for r in sub])
+        print(f"  {lname:13s} beats both ends on {int((g > 0).sum())}/{len(g)}   "
+              f"mean {g.mean():+.4f}   median {float(np.median(g)):+.4f}   p = {sign_test(g):.4f}")
+        # The product question is not the peak, it is the price: what a fixed escalation budget buys
+        # against the student alone, since the teacher costs ~14x the student per row.
+        for f in (0.10, 0.20, 0.30, 0.50):
+            j = fracs.index(f)
+            d = np.array([r["curve"][j][1] - r["student"] for r in sub])
+            print(f"    escalate {f:4.0%}: {d.mean():+.4f} over the student alone "
+                  f"({int((d > 0).sum())}/{len(d)} datasets, p = {sign_test(d):.4f})")
+    # Selecting the best fraction per dataset on the same data it is measured on is an oracle and
+    # cannot be shipped; it is reported to bound what a tuned rule could reach, never as the result.
+    print("\n  'best' selects the escalation fraction on the test set itself, so it is an oracle "
+          "bound on what a tuned rule could reach, not an achievable number. The fixed-budget rows "
+          "above are the ones a product could actually run.")
+    if args.out:
+        args.out.write_text(json.dumps({"design": "escalate the least-confident fraction",
+                                        "fracs": fracs, "rows": rows}, indent=2), encoding="utf-8")
+        print(f"wrote {args.out}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gate", action="store_true", help="T vs A on full test splits (the gate)")
     ap.add_argument("--arm-b", action="store_true", help="arms A/B/C on pool/holdout splits")
+    ap.add_argument("--route", action="store_true",
+                    help="escalate the student's least-confident rows to the teacher instead of "
+                         "distilling from it")
+    ap.add_argument("--route-cache", type=Path, default=ROOT / "data" / "route_students",
+                    help="per-(dataset, learner, seed) student predictions and margins")
     ap.add_argument("--datasets", nargs="*", default=None)
     ap.add_argument("--teacher", type=Path, default=ROOT / "reference",
                     help="directory of archived pipeline reports and soft-label sidecars")
@@ -720,12 +896,14 @@ def main() -> int:
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 
-    if not (args.gate or args.arm_b):
+    if not (args.gate or args.arm_b or args.route):
         args.gate = True
     t0 = time.perf_counter()
     rc = run_gate(args) if args.gate else 0
     if args.arm_b:
         rc = run_arm_b(args) or rc
+    if args.route:
+        rc = run_route(args) or rc
     print(f"\n{(time.perf_counter() - t0) / 60:.1f} min")
     return rc
 

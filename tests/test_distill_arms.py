@@ -239,6 +239,40 @@ class TestSoftTargetRidge:
                                  ["1", "2"], rng.normal(size=(2, 16)), n_kernels=64)
 
 
+class TestRouting:
+    def test_binary_margin_is_distance_from_the_boundary(self):
+        assert dg.decision_margin(np.array([-2.0, 0.5, 3.0])).tolist() == [2.0, 0.5, 3.0]
+
+    def test_multiclass_margin_is_the_gap_to_the_runner_up(self):
+        # Not "the top score": a row scoring 9.0/8.9 is a coin flip and a row scoring 2.0/0.1 is not,
+        # and routing on the top score alone would escalate the confident one.
+        d = np.array([[9.0, 8.9, 0.0], [2.0, 0.1, 0.0]])
+        assert dg.decision_margin(d).tolist() == pytest.approx([0.1, 1.9])
+
+    def test_the_ends_of_the_curve_are_the_two_models_alone(self):
+        y = np.array(["a", "b", "a", "b"])
+        s = np.array(["a", "b", "b", "b"])          # student: 3/4
+        t = np.array(["a", "a", "a", "a"])          # teacher: 2/4
+        c = dg.route_curve(s, np.array([9.0, 8.0, 1.0, 2.0]), t, y, [0.0, 1.0])
+        assert c[0][1] == pytest.approx(0.75)
+        assert c[1][1] == pytest.approx(0.50)
+
+    def test_it_escalates_the_least_confident_first(self):
+        y = np.array(["a", "b", "a", "b"])
+        s = np.array(["a", "b", "b", "b"])          # wrong only on row 2, its least confident
+        t = np.array(["a", "b", "a", "b"])          # teacher is right everywhere
+        # Routing 25% must pick row 2 and reach 1.0. Escalating the MOST confident instead would
+        # leave the error in place and score 0.75 -- a plausible number from an inverted sort.
+        assert dg.route_curve(s, np.array([9.0, 8.0, 1.0, 7.0]), t, y, [0.25])[0][1] == 1.0
+
+    def test_string_labels_of_different_widths_survive_the_substitution(self):
+        # A fixed-width numpy string array silently truncates a longer label assigned into it.
+        y = np.array(["long_label", "b"])
+        s = np.array(["b", "b"])
+        t = np.array(["long_label", "long_label"])
+        assert dg.route_curve(s, np.array([0.0, 9.0]), t, y, [0.5])[0][1] == 1.0
+
+
 class TestSignTest:
     def test_all_wins_is_the_two_sided_coin_tail(self):
         assert dg.sign_test(np.ones(6)) == pytest.approx(2 / 2**6)

@@ -205,6 +205,38 @@ Routing is the one approach that never asks a wrong-but-confident prediction to 
 A teacher error costs one row instead of biasing every coefficient in a fit. That is the whole
 difference, and it is why the same models that cannot teach can still help.
 
+## Serving it: what actually gets deployed
+
+Nothing about routing changes training. You fit the student on your labelled data exactly as before;
+the teacher is not involved. Routing is entirely an inference-time decision.
+
+```
+row ──▶ student.predict + margin ──▶ margin >= threshold ──▶ student's label      (~80%, 1x)
+                                          │
+                                          └── below ──▶ teacher on this row ──▶ teacher's label
+```
+
+**The teacher's answers go to the caller and nowhere else.** They are not fed back into the student.
+That is distillation, it was measured on these datasets and returned +0.0011, and routing makes it
+*worse* rather than better: the rows routing selects are the ones the student found hardest, which
+are the same rows the teacher is least accurate on and most systematically wrong about. A training
+set built from escalated rows is enriched for exactly the correlated errors that closed distillation.
+
+Three things about deploying the teacher that the accuracy tables do not show:
+
+* **It is an in-context model, so it has no trained weights for your task.** Every call passes your
+  labelled training rows as context — literally `tabfm_classify('train_cur', 'y', test := 'test_cur',
+  ...)`. Deploying the teacher means deploying the training data with it, and every escalated call
+  re-processes that context.
+* **Batch the escalated rows.** The 14x figure was measured on whole-dataset batches, where the
+  context cost is amortised over many test rows. One row at a time you pay the full context cost for
+  a single prediction. That is reasoning from how the call is shaped rather than a measurement — the
+  single-row latency has not been measured here — but it is the difference between a 3.6x system and
+  something much worse.
+* **The threshold is one number and it can drift.** It is calibrated against a margin distribution;
+  if your inputs move, the realised escalation rate moves with them. The realised rate is worth
+  monitoring in production for exactly that reason, since it is observable without labels.
+
 ## What is not established
 
 * **28 datasets, one seed, one split.** The escalation fractions are fixed rather than tuned, which

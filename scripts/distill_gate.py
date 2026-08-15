@@ -802,6 +802,36 @@ def run_arm_b(args) -> int:
     return 0
 
 
+def error_overlap(wrong: dict[str, np.ndarray]) -> dict:
+    """Do these labellers make the SAME mistakes? The question an ensemble lives or dies by.
+
+    Accuracy is not what governs pseudo-labelling here: a teacher's errors beat random errors of the
+    same rate by five points, because they concentrate on the same ambiguous rows and point the same
+    way. An ensemble that is more accurate while wrong in the same places inherits exactly that, so
+    the number to look at is not the rate.
+
+    * `joint / independent` -- how much more often two models are wrong together than chance would
+      give. 1.0 is independence; above 1.0 they share a failure mode.
+    * `all_wrong` -- rows no model gets right. No combination rule can ever recover these, so this is
+      the hard floor on any ensemble built from this set.
+    * `any_right` -- the accuracy a perfect oracle picking among these models would reach. The gap
+      between it and the best single model is all the complementary information there is.
+    """
+    names = list(wrong)
+    pairs = []
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            ja, jb = wrong[a], wrong[b]
+            joint = float((ja & jb).mean())
+            indep = float(ja.mean() * jb.mean())
+            pairs.append({"a": a, "b": b, "joint": joint, "independent": indep,
+                          "ratio": (joint / indep) if indep > 0 else float("nan")})
+    stacked = np.vstack([wrong[n] for n in names])
+    return {"pairs": pairs, "all_wrong": float(stacked.all(axis=0).mean()),
+            "any_right": float(1.0 - stacked.all(axis=0).mean()),
+            "mean_single": float(1.0 - stacked.mean())}
+
+
 def run_labellers(args) -> int:
     """How accurate is each labeller, and their average, on the rows a pool would be drawn from?
 
@@ -822,7 +852,7 @@ def run_labellers(args) -> int:
     print(f"labeller accuracy on the full test split, {len(models)} model(s): {', '.join(models)}\n")
     print(f"{'dataset':30s} " + " ".join(f"{m:>12s}" for m in models)
           + f"{'ensemble':>12s}{'best single':>13s}")
-    rows, missing = [], {m: 0 for m in models}
+    rows, missing, overlaps = [], {m: 0 for m in models}, []
     for name in names:
         _, yte = load(name, "test")
         accs = {}
@@ -834,6 +864,10 @@ def run_labellers(args) -> int:
             accs[m] = float((teacher_labels(s, len(yte)) == yte).mean())
         ens = load_ensemble_soft(args.teacher, name, models) if len(accs) == len(models) else None
         ens_acc = float((teacher_labels(ens, len(yte)) == yte).mean()) if ens else float("nan")
+        if len(accs) == len(models) and len(models) > 1:
+            wrong = {m: (teacher_labels(load_soft(args.teacher, name, m), len(yte)) != yte)
+                     for m in models}
+            overlaps.append({"dataset": name, **error_overlap(wrong)})
         print(f"{name:30s} " + " ".join(f"{accs.get(m, float('nan')):12.4f}" for m in models)
               + f"{ens_acc:12.4f}{(max(accs.values()) if accs else float('nan')):13.4f}")
         rows.append({"dataset": name, "per_model": accs, "ensemble": ens_acc,
@@ -855,8 +889,34 @@ def run_labellers(args) -> int:
               f"({int((e > b).sum())}/{len(full)} wins, p = {sign_test(e - b):.4f})")
         print("    'best single' is chosen per dataset on the test set, so it is an oracle: a real "
               "system must pick one model in advance, and the ensemble is what avoids that choice.")
+
+    if overlaps:
+        print(f"\n  ERROR OVERLAP over {len(overlaps)} datasets -- whether these models fail in "
+              f"the same places:")
+        ratios: dict[tuple[str, str], list[float]] = {}
+        for o in overlaps:
+            for pr in o["pairs"]:
+                if pr["ratio"] == pr["ratio"]:
+                    ratios.setdefault((pr["a"], pr["b"]), []).append(pr["ratio"])
+        for (a, b), v in sorted(ratios.items()):
+            arr = np.array(v)
+            print(f"    {a:12s} vs {b:12s} wrong together {arr.mean():.2f}x as often as "
+                  f"independence would give")
+        allw = np.array([o["all_wrong"] for o in overlaps])
+        anyr = np.array([o["any_right"] for o in overlaps])
+        single = np.array([o["mean_single"] for o in overlaps])
+        print(f"\n    every model wrong on {allw.mean():.1%} of rows -- the floor no combination "
+              f"rule can go below")
+        print(f"    at least one right on {anyr.mean():.1%}, against {single.mean():.1%} for the "
+              f"average single model: {anyr.mean() - single.mean():+.1%} of complementary "
+              f"information exists to be exploited")
+        print("    A ratio near 1.0 means the errors are independent and an ensemble can average "
+              "them away. Well above 1.0 means the models share a failure mode -- on these features, "
+              "on these rows -- and a more accurate ensemble would still be wrong in the same "
+              "places, which is the thing that closed hard-label distillation.")
     if args.out and rows:
-        args.out.write_text(json.dumps({"models": models, "rows": rows}, indent=2), encoding="utf-8")
+        args.out.write_text(json.dumps({"models": models, "rows": rows,
+                                        "overlaps": overlaps}, indent=2), encoding="utf-8")
         print(f"\nwrote {args.out}")
     return 0
 

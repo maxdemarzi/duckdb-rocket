@@ -199,6 +199,50 @@ class TestBreakEven:
         assert dg.break_even([(0.0, 0.1), (0.1, -0.1), (0.2, 0.1), (0.3, -0.1)]) == pytest.approx(0.05)
 
 
+class TestErrorOverlap:
+    """Whether labellers fail in the same places, which is what an ensemble lives or dies by.
+
+    Accuracy is not the governing quantity here: a teacher's errors cost about five points more than
+    random errors of the same rate, because they concentrate on the same rows. So a more accurate
+    ensemble that is wrong in the same places inherits exactly the problem it was meant to solve.
+    """
+
+    def _wrong(self, n, *idx_sets):
+        return {f"m{i}": np.isin(np.arange(n), list(s)) for i, s in enumerate(idx_sets)}
+
+    def test_identical_errors_are_far_above_independence(self):
+        o = dg.error_overlap(self._wrong(10, {0, 1}, {0, 1}))
+        # p = 0.2 each, so independence predicts 0.04 and they are actually wrong together 0.2.
+        assert o["pairs"][0]["ratio"] == pytest.approx(5.0)
+        assert o["all_wrong"] == pytest.approx(0.2)
+        assert o["any_right"] == pytest.approx(0.8)
+        # No complementary information at all: the oracle equals the average single model.
+        assert o["any_right"] == pytest.approx(o["mean_single"])
+
+    def test_disjoint_errors_leave_everything_to_gain(self):
+        o = dg.error_overlap(self._wrong(10, {0, 1}, {2, 3}))
+        assert o["pairs"][0]["ratio"] == pytest.approx(0.0)
+        assert o["all_wrong"] == pytest.approx(0.0)
+        assert o["any_right"] - o["mean_single"] == pytest.approx(0.2)
+
+    def test_independent_errors_sit_at_one(self):
+        # 100 rows: A wrong on the first 20, B wrong on every fifth. Their overlap is exactly what
+        # independence predicts, which is the calibration point the ratio is read against.
+        n = 100
+        a = np.zeros(n, bool); a[:20] = True
+        b = np.zeros(n, bool); b[::5] = True
+        assert dg.error_overlap({"a": a, "b": b})["pairs"][0]["ratio"] == pytest.approx(1.0)
+
+    def test_every_pair_is_reported_once(self):
+        o = dg.error_overlap(self._wrong(10, {0}, {1}, {2}))
+        assert [(p["a"], p["b"]) for p in o["pairs"]] == [("m0", "m1"), ("m0", "m2"), ("m1", "m2")]
+
+    def test_a_model_that_is_never_wrong_gives_no_ratio_rather_than_a_crash(self):
+        o = dg.error_overlap(self._wrong(10, {0, 1}, set()))
+        assert o["pairs"][0]["ratio"] != o["pairs"][0]["ratio"]  # nan, and filtered when aggregated
+        assert o["all_wrong"] == 0.0
+
+
 class TestNoiseCurve:
     CURVE = [(0.0, 0.10), (0.10, 0.06), (0.20, 0.02), (0.40, -0.06)]
 

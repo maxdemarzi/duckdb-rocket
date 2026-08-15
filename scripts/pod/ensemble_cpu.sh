@@ -22,7 +22,22 @@ cd /workspace
 R=/workspace/duckdb-rocket
 OUT=/workspace/ensemble
 BUDGET_MIN="${BUDGET_MIN:-240}"
-MODELS="${MODELS:-mitra tabpfn-v2 orion-bix}"
+TIMEOUT_MIN="${TIMEOUT_MIN:-30}"
+
+# **mitra is not in the default list, and the reason is cost rather than capability.** Measured on
+# 16 vCPU: Lightning2 -- 60 train, 61 test -- reached group 2 of 40 in about five minutes, so roughly
+# 100 minutes for one of the smallest datasets in the subgroup. Every dataset except Beef (30 test
+# rows) therefore hit the 30-minute per-dataset timeout, and the first run of this script produced
+# exactly one mitra report out of 29.
+#
+# Why it is slow is the same fact that makes it usable at all. mitra declares max_features = 100
+# against tabicl's 512, and the engine covers a 500-feature group by raising the estimator count
+# rather than by truncating -- which is why a probe with the only informative feature at index 499
+# still classifies it correctly, and why each call costs about five times what the others cost.
+#
+# So running mitra means either TIMEOUT_MIN=180 and a much longer budget, or fewer groups, and
+# either is a different experiment from the one the other three are in. MODELS='mitra' TIMEOUT_MIN=180.
+MODELS="${MODELS:-tabpfn-v2 orion-bix}"
 
 log() { printf '\n=== %s  [%s]\n' "$*" "$(date -u +%H:%M:%S)"; }
 
@@ -92,11 +107,11 @@ echo "  seeded $(ls "$OUT"/*.json 2>/dev/null | wc -l) report(s)"
 # The subgroup, read from the gate's own output rather than listed here: these are the datasets where
 # a label-only student is still below 0.90, which is the only place any of this can show anything.
 for m in $MODELS; do
-    log "sweep: $m, budget ${BUDGET_MIN} min"
+    log "sweep: $m, budget ${BUDGET_MIN} min, per-dataset timeout ${TIMEOUT_MIN} min"
     uv run python scripts/teacher_sweep.py --model "$m" \
         --from-gate reference/distill_gate.json --max-student 0.90 \
         --budget-min "$BUDGET_MIN" --out-dir "$OUT" --device cpu \
-        --test-chunk 128 --timeout-min 30 2>&1 | tail -80
+        --test-chunk 128 --timeout-min "$TIMEOUT_MIN" 2>&1 | tail -80
     echo "  $m rc=${PIPESTATUS[0]}  reports: $(ls "$OUT"/phase5_*_${m}.json 2>/dev/null | wc -l)"
 done
 

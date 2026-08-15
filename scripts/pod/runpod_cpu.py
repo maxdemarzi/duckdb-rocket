@@ -235,16 +235,18 @@ def cmd_create(args) -> int:
 
 
 def cmd_ssh(args) -> int:
-    pod = request(f"/pods/{args.pod_id}")
-    ip = pod.get("publicIp")
+    # Via `endpoint`, not a second inline copy of the same lookup. It had one, and so it kept
+    # reporting "no public 22/tcp mapping yet" for a pod that `gate` was ssh-ing into at that
+    # moment: the retry that fixed the flapping lived in `endpoint` and this never called it.
     # portMappings comes back as {"22": 42374} -- a private->public dict, not the list of
     # {privatePort, publicPort} objects the older GraphQL API returned.
-    mappings = pod.get("portMappings") or {}
-    port = mappings.get("22") if isinstance(mappings, dict) else None
-    if not ip or not port:
-        print(f"pod {args.pod_id} has no public 22/tcp mapping yet "
+    where = endpoint(args.pod_id)
+    if where is None:
+        pod = request(f"/pods/{args.pod_id}")
+        print(f"pod {args.pod_id} published no public 22/tcp mapping in {ENDPOINT_READS} reads "
               f"(status {pod.get('desiredStatus')}); it may still be starting.")
         return 1
+    ip, port = where
     print(f"ssh -p {port} root@{ip}")
     print(f"ssh -p {port} root@{ip} 'bash -s' < scripts/pod/bootstrap.sh")
     return 0
@@ -267,12 +269,70 @@ def wait_for_endpoint(pod_id: str, timeout_s: int, poll_s: int = 10) -> tuple[st
         time.sleep(poll_s)
 
 
+#: **The API stops reporting a live pod's endpoint, and this is measured rather than inferred.**
+#:
+#: On a pod that was demonstrably up -- `gate` had ssh'd in and pulled 21 MB at 29.8 MB/s, and a
+#: sweep was running over that same ssh throughout -- `publicIp` came back `''` and `portMappings`
+#: `None` on **25 of 25 polls over 75 seconds**. Earlier, minutes after the same pod started, six
+#: polls gave four empty and two populated. So the endpoint is published briefly around startup and
+#: then simply is not reported again; it is not fast flapping, and no retry count fixes it.
+#:
+#: Two consequences worth stating. Retrying is necessary but not sufficient, so the last endpoint
+#: seen is remembered on disk and reused. And the earlier pod that was terminated as a "bad
+#: placement" after ten minutes of empty reads was probably fine -- with this behaviour, ten minutes
+#: of empty reads is the expected observation for a healthy pod, not evidence against one. That
+#: diagnosis is withdrawn.
+ENDPOINT_READS = 3
+ENDPOINT_CACHE = pathlib.Path.home() / ".runpod" / "endpoints.json"
+
+
+def _remembered() -> dict:
+    try:
+        return json.loads(ENDPOINT_CACHE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _remember(pod_id: str, ip: str, port: int) -> None:
+    try:
+        ENDPOINT_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        seen = _remembered()
+        seen[pod_id] = {"ip": ip, "port": int(port)}
+        ENDPOINT_CACHE.write_text(json.dumps(seen, indent=2), encoding="utf-8")
+    except OSError:
+        pass  # a cache that cannot be written is not a reason to fail a command
+
+
+def listening(ip: str, port: int, timeout: float = 5.0) -> bool:
+    """Is anything accepting TCP there? What makes reusing a remembered endpoint safe.
+
+    Without this, a terminated pod's stale entry would be handed back as a live endpoint and the
+    next command would hang against an address belonging to whoever got it next.
+    """
+    import socket
+
+    try:
+        with socket.create_connection((ip, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def endpoint(pod_id: str) -> tuple[str, int] | None:
-    pod = request(f"/pods/{pod_id}")
-    ip = pod.get("publicIp")
-    mappings = pod.get("portMappings") or {}
-    port = mappings.get("22") if isinstance(mappings, dict) else None
-    return (ip, port) if ip and port else None
+    for attempt in range(ENDPOINT_READS):
+        pod = request(f"/pods/{pod_id}")
+        ip = pod.get("publicIp")
+        mappings = pod.get("portMappings") or {}
+        port = mappings.get("22") if isinstance(mappings, dict) else None
+        if ip and port:
+            _remember(pod_id, ip, port)
+            return ip, port
+        if attempt < ENDPOINT_READS - 1:
+            time.sleep(4)
+    was = _remembered().get(pod_id)
+    if was and listening(was["ip"], was["port"]):
+        return was["ip"], int(was["port"])
+    return None
 
 
 def cmd_gate(args) -> int:

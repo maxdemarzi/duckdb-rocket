@@ -34,7 +34,37 @@ time in this project that a six-dataset conclusion did not survive widening, aft
 shortlist and the "ts beats rocket" claim.
 
 **So distillation is not dead and it is not general.** Its case is confined to unsaturated datasets,
-which is exactly where arm B is now being run.
+which is exactly where arm B was then run.
+
+## Arm B, and why it fails (2026-08-15)
+
+Run on those 28 datasets, one 50/50 pool/holdout split each, `rocket+ridge`. The pool has **five
+points** of headroom with true labels (`C − A` +0.0474, 21/28, p=0.0001) — the premise this document
+argued for finally holds, against under one point on the saturated subset that killed the first gate.
+
+The teacher recovers almost none of it: **+0.0011 with hard argmax, 2.4% of the ceiling.** Soft
+targets reach +0.0119 (25.1%) and confidence filtering +0.0064 (13.5%); `Bs − B` is +0.0107 at
+p=0.0525 paired on identical splits. None of the three clears the 0.0163 this design can detect, so
+the only firm statement is the ordering.
+
+**The reason is not the teacher's error rate, and this is the part worth carrying forward.** The
+break-even sweep corrupts the pool's true labels at known rates and finds where the gain crosses
+zero: the median is **25.6%**, against a median teacher error of **21.6%**. On rate alone the teacher
+is good enough on 9 of 13 measurable cases. Yet arm B pays nothing — and swapping the teacher's
+labels for *random* labels of the same error rate is worth **+0.0516** (10/12, p=0.0386).
+
+A teacher's mistakes are not noise. They concentrate on the same ambiguous rows and point the same
+way, so the student learns a coherent wrong rule; random errors of the same size cancel. Every
+prediction this document made about *how much* the teacher must know was aimed at the wrong quantity.
+
+**What that implies for anything built next.** Improving a labeller's accuracy is not the lever —
+the rate was never binding. The lever is either decorrelating the error structure (an ensemble of
+architecturally unrelated models, judged on error *overlap* rather than accuracy) or not putting
+pseudo-labels into a training set at all (routing: run the student, escalate only the rows it is
+unsure of, so a teacher error costs one row instead of biasing every coefficient).
+
+Full numbers and method in `reference/RESULTS.md`; raw output in `reference/distill_armb.json` and
+`reference/distill_breakeven.json`.
 
 ## Why the gate was re-opened
 

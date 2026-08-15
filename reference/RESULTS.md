@@ -413,6 +413,82 @@ The gate cost 56.9 minutes locally at 7 workers, with per-`(dataset, learner, se
 accuracies cached under `data/gate_students/` so that re-running it as more teacher reports land
 costs only the new fits.
 
+### Distillation: the teacher's error *rate* was never the problem (2026-08-15)
+
+The gate above opens on 29 datasets — those where a label-only student is still below 0.90. Arm B
+asks the actual question there: train a student on the train split plus a pool of test rows the
+teacher has labelled, and score it on a held-out half. `scripts/distill_gate.py --arm-b`, 28 datasets
+with soft-label sidecars, one 50/50 split each, `rocket+ridge`.
+
+| arm | what the pool carries | wins | mean | p | share of the ceiling |
+|---|---|---|---|---|---|
+| **C** | the **true** labels | 21/28 | **+0.0474** | 0.0001 | — (this *is* the ceiling) |
+| **Bs** | the teacher's full distribution | 15/28 | +0.0119 | 0.13 | 25.1% |
+| **Bc** | argmax, most confident half | 14/28 | +0.0064 | 0.19 | 13.5% |
+| **B** | argmax, whole pool | 12/28 | +0.0011 | 1.00 | 2.4% |
+
+`Bs − B` is +0.0107 at p=0.0525, paired on identical splits — the one comparison here worth trusting,
+since it changes nothing but how the pool's labels are represented. Note that `Bs − A` at +0.0119 is
+**below** the 0.0163 this design can detect at 80% power, so "soft-target distillation works" is not
+established. What is established is that soft targets beat hard argmax, and that the ceiling is four
+times either.
+
+**The break-even sweep, which was meant to close the question and did the opposite.** Rather than
+test candidate labellers one at a time, corrupt the pool's *true* labels at 5/10/20/30/40% and find
+where the gain crosses zero. That gives the error rate any labeller must beat, and then every
+candidate — ensembles included — is one number against another. Ten datasets with ≥5 points of
+headroom, both learners:
+
+    median break-even   25.6%      the pool tolerates a quarter of its labels being wrong
+    median teacher err  21.6%      the teacher is inside that on 9 of 13 measurable cases
+    7 of 20 cases still paid at 40% noise
+
+By that reading arm B should have paid. It returned +0.0011.
+
+**Both are right, and the contradiction is the result.** Matching each dataset's synthetic noise to
+its teacher's exact error rate — same split, same pool rows, same student, interpolating the measured
+curve rather than snapping to the nearest swept rate — replacing the teacher's labels with *random*
+labels of the same error rate is worth about five points:
+
+| | wins for random noise | mean | p |
+|---|---|---|---|
+| all 20 (dataset, learner) | 15/20 | +0.0401 | 0.0414 |
+| no extrapolation (T err ≤ 40%) | 10/12 | **+0.0516** | 0.0386 |
+
+So the error *rate* is not what governs. **A teacher's mistakes are not noise**: they concentrate on
+the same ambiguous rows and point the same way, so the student learns a coherent wrong rule, where
+random errors of the same size largely cancel. That also explains the arm ordering above — soft
+targets and confidence filtering both work by marking exactly the rows the teacher got systematically
+wrong, which is why they recover 25% and 14% of the ceiling against hard argmax's 2%.
+
+The interpolation matters and is not a detail: the swept rates sit *below* the teacher's error on
+nine of ten datasets, so snapping to the nearest one compares against a **less** corrupted pool and
+flatters the random side. Correcting that bias made the effect larger, not smaller.
+
+`reference/distill_armb.json`, `reference/distill_breakeven.json`.
+
+#### What this leaves, and what it costs to find out
+
+An ensemble of labellers is the standard escape, and after `scripts/convert_model_weights.sh` there
+are four to build one from — `tabicl-v2` (BSD-3), `mitra` (Apache-2.0), `tabpfn-v2` (Apache-2.0 +
+attribution) and `orion-bix` (MIT), all verified classifying through the real extension on CPU.
+`tabpfn-v2-5` and `tabpfn-v3` also exist and are **non-commercial**, so they are research instruments
+and not shippable.
+
+But the result above changes what an ensemble has to prove. Lowering the error *rate* is not the
+goal, because the rate was never binding. Six models of one `icl-transformer` family scoring one set
+of ROCKET features can be wrong in the same places, and an ensemble that is more accurate while
+sharing the failure mode inherits the whole problem. So the measurement is error **overlap** — how
+much more often two models are wrong together than independence would give, how many rows no model
+gets right, and how far a perfect oracle over them would reach.
+
+One practical note for anyone re-running this: `mitra` costs about **five times** what the others do
+per call. It declares `max_features = 100` against `tabicl`'s 512 and the engine covers a
+500-feature group by raising the estimator count rather than truncating — so it does read all 500
+(verified: it classifies correctly with the only informative feature at index 499, 9 of 10, ~1% by
+chance) and pays five times over for it. On 16 vCPU that is ~100 minutes for a 61-row test set, and
+it timed out on 28 of 29 datasets at the 30-minute limit that suits the other three.
+
 ### The second feature family, measured on all 112 datasets (2026-08-14)
 
 `anofox_forecast` -- the same vendor's forecasting extension -- exposes `ts_features_by(table, group,

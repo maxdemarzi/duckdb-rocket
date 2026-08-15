@@ -122,3 +122,52 @@ def test_report_kernels_pairs_datasets_by_name_not_position(capsys):
     # C's 0.70 against B's 0.90 -- a mean of (0.00 + -0.20) / 2 = -0.1000, printed as a finding.
     assert "250: +0.0000" in out
     assert "-0.1000" not in out
+
+
+def _timings(d: Path, classify_total: float, transform_total: float, n_groups: int = 40) -> Path:
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "timings.json").write_text(json.dumps(
+        [{"grp": g, "transform_seconds": transform_total / n_groups,
+          "classify_seconds": classify_total / n_groups} for g in range(n_groups)]),
+        encoding="utf-8")
+    return d
+
+
+def test_cost_model_recovers_a_known_fixed_and_marginal_cost(tmp_path, capsys):
+    """Two batch sizes must separate the pass routing avoids from the one it cannot.
+
+    Built from a cost that is known by construction -- 1.4 s per group plus 9 ms per row -- so the
+    fit is checked against the truth rather than against itself.
+    """
+    from route_serve import cost_model
+    a, b, g = 1.4, 0.009, 40
+    small = _timings(tmp_path / "s", (a + b * 14) * g, 1.7, g)
+    big = _timings(tmp_path / "b", (a + b * 64) * g, 2.7, g)
+    cost_model(small, big, 14, 64, g, (a + b * 14) * g + 2.2, (a + b * 64) * g + 3.2)
+    out = capsys.readouterr().out
+    assert "1.400 s fixed per group + 9.0 ms per query row" in out
+    assert f"{a * g:.1f} s that escalating cannot avoid" in out
+    # The claim the whole experiment turns on: a 22% escalation does NOT cost 22%.
+    assert "not 22%" in out
+
+
+def test_cost_model_declines_to_fit_when_the_points_do_not_separate(tmp_path, capsys):
+    """A bigger batch that ran FASTER gives a negative marginal cost; say so, do not print it."""
+    from route_serve import cost_model
+    small = _timings(tmp_path / "s", 80.0, 1.0)
+    big = _timings(tmp_path / "b", 60.0, 1.0)
+    cost_model(small, big, 14, 64, 40, 81.0, 61.0)
+    assert "do not separate" in capsys.readouterr().out
+
+
+def test_cost_model_warns_when_one_group_stalled(tmp_path, capsys):
+    """A 13x-median group has been seen in the archive; the totals are then not a steady rate."""
+    from route_serve import cost_model
+    small, big = tmp_path / "s", tmp_path / "b"
+    _timings(small, 56.0, 1.7)
+    _timings(big, 78.0, 2.7)
+    t = json.loads((small / "timings.json").read_text(encoding="utf-8"))
+    t[0]["classify_seconds"] *= 13
+    (small / "timings.json").write_text(json.dumps(t), encoding="utf-8")
+    cost_model(small, big, 14, 64, 40, 60.0, 82.0)
+    assert "CAUTION" in capsys.readouterr().out

@@ -148,6 +148,67 @@ def teacher_predict(dataset: str, idx: np.ndarray, workdir: Path, n_groups: int,
     return np.array([by_id[n_train + k] for k in range(n_q)])
 
 
+def group_seconds(workdir: Path) -> tuple[float, float, float] | None:
+    """(transform total, classify total, slowest/median group) from the run's own timings.json.
+
+    The fit below uses the TOTAL, not the median group: the total is what the call actually costs,
+    and a fixed-plus-marginal model built from medians would not add back up to it. The spread comes
+    back alongside because a single stalled group -- 12.96x the median in the worst archived run --
+    is the one thing that would make the total a bad summary, and it should be visible when it does.
+    """
+    p = workdir / "timings.json"
+    if not p.exists():
+        return None
+    t = json.loads(p.read_text(encoding="utf-8"))
+    if not t:
+        return None
+    cl = sorted(float(r["classify_seconds"]) for r in t)
+    med = cl[len(cl) // 2]
+    return sum(float(r["transform_seconds"]) for r in t), sum(cl), (cl[-1] / med if med else 1.0)
+
+
+def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
+               wall_small: float, wall_big: float) -> None:
+    """Split the teacher's cost into the part routing can avoid and the part it cannot.
+
+    Two batch sizes of the same dataset give two points on `seconds_per_group = a + b*n`, and the
+    split matters more than the total. **b*n is the only part escalating fewer rows removes.** `a`
+    is the pass over the labelled context, which tabfm_classify redoes on every call because the
+    teacher has no trained weights -- so it is paid once per group whether one row is escalated or
+    all of them.
+
+    Read off the run's own per-group timings rather than off wall clock, so that DuckDB startup and
+    the ROCKET transform are not silently attributed to the model. On the first measurement those
+    came to 0.5 s of a 63.2 s call -- small, but assuming it would have been an assumption.
+    """
+    a_small, a_big = group_seconds(small), group_seconds(big)
+    if a_small is None or a_big is None or n_big == n_small:
+        return
+    (tr_s, cl_s, sp_s), (tr_b, cl_b, sp_b) = a_small, a_big
+    # Per group, from the totals: sum / n_groups.
+    per_s, per_b = cl_s / n_groups, cl_b / n_groups
+    b = (per_b - per_s) / (n_big - n_small)
+    a = per_s - b * n_small
+    if a <= 0 or b <= 0:
+        print("  (the two batch sizes do not separate a fixed and a marginal cost here)")
+        return
+    fixed, marginal = a * n_groups, b * n_groups
+    print(f"\n  cost of a classify call, fitted on {n_small} and {n_big} rows:")
+    print(f"    {a:.3f} s fixed per group + {b * 1000:.1f} ms per query row")
+    print(f"    over {n_groups} groups: {fixed:.1f} s that escalating cannot avoid, "
+          f"+ {marginal * 1000:.0f} ms per escalated row")
+    print(f"    startup and transform, outside the model: {wall_small - cl_s - tr_s:.1f} s of the "
+          f"{wall_small:.1f} s call ({tr_s:.1f} s of it the ROCKET transform)")
+    if max(sp_s, sp_b) > 3:
+        print(f"    CAUTION: one group ran {max(sp_s, sp_b):.1f}x the median, so the totals these "
+              f"are fitted on are not a steady rate")
+    # The number that decides whether routing is worth anything on this shape of batch.
+    print(f"    so escalating {n_small}/{n_big} rows costs "
+          f"{(fixed + marginal * n_small) / (fixed + marginal * n_big):.0%} of teacher-everywhere, "
+          f"not {n_small / n_big:.0%}: the fixed pass is {fixed / (fixed + marginal * n_big):.0%} "
+          f"of the full-batch cost and routing does not touch it")
+
+
 def serve(dataset: str, art: Path, batch: int, n_groups: int, seed: int, shell: Path,
           workdir: Path, compare: bool = False) -> int:
     meta = json.loads((art / "meta.json").read_text(encoding="utf-8"))
@@ -206,6 +267,7 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int, seed: int, shell: 
         print(f"  the teacher's per-row cost falls {(t_teacher / len(idx)) / (t_all / take):.1f}x "
               f"going from {len(idx)} rows to {take} -- its context pass is fixed per call, so a "
               f"small escalation batch amortises it over fewer rows")
+        cost_model(workdir, workdir / "all", len(idx), take, n_groups, t_teacher, t_all)
     elif len(idx):
         print(f"  the escalated {esc.mean():.0%} of rows took {t_teacher / total:.0%} of the time")
         print("  (--compare runs the teacher on every row too, which is the only honest way to "

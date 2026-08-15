@@ -43,9 +43,16 @@ train split, and both are scored on the whole test set:
 Only arm B -- the actual distillation -- needs unlabelled data, so it keeps a pool/holdout split, and
 it takes `--repeats` so per-dataset split noise is averaged rather than believed.
 
+**What the wide gate found, and why arm B runs where it does.** Over 67 archived teachers the teacher
+is level with both students (+0.0085 and +0.0019, against a detectable shift of 0.0140) because 28 of
+them have a student at 0.95 or better and no room to move. Below 0.90 the teacher leads ridge on 21 of
+29 (+0.0294, p=0.0125) and below 0.75 on 11 of 11 (+0.0572, p=0.0010). So the gate opens on a
+subgroup, and arm B is asked the same question on the same subgroup rather than on the archive:
+
     uv run python scripts/distill_gate.py --gate                       # T vs A, all archived teachers
     uv run python scripts/distill_gate.py --gate --learners rocket+ridge
-    uv run python scripts/distill_gate.py --arm-b --teacher reference --repeats 5
+    uv run python scripts/distill_gate.py --arm-b --from-gate reference/distill_gate.json \\
+        --max-student 0.90 --repeats 3 --jobs 7
 """
 
 from __future__ import annotations
@@ -54,6 +61,7 @@ import argparse
 import json
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -93,6 +101,46 @@ def mr_hydra(xtr, ytr, xte, seed: int = 0):
 LEARNERS = {"rocket+ridge": rocket_ridge, "mr-hydra": mr_hydra}
 
 
+
+def _student_cache_path(cache: Path, name: str, learner: str, seed: int) -> Path:
+    return cache / f"{name}__{learner.replace('+', '_')}__seed{seed}.json"
+
+
+def student_accuracy(name: str, learner: str, seed: int, cache: Path | None) -> float | None:
+    """One student's accuracy on the full test split, cached per (dataset, learner, seed).
+
+    Cached because the gate is re-run every time another teacher report lands, and the student side
+    has not changed. The key includes the seed so a different bank is never served from cache.
+    """
+    if cache is not None:
+        cp = _student_cache_path(cache, name, learner, seed)
+        if cp.exists():
+            try:
+                return float(json.loads(cp.read_text(encoding="utf-8"))["accuracy"])
+            except Exception:  # noqa: BLE001
+                pass
+    try:
+        xtr, ytr = load(name, "train")
+        xte, yte = load(name, "test")
+    except Exception:  # noqa: BLE001
+        return None
+    xtr, xte = normalize_series(xtr), normalize_series(xte)
+    acc = float((LEARNERS[learner](xtr, ytr, xte, seed=seed) == yte).mean())
+    if cache is not None:
+        cache.mkdir(parents=True, exist_ok=True)
+        _student_cache_path(cache, name, learner, seed).write_text(
+            json.dumps({"dataset": name, "learner": learner, "seed": seed, "accuracy": acc}),
+            encoding="utf-8")
+    return acc
+
+
+def _student_worker(t):
+    name, learner, seed, cache = t
+    try:
+        return name, learner, student_accuracy(name, learner, seed, Path(cache) if cache else None)
+    except Exception:  # noqa: BLE001
+        return name, learner, None
+
 def teacher_reports(directory: Path) -> dict[str, dict]:
     """Archived pipeline reports, keyed by dataset: the teacher's FULL-test accuracy.
 
@@ -118,29 +166,42 @@ def teacher_reports(directory: Path) -> dict[str, dict]:
 
 
 def load_soft(directory: Path, dataset: str) -> dict | None:
-    for stem in (f"phase5_{dataset}_gpu_soft.json", f"phase5_{dataset}_soft.json"):
+    # _cpu_soft too: the sweep archives by recorded device, so a dataset scored on CPU is filed
+    # under _cpu and would otherwise be invisible to arm B.
+    for stem in (f"phase5_{dataset}_gpu_soft.json", f"phase5_{dataset}_cpu_soft.json",
+                 f"phase5_{dataset}_soft.json"):
         p = directory / stem
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8"))
     return None
 
 
-def teacher_labels(soft: dict, n_test: int) -> np.ndarray:
-    """Teacher argmax per test row, in the dataset's own test order.
+def teacher_label_conf(soft: dict, n_test: int) -> tuple[np.ndarray, np.ndarray]:
+    """Teacher argmax and its confidence per test row, in the dataset's own test order.
 
     The pipeline lays its ids out as arange(n_train + n_test) with train first, so test row k is id
     n_train + k. The sidecar records n_train so that offset is asserted rather than rediscovered.
+
+    Confidence is the winning posterior, renormalised. Arm Bc uses it to keep only the teacher's most
+    confident pseudo-labels, which is the standard answer to hard-label distillation diluting the
+    training set with the teacher's own mistakes.
     """
     off, mean_p = soft["n_train"], soft["mean_proba"]
     if soft["n_test"] != n_test:
         raise ValueError(f"teacher ran on {soft['n_test']} test rows, the loader gives {n_test}")
-    out = []
+    lab, conf = [], []
     for k in range(n_test):
         row = mean_p.get(str(off + k))
         if row is None:
             raise ValueError(f"teacher has no probabilities for test row {k} (id {off + k})")
-        out.append(max(row, key=row.get))
-    return np.asarray(out)
+        best = max(row, key=row.get)
+        lab.append(best)
+        conf.append(row[best] / (sum(row.values()) or 1.0))
+    return np.asarray(lab), np.asarray(conf, dtype=float)
+
+
+def teacher_labels(soft: dict, n_test: int) -> np.ndarray:
+    return teacher_label_conf(soft, n_test)[0]
 
 
 def sign_test(diffs: np.ndarray) -> float:
@@ -175,31 +236,26 @@ def run_gate(args) -> int:
     print(f"{'dataset':24s} {'n_test':>6s} {'teacher':>8s} "
           + " ".join(f"{k:>13s}" for k in learners) + "   T-A per learner")
 
+    jobs = [(n, l, args.seed, str(args.cache) if args.cache else None)
+            for n in names for l in learners]
+    results: dict[tuple[str, str], float] = {}
+    with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        futures = [ex.submit(_student_worker, j) for j in jobs]
+        for i, fut in enumerate(as_completed(futures), start=1):
+            n, l, acc = fut.result()
+            if acc is not None:
+                results[(n, l)] = acc
+            if i % 10 == 0 or i == len(jobs):
+                print(f"  ... {i}/{len(jobs)} student fits done", flush=True)
+
     rows: list[dict] = []
     for name in names:
         rep = reports[name]
         T, n_test = rep["accuracy"], rep["shape"]["n_test"]
-        try:
-            xtr, ytr = load(name, "train")
-            xte, yte = load(name, "test")
-        except Exception as e:  # noqa: BLE001
-            print(f"{name:24s} load failed: {str(e)[:44]}")
+        accs = {l: results[(name, l)] for l in learners if (name, l) in results}
+        if not accs:
             continue
-        if len(yte) != n_test:
-            print(f"{name:24s} SKIPPED: report says {n_test} test rows, loader gives {len(yte)}")
-            continue
-        xtr, xte = normalize_series(xtr), normalize_series(xte)
-
-        accs, deltas = {}, {}
-        for lname, fn in learners.items():
-            try:
-                accs[lname] = float((fn(xtr, ytr, xte, seed=args.seed) == yte).mean())
-            except Exception as e:  # noqa: BLE001
-                print(f"{name:24s} {lname} failed: {str(e)[:40]}")
-                continue
-            deltas[lname] = T - accs[lname]
-        if not deltas:
-            continue
+        deltas = {l: T - a for l, a in accs.items()}
         print(f"{name:24s} {n_test:6d} {T:8.4f} "
               + " ".join(f"{accs.get(k, float('nan')):13.4f}" for k in learners)
               + "   " + "  ".join(f"{k}: {v:+.4f}" for k, v in deltas.items()))
@@ -251,65 +307,230 @@ def run_gate(args) -> int:
     return 0
 
 
+ARMS = ("A", "B", "C", "Bc")
+ARM_DOC = {"A": "train labels only", "B": "train + teacher-labelled pool",
+           "C": "train + truly-labelled pool (the ceiling)",
+           "Bc": "train + the most confident half of the teacher-labelled pool"}
+
+
+def pool_holdout(yte: np.ndarray, seed: int, rep: int):
+    """The split, deterministic in (dataset, seed, rep) -- which is what makes the cache safe.
+
+    Stratified so a small holdout still contains every class; unstratified only when some class has
+    a single member and stratification is impossible.
+    """
+    idx = np.arange(len(yte))
+    try:
+        return train_test_split(idx, test_size=0.5, random_state=seed + rep, stratify=yte)
+    except ValueError:
+        return train_test_split(idx, test_size=0.5, random_state=seed + rep)
+
+
+def _armb_cache_path(cache: Path, name: str, learner: str, seed: int, rep: int) -> Path:
+    return cache / f"{name}__{learner.replace('+', '_')}__seed{seed}__r{rep}.json"
+
+
+def arm_split(name: str, learner: str, seed: int, rep: int, arms: tuple[str, ...],
+              teacher_dir: str, cache: str | None) -> dict[str, float]:
+    """Every requested arm on ONE pool/holdout split, cached per split and merged per arm.
+
+    Cached per arm rather than per split so that adding an arm later -- or another repeat -- costs
+    only the new fits. The split is a pure function of (dataset, seed, rep), so a cached A from an
+    earlier run is the same A the new arms are being compared against.
+    """
+    cp = _armb_cache_path(Path(cache), name, learner, seed, rep) if cache else None
+    have: dict[str, float] = {}
+    if cp is not None and cp.exists():
+        try:
+            have = dict(json.loads(cp.read_text(encoding="utf-8"))["arms"])
+        except Exception:  # noqa: BLE001
+            have = {}
+    todo = [a for a in arms if a not in have]
+    if not todo:
+        return have
+
+    soft = load_soft(Path(teacher_dir), name)
+    if soft is None:
+        raise ValueError("no soft-label sidecar")
+    xtr, ytr = load(name, "train")
+    xte, yte = load(name, "test")
+    xtr, xte = normalize_series(xtr), normalize_series(xte)
+    tlab, tconf = teacher_label_conf(soft, len(yte))
+    pool_i, hold_i = pool_holdout(yte, seed, rep)
+    hx, hy = xte[hold_i], yte[hold_i]
+    fn = LEARNERS[learner]
+
+    def score(x, y) -> float:
+        return float((fn(x, y, hx, seed=seed) == hy).mean())
+
+    out = dict(have)
+    for a in todo:
+        if a == "A":
+            out["A"] = score(xtr, ytr)
+        elif a == "B":
+            out["B"] = score(np.concatenate([xtr, xte[pool_i]]),
+                             np.concatenate([ytr, tlab[pool_i]]))
+        elif a == "C":
+            out["C"] = score(np.concatenate([xtr, xte[pool_i]]),
+                             np.concatenate([ytr, yte[pool_i]]))
+        elif a == "Bc":
+            order = np.argsort(-tconf[pool_i], kind="stable")
+            keep = pool_i[order[: max(1, len(pool_i) // 2)]]
+            out["Bc"] = score(np.concatenate([xtr, xte[keep]]),
+                              np.concatenate([ytr, tlab[keep]]))
+    if cp is not None:
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps({"dataset": name, "learner": learner, "seed": seed, "repeat": rep,
+                                  "n_pool": int(len(pool_i)), "n_hold": int(len(hold_i)),
+                                  "arms": out}), encoding="utf-8")
+    return out
+
+
+def _armb_worker(t):
+    name, learner, seed, rep, arms, teacher_dir, cache = t
+    try:
+        return name, learner, rep, arm_split(name, learner, seed, rep, arms, teacher_dir, cache), ""
+    except Exception as e:  # noqa: BLE001
+        return name, learner, rep, None, f"{type(e).__name__}: {e}"[:120]
+
+
+def gate_selection(path: Path, max_student: float) -> list[str]:
+    """Datasets from a gate run whose best student is below `max_student`.
+
+    The subgroup is read off the gate's own output rather than pasted in, so what was tested is
+    recoverable from the command line. docs/DISTILLATION_PLAN.md argues for this cut before any of
+    these numbers existed: a dataset a label-only student already solves has no headroom to distil
+    into, and 28 of the gate's 67 datasets are in that state.
+    """
+    d = json.loads(path.read_text(encoding="utf-8"))
+    return [r["dataset"] for r in d["rows"]
+            if r.get("students") and max(r["students"].values()) < max_student]
+
+
 def run_arm_b(args) -> int:
-    """Arms A, B and C on a pool/holdout split -- the only part that needs unlabelled data.
+    """Arms A/B/C/Bc on pool/holdout splits -- the only part that needs unlabelled data.
 
     Averaged over `--repeats` splits: one 50/50 split of a small test set is a very noisy estimate,
-    and believing a single one is what broke the previous design.
+    and believing a single one is what broke the second design of the gate.
     """
     reports = teacher_reports(args.teacher)
-    names = [n for n in (args.datasets or sorted(reports)) if n in reports]
-    learners = {k: v for k, v in LEARNERS.items() if k in args.learners}
-    print(f"arms A/B/C over {args.repeats} split(s) per dataset\n")
-    print(f"{'dataset':22s} {'learner':13s} {'A':>7s} {'B':>7s} {'C':>7s} {'B-A':>8s} {'C-A':>8s}")
+    if args.from_gate:
+        wanted = gate_selection(args.from_gate, args.max_student)
+        print(f"subgroup from {args.from_gate}: {len(wanted)} datasets with every student "
+              f"below {args.max_student}")
+    else:
+        wanted = args.datasets or sorted(reports)
+    names = [n for n in wanted if n in reports]
+    no_soft = [n for n in names if load_soft(args.teacher, n) is None]
+    names = [n for n in names if n not in no_soft]
+    if no_soft:
+        print(f"  {len(no_soft)} skipped for want of a soft-label sidecar: {', '.join(no_soft)}")
+    if not names:
+        print("nothing to run")
+        return 1
 
+    learners = {k: v for k, v in LEARNERS.items() if k in args.learners}
+    arms = tuple(a for a in ARMS if a in args.arms)
+    cache = str(args.armb_cache) if args.armb_cache else None
+    print(f"\narms {'/'.join(arms)} over {args.repeats} split(s), {len(names)} datasets, "
+          f"{len(learners)} learner(s), {args.jobs} worker(s)")
+    for a in arms:
+        print(f"    {a:3s} {ARM_DOC[a]}")
+
+    # Biggest first: the tail of a fan-out is set by its slowest job, so starting the 760-row
+    # datasets last would leave six workers idle while one finishes.
+    jobs = sorted(((n, l, args.seed, r, arms, str(args.teacher), cache)
+                   for n in names for l in learners for r in range(args.repeats)),
+                  key=lambda j: -reports[j[0]]["shape"]["n_test"])
+    got: dict[tuple[str, str], dict[int, dict[str, float]]] = {}
+    t0 = time.perf_counter()
+    with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        futures = [ex.submit(_armb_worker, j) for j in jobs]
+        for i, fut in enumerate(as_completed(futures), start=1):
+            n, l, rep, res, err = fut.result()
+            if res is None:
+                print(f"  {n} {l} r{rep} failed: {err}", flush=True)
+            else:
+                got.setdefault((n, l), {})[rep] = res
+            if i % 20 == 0 or i == len(jobs):
+                el = (time.perf_counter() - t0) / 60
+                print(f"  ... {i}/{len(jobs)} splits, {el:.1f} min elapsed, "
+                      f"~{el / i * (len(jobs) - i):.1f} min left", flush=True)
+
+    print(f"\n{'dataset':30s} {'learner':13s} " + " ".join(f"{a:>7s}" for a in arms)
+          + "".join(f"{a + '-A':>9s}" for a in arms if a != "A"))
     rows = []
     for name in names:
-        soft = load_soft(args.teacher, name)
-        if soft is None:
-            continue
-        xtr, ytr = load(name, "train")
-        xte, yte = load(name, "test")
-        xtr, xte = normalize_series(xtr), normalize_series(xte)
-        try:
-            tlab = teacher_labels(soft, len(yte))
-        except ValueError as e:
-            print(f"{name:22s} {e}")
-            continue
-
-        for lname, fn in learners.items():
-            A, B, C = [], [], []
-            for rep in range(args.repeats):
-                idx = np.arange(len(yte))
-                try:
-                    pool_i, hold_i = train_test_split(
-                        idx, test_size=0.5, random_state=args.seed + rep, stratify=yte)
-                except ValueError:
-                    pool_i, hold_i = train_test_split(
-                        idx, test_size=0.5, random_state=args.seed + rep)
-                hx, hy = xte[hold_i], yte[hold_i]
-                bx = np.concatenate([xtr, xte[pool_i]])
-                A.append(float((fn(xtr, ytr, hx, seed=args.seed) == hy).mean()))
-                B.append(float((fn(bx, np.concatenate([ytr, tlab[pool_i]]), hx,
-                                   seed=args.seed) == hy).mean()))
-                C.append(float((fn(bx, np.concatenate([ytr, yte[pool_i]]), hx,
-                                   seed=args.seed) == hy).mean()))
-            a, b, c = float(np.mean(A)), float(np.mean(B)), float(np.mean(C))
-            print(f"{name:22s} {lname:13s} {a:7.4f} {b:7.4f} {c:7.4f} {b - a:+8.4f} {c - a:+8.4f}")
-            rows.append({"dataset": name, "learner": lname, "A": a, "B": b, "C": c})
-
-    if rows:
         for lname in learners:
-            sub = [r for r in rows if r["learner"] == lname]
-            if not sub:
+            per = got.get((name, lname), {})
+            if not per:
                 continue
-            ba = np.array([r["B"] - r["A"] for r in sub])
-            print(f"\n  {lname}: B-A {int((ba > 0).sum())}/{len(ba)} wins, mean {ba.mean():+.4f}, "
-                  f"sign test p = {sign_test(ba):.4f}")
-        print("\nArm B uses the teacher's hard argmax. A soft-label student can exceed it, so a "
-              "negative here bounds hard-label distillation and not distillation.")
-    if args.out and rows:
-        args.out.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+            mean = {a: float(np.mean([v[a] for v in per.values() if a in v]))
+                    for a in arms if any(a in v for v in per.values())}
+            if "A" not in mean:
+                continue
+            print(f"{name:30s} {lname:13s} " + " ".join(f"{mean.get(a, float('nan')):7.4f}" for a in arms)
+                  + "".join(f"{mean[a] - mean['A']:+9.4f}" for a in arms
+                            if a != "A" and a in mean))
+            rows.append({"dataset": name, "learner": lname, "repeats": len(per),
+                         "teacher": reports[name]["accuracy"], "mean": mean,
+                         "per_split": {str(k): v for k, v in sorted(per.items())}})
+
+    if not rows:
+        return 1
+
+    print("\nDISTILLATION -- paired across datasets, per learner:")
+    verdicts: dict[str, dict] = {}
+    for lname in learners:
+        sub = [r for r in rows if r["learner"] == lname]
+        if not sub:
+            continue
+        for a in arms:
+            if a == "A":
+                continue
+            d = np.array([r["mean"][a] - r["mean"]["A"] for r in sub if a in r["mean"]])
+            if not len(d):
+                continue
+            p = sign_test(d)
+            verdicts[f"{lname}:{a}"] = {"n": len(d), "wins": int((d > 0).sum()),
+                                        "mean": float(d.mean()),
+                                        "median": float(np.median(d)), "sign_p": p}
+            print(f"  {lname:13s} {a + '-A':6s} {int((d > 0).sum()):3d}/{len(d)} wins   "
+                  f"mean {d.mean():+.4f}   median {float(np.median(d)):+.4f}   p = {p:.4f}")
+        d = np.array([r["mean"]["B"] - r["mean"]["A"] for r in sub if "B" in r["mean"]])
+        if len(d) > 1:
+            print(f"  {lname:13s} {'':6s} sd {float(np.std(d, ddof=1)):.4f}, so n={len(d)} detects "
+                  f"a shift of about {2.8 * float(np.std(d, ddof=1)) / len(d) ** 0.5:.4f} at 80% power")
+
+    # The mechanism check. Distillation can only add what the teacher knows and the student does
+    # not, so B-A should track the teacher's own edge. If it does not, any aggregate win is luck.
+    if "B" in arms and "C" in arms:
+        print("\n  by the teacher's edge over the student on the same splits (T - A):")
+        for lname in learners:
+            sub = [r for r in rows if r["learner"] == lname and "B" in r["mean"]]
+            if len(sub) < 4:
+                continue
+            edge = np.array([r["teacher"] - r["mean"]["A"] for r in sub])
+            ba = np.array([r["mean"]["B"] - r["mean"]["A"] for r in sub])
+            ca = np.array([r["mean"]["C"] - r["mean"]["A"] for r in sub])
+            for label, m in (("teacher ahead", edge > 0), ("teacher behind", edge <= 0)):
+                if m.sum():
+                    print(f"    {lname:13s} {label:15s} n={int(m.sum()):3d}   "
+                          f"B-A {ba[m].mean():+.4f} ({int((ba[m] > 0).sum())} wins)   "
+                          f"C-A {ca[m].mean():+.4f}   p = {sign_test(ba[m]):.4f}")
+
+    print("\nArm B uses the teacher's hard argmax. A soft-label student can exceed it, so a negative "
+          "here bounds hard-label distillation and not distillation. C is the same pool with real "
+          "labels: where C-A is itself near zero, no labelling of the pool could have helped and the "
+          "dataset says nothing about the teacher.")
+    if args.out:
+        args.out.write_text(json.dumps(
+            {"design": "arms A/B/C/Bc on 50/50 pool/holdout, averaged over repeats",
+             "arms": {a: ARM_DOC[a] for a in arms}, "repeats": args.repeats, "seed": args.seed,
+             "selection": (f"best student < {args.max_student} in {args.from_gate}"
+                           if args.from_gate else "explicit"),
+             "n_datasets": len({r['dataset'] for r in rows}), "verdicts": verdicts, "rows": rows},
+            indent=2), encoding="utf-8")
         print(f"wrote {args.out}")
     return 0
 
@@ -324,7 +545,23 @@ def main() -> int:
                     help="directory of archived pipeline reports and soft-label sidecars")
     ap.add_argument("--learners", nargs="*", default=list(LEARNERS))
     ap.add_argument("--repeats", type=int, default=5, help="pool/holdout splits to average (arm B)")
+    ap.add_argument("--arms", nargs="*", default=["A", "B", "C"],
+                    help=f"which arms to score: {', '.join(f'{k} = {v}' for k, v in ARM_DOC.items())}")
+    ap.add_argument("--from-gate", type=Path,
+                    help="select datasets from a gate run instead of naming them, so the subgroup "
+                         "under test is recoverable from the command line")
+    ap.add_argument("--max-student", type=float, default=0.90,
+                    help="with --from-gate, keep datasets whose BEST student is below this; a "
+                         "dataset a label-only student already solves has no headroom to distil into")
+    ap.add_argument("--armb-cache", type=Path, default=ROOT / "data" / "armb_splits",
+                    help="per-(dataset, learner, seed, repeat) arm scores, merged per arm, so "
+                         "adding an arm or a repeat later costs only the new fits")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--jobs", type=int, default=1,
+                    help="parallel student fits; the gate is embarrassingly parallel across datasets")
+    ap.add_argument("--cache", type=Path, default=ROOT / "data" / "gate_students",
+                    help="per-(dataset, learner, seed) student accuracies, so re-running the "
+                         "gate as more teacher reports land costs nothing already computed")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 

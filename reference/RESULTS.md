@@ -372,6 +372,47 @@ first came out of a run whose row alignment was wrong. They are reported now, at
 `min_groups_per_row = max_groups_per_row = 40` on both — 15,000 group-rows over 375 ids and 22,000
 over 550. `reference/phase5_ScreenType_gpu.json`, `reference/phase5_InlineSkate_gpu.json`.
 
+### Widened to 67 datasets: that +0.033 is a hard-dataset margin, not a general one (2026-08-14)
+
+The six rows above are six rows, and this project has now had three six-dataset conclusions fail to
+survive widening. So the teacher was run across every dataset inside `tabicl-v2`'s 10-class cap —
+75 archived reports, 67 of them with a clean run and a loadable test split — and each was compared
+against the same two students on the **same full test split**, per learner, never as a max over
+learners. `scripts/distill_gate.py --gate`, `reference/distill_gate.json`.
+
+| subgroup | n | vs ROCKET+ridge | vs mr-hydra |
+|---|---|---|---|
+| every archived teacher | 67 | 30/67, **+0.0085**, p=0.69 | 25/67, **+0.0019**, p=0.68 |
+| best student < 0.90 | 29 | 21/29, **+0.0294**, p=0.0125 | 17/29, **+0.0198**, p=0.25 |
+| best student < 0.75 | 11 | 11/11, **+0.0572**, p=0.0010 | 8/11, **+0.0326**, p=0.23 |
+| best student ≥ 0.95 | 28 | 6/28, −0.0057, p=0.17 | 6/28, −0.0102, p=0.12 |
+
+Two-sided sign tests on the paired per-dataset differences — distribution-free on purpose, because a
+30-row test set and a 4,500-row one are not comparable draws.
+
+**Over the whole archive the pipeline and both students are level.** +0.0085 and +0.0019 are below
+the 0.0140 shift that n=67 detects at 80% power, and the median difference is exactly 0.0000: **28 of
+the 67 datasets have a student at 0.95 or better**, and on those neither model can move.
+
+**On the datasets with headroom the margin is real.** Below 0.90 the pipeline leads ridge by 2.9
+points on 21 of 29; below 0.75 it wins **11 of 11** at p=0.0010, which survives correcting for the
+four subgroups looked at. That subgroup was specified in `docs/DISTILLATION_PLAN.md` before any of
+these numbers existed, on the argument that a saturated dataset cannot demonstrate anything.
+
+**Against `mr-hydra` the sign is positive everywhere and significant nowhere** (+0.0198 and +0.0326,
+p=0.25 and p=0.23). That is a power statement, not a tie: only eleven datasets in the whole archive
+are genuinely hard, so widening further cannot fix it — the archive runs out of hard problems before
+the test runs out of appetite.
+
+So the six-dataset "+0.033, 6 of 6" above is a **correct measurement of a subgroup, reported as if it
+were general**. The corrected claim: this pipeline beats a ridge head on the same features where the
+problem is hard, ties it where the problem is easy, and its advantage over a stronger convolutional
+student is unresolved and will stay unresolved on UCR.
+
+The gate cost 56.9 minutes locally at 7 workers, with per-`(dataset, learner, seed)` student
+accuracies cached under `data/gate_students/` so that re-running it as more teacher reports land
+costs only the new fits.
+
 ### The second feature family, measured on all 112 datasets (2026-08-14)
 
 `anofox_forecast` -- the same vendor's forecasting extension -- exposes `ts_features_by(table, group,

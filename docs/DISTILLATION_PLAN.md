@@ -1,6 +1,42 @@
 # The one-two punch: label with the teacher, serve with a student
 
-**Status: gate failed on the wrong datasets. Re-open before believing the negative.**
+**Status: the gate opens, but only on hard datasets. 67 archived teachers, 2026-08-14.**
+
+## The gate, decided (2026-08-14)
+
+`scripts/distill_gate.py --gate`, third design: teacher accuracy `T` read from its archived pipeline
+report, each student trained on the train split and scored on the **same full test split**, reported
+**per learner** and never as a max over learners. 67 datasets, `reference/distill_gate.json`.
+
+| subgroup | n | vs ROCKET+ridge | vs mr-hydra |
+|---|---|---|---|
+| all archived teachers | 67 | 30/67, **+0.0085**, p=0.69 | 25/67, **+0.0019**, p=0.68 |
+| best student < 0.90 | 29 | 21/29, **+0.0294**, p=0.0125 | 17/29, **+0.0198**, p=0.25 |
+| best student < 0.75 | 11 | 11/11, **+0.0572**, p=0.0010 | 8/11, **+0.0326**, p=0.23 |
+| best student ≥ 0.95 | 28 | 6/28, −0.0057, p=0.17 | 6/28, −0.0102, p=0.12 |
+
+**Across the whole archive the teacher is level with both students.** Both effects are below the
+0.0140 shift n=67 can detect at 80% power, and the median difference is exactly 0.0000 — because 28
+of the 67 datasets have a student at 0.95 or better, where neither model has anywhere to go.
+
+**The difficulty split is not post-hoc.** It is the cut this document argued for before any of these
+numbers existed, in the section below: a dataset a label-only student already solves has no headroom
+to distil into. On the datasets that do have headroom the teacher leads ROCKET+ridge by 3 points, and
+on the hardest eleven it wins **11 of 11** at p=0.0010 — which survives correcting for the four
+subgroups examined. Against `mr-hydra` the teacher is ahead everywhere too (+0.0198, +0.0326) but
+never significantly: only eleven datasets in the whole archive are genuinely hard, so the question
+stays underpowered at any archive size.
+
+**This also retracts a six-dataset result of my own.** The same gate over the six hard datasets alone
+read 6/6 and +0.0328 at p=0.0312, and was reported as the corrected verdict. At 67 datasets it is
+30/67 and +0.0085. The six-dataset number was a *subgroup* effect stated as a general one — the third
+time in this project that a six-dataset conclusion did not survive widening, after the feature
+shortlist and the "ts beats rocket" claim.
+
+**So distillation is not dead and it is not general.** Its case is confined to unsaturated datasets,
+which is exactly where arm B is now being run.
+
+## Why the gate was re-opened
 
 The gate below fired and was honoured, and the measurement stands: on the ten-dataset subset there
 is no headroom to distil. But the subset was chosen for *spread*, and nine of its ten datasets sit

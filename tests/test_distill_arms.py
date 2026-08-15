@@ -239,6 +239,65 @@ class TestSoftTargetRidge:
                                  ["1", "2"], rng.normal(size=(2, 16)), n_kernels=64)
 
 
+class TestEnsembleSoftLabels:
+    def _write(self, d: Path, dataset: str, model: str, probs: list[dict], classes=("1", "2")):
+        s = _sidecar(0, len(probs), probs)
+        s["classes"] = list(classes)
+        s["model"] = model
+        name = (f"phase5_{dataset}_gpu_soft.json" if model == "tabicl-v2"
+                else f"phase5_{dataset}_{model}_soft.json")
+        (d / name).write_text(json.dumps(s))
+
+    def test_probabilities_are_averaged_not_voted(self, tmp_path):
+        # Two models that disagree 0.6/0.4 and 0.3/0.7 average to 0.45/0.55 -- class 2. A majority
+        # vote on their argmaxes ties, and any tie-break would be arbitrary; that is the information
+        # averaging keeps and voting discards.
+        self._write(tmp_path, "D", "tabicl-v2", [{"1": 0.6, "2": 0.4}])
+        self._write(tmp_path, "D", "mitra", [{"1": 0.3, "2": 0.7}])
+        ens = dg.load_ensemble_soft(tmp_path, "D", ["tabicl-v2", "mitra"])
+        assert ens["mean_proba"]["0"] == pytest.approx({"1": 0.45, "2": 0.55})
+        assert list(dg.teacher_labels(ens, 1)) == ["2"]
+
+    def test_one_model_is_the_identity(self, tmp_path):
+        self._write(tmp_path, "D", "tabicl-v2", [{"1": 0.6, "2": 0.4}])
+        one = dg.load_ensemble_soft(tmp_path, "D", ["tabicl-v2"])
+        assert one["mean_proba"] == dg.load_soft(tmp_path, "D")["mean_proba"]
+
+    def test_a_missing_model_gives_none_rather_than_a_smaller_ensemble(self, tmp_path):
+        # Averaging whichever models happened to have run would make the ensemble's membership vary
+        # by dataset, so no per-dataset accuracy would be comparable to any other.
+        self._write(tmp_path, "D", "tabicl-v2", [{"1": 0.6, "2": 0.4}])
+        assert dg.load_ensemble_soft(tmp_path, "D", ["tabicl-v2", "mitra"]) is None
+
+    def test_rows_are_renormalised_before_averaging(self, tmp_path):
+        # An unnormalised model would otherwise get more weight than the others in proportion to how
+        # unnormalised it is.
+        self._write(tmp_path, "D", "tabicl-v2", [{"1": 6.0, "2": 4.0}])
+        self._write(tmp_path, "D", "mitra", [{"1": 0.2, "2": 0.8}])
+        ens = dg.load_ensemble_soft(tmp_path, "D", ["tabicl-v2", "mitra"])
+        assert ens["mean_proba"]["0"] == pytest.approx({"1": 0.4, "2": 0.6})
+
+    def test_disagreeing_class_lists_raise(self, tmp_path):
+        self._write(tmp_path, "D", "tabicl-v2", [{"1": 0.6, "2": 0.4}], classes=("1", "2"))
+        self._write(tmp_path, "D", "mitra", [{"1": 0.6, "2": 0.4}], classes=("2", "1"))
+        with pytest.raises(ValueError, match="classes"):
+            dg.load_ensemble_soft(tmp_path, "D", ["tabicl-v2", "mitra"])
+
+    def test_a_different_split_raises(self, tmp_path):
+        self._write(tmp_path, "D", "tabicl-v2", [{"1": 0.6, "2": 0.4}])
+        self._write(tmp_path, "D", "mitra", [{"1": 0.6, "2": 0.4}, {"1": 0.5, "2": 0.5}])
+        with pytest.raises(ValueError, match="different split"):
+            dg.load_ensemble_soft(tmp_path, "D", ["tabicl-v2", "mitra"])
+
+    def test_the_archived_teacher_keeps_its_model_free_filename(self, tmp_path):
+        # Renaming the archived sidecars would orphan reference/distill_gate.json and everything
+        # built on it, so tabicl-v2 must resolve to the old spelling and only new models get a suffix.
+        self._write(tmp_path, "D", "tabicl-v2", [{"1": 0.6, "2": 0.4}])
+        assert dg.load_soft(tmp_path, "D", "tabicl-v2") is not None
+        assert dg.load_soft(tmp_path, "D") is not None
+        assert dg.load_soft(tmp_path, "D", "mitra") is None
+
+
 class TestRouting:
     def test_binary_margin_is_distance_from_the_boundary(self):
         assert dg.decision_margin(np.array([-2.0, 0.5, 3.0])).tolist() == [2.0, 0.5, 3.0]

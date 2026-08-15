@@ -165,15 +165,62 @@ def teacher_reports(directory: Path) -> dict[str, dict]:
     return out
 
 
-def load_soft(directory: Path, dataset: str) -> dict | None:
-    # _cpu_soft too: the sweep archives by recorded device, so a dataset scored on CPU is filed
-    # under _cpu and would otherwise be invisible to arm B.
-    for stem in (f"phase5_{dataset}_gpu_soft.json", f"phase5_{dataset}_cpu_soft.json",
-                 f"phase5_{dataset}_soft.json"):
+def load_soft(directory: Path, dataset: str, model: str | None = None) -> dict | None:
+    """One model's soft-label sidecar, or None.
+
+    `model=None` means the original teacher, whose reports predate `--model` and carry no model in
+    their name. The archived spelling is preserved rather than migrated: renaming those files would
+    orphan reference/distill_gate.json and everything built on it. `_cpu_soft` is included because
+    the sweep archives by recorded device, so a dataset scored on CPU is filed under `_cpu` and
+    would otherwise be invisible.
+    """
+    stems = ([f"phase5_{dataset}_{model}_soft.json"] if model and model != "tabicl-v2" else
+             [f"phase5_{dataset}_gpu_soft.json", f"phase5_{dataset}_cpu_soft.json",
+              f"phase5_{dataset}_soft.json"])
+    for stem in stems:
         p = directory / stem
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8"))
     return None
+
+
+def load_ensemble_soft(directory: Path, dataset: str, models: list[str]) -> dict | None:
+    """Several labellers averaged into one, or None if any of them is missing this dataset.
+
+    Averaging probabilities rather than voting on argmax, for the same reason arm Bs exists: on a
+    dataset where each model is 60% accurate, most of what they collectively know is in how they
+    hedge, and a majority vote throws it away before the ensemble can use it.
+
+    Returning None when one model is absent is deliberate. Silently averaging whichever subset
+    happened to have run would make the ensemble's membership vary by dataset, so a per-dataset
+    accuracy would not be comparable to any other and the aggregate would describe no fixed system.
+    """
+    parts = []
+    for m in models:
+        s = load_soft(directory, dataset, m)
+        if s is None:
+            return None
+        parts.append(s)
+    base = parts[0]
+    classes = list(base["classes"])
+    for s in parts[1:]:
+        if list(s["classes"]) != classes:
+            raise ValueError(f"{dataset}: {s.get('model')} has classes {s['classes']}, "
+                             f"{base.get('model')} has {classes}")
+        if s["n_train"] != base["n_train"] or s["n_test"] != base["n_test"]:
+            raise ValueError(f"{dataset}: {s.get('model')} ran on a different split")
+    merged: dict[str, dict[str, float]] = {}
+    for key in base["mean_proba"]:
+        rows = []
+        for s in parts:
+            row = s["mean_proba"].get(key)
+            if row is None:
+                raise ValueError(f"{dataset}: {s.get('model')} has no row {key}")
+            tot = sum(row.values()) or 1.0
+            rows.append({c: row.get(c, 0.0) / tot for c in classes})
+        merged[key] = {c: sum(r[c] for r in rows) / len(rows) for c in classes}
+    return {"dataset": dataset, "model": "+".join(models), "n_train": base["n_train"],
+            "n_test": base["n_test"], "classes": classes, "mean_proba": merged}
 
 
 def teacher_label_conf(soft: dict, n_test: int) -> tuple[np.ndarray, np.ndarray]:
@@ -688,6 +735,65 @@ def run_arm_b(args) -> int:
     return 0
 
 
+def run_labellers(args) -> int:
+    """How accurate is each labeller, and their average, on the rows a pool would be drawn from?
+
+    This costs no fits at all -- every number comes from archived sidecars and the true test labels
+    -- and it is what prices an ensemble before one is built. The break-even sweep says how accurate
+    a labeller must be for the pool to pay; this says how accurate each candidate actually is. If
+    the best candidate's error sits above the break-even, no amount of arm B will change it, and the
+    comparison is one column against another rather than another run.
+    """
+    models = list(args.labellers)
+    reports = teacher_reports(args.teacher)
+    if args.from_gate:
+        wanted = gate_selection(args.from_gate, args.max_student)
+    else:
+        wanted = args.datasets or sorted(reports)
+    names = [n for n in wanted if n in reports]
+
+    print(f"labeller accuracy on the full test split, {len(models)} model(s): {', '.join(models)}\n")
+    print(f"{'dataset':30s} " + " ".join(f"{m:>12s}" for m in models)
+          + f"{'ensemble':>12s}{'best single':>13s}")
+    rows, missing = [], {m: 0 for m in models}
+    for name in names:
+        _, yte = load(name, "test")
+        accs = {}
+        for m in models:
+            s = load_soft(args.teacher, name, m)
+            if s is None:
+                missing[m] += 1
+                continue
+            accs[m] = float((teacher_labels(s, len(yte)) == yte).mean())
+        ens = load_ensemble_soft(args.teacher, name, models) if len(accs) == len(models) else None
+        ens_acc = float((teacher_labels(ens, len(yte)) == yte).mean()) if ens else float("nan")
+        print(f"{name:30s} " + " ".join(f"{accs.get(m, float('nan')):12.4f}" for m in models)
+              + f"{ens_acc:12.4f}{(max(accs.values()) if accs else float('nan')):13.4f}")
+        rows.append({"dataset": name, "per_model": accs, "ensemble": ens_acc,
+                     "best_single": max(accs.values()) if accs else None})
+    for m, k in missing.items():
+        if k:
+            print(f"  {m}: no sidecar for {k} of {len(names)} datasets")
+
+    full = [r for r in rows if r["ensemble"] == r["ensemble"] and r["best_single"] is not None]
+    if full:
+        print(f"\n  over the {len(full)} datasets every model ran:")
+        for m in models:
+            v = np.array([r["per_model"][m] for r in full])
+            print(f"    {m:14s} mean {v.mean():.4f}   mean error {1 - v.mean():.1%}")
+        e = np.array([r["ensemble"] for r in full])
+        b = np.array([r["best_single"] for r in full])
+        print(f"    {'ensemble':14s} mean {e.mean():.4f}   mean error {1 - e.mean():.1%}")
+        print(f"\n    ensemble vs the best single model: {e.mean() - b.mean():+.4f} "
+              f"({int((e > b).sum())}/{len(full)} wins, p = {sign_test(e - b):.4f})")
+        print("    'best single' is chosen per dataset on the test set, so it is an oracle: a real "
+              "system must pick one model in advance, and the ensemble is what avoids that choice.")
+    if args.out and rows:
+        args.out.write_text(json.dumps({"models": models, "rows": rows}, indent=2), encoding="utf-8")
+        print(f"\nwrote {args.out}")
+    return 0
+
+
 def decision_margin(d: np.ndarray) -> np.ndarray:
     """How far the student was from changing its mind: |distance| binary, top1 - top2 multiclass."""
     if d.ndim == 1:
@@ -864,6 +970,11 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gate", action="store_true", help="T vs A on full test splits (the gate)")
     ap.add_argument("--arm-b", action="store_true", help="arms A/B/C on pool/holdout splits")
+    ap.add_argument("--labeller-accuracy", action="store_true",
+                    help="how accurate each labeller and their average are; costs no fits and is "
+                         "what prices an ensemble against the break-even")
+    ap.add_argument("--labellers", nargs="*", default=["tabicl-v2"],
+                    help="models whose archived soft labels to read and average")
     ap.add_argument("--route", action="store_true",
                     help="escalate the student's least-confident rows to the teacher instead of "
                          "distilling from it")
@@ -896,7 +1007,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 
-    if not (args.gate or args.arm_b or args.route):
+    if not (args.gate or args.arm_b or args.route or args.labeller_accuracy):
         args.gate = True
     t0 = time.perf_counter()
     rc = run_gate(args) if args.gate else 0
@@ -904,6 +1015,8 @@ def main() -> int:
         rc = run_arm_b(args) or rc
     if args.route:
         rc = run_route(args) or rc
+    if args.labeller_accuracy:
+        rc = run_labellers(args) or rc
     print(f"\n{(time.perf_counter() - t0) / 60:.1f} min")
     return rc
 

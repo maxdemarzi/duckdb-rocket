@@ -152,12 +152,37 @@ SELECT column_name FROM (DESCRIBE SELECT * FROM ts_features_by('probe_long', id,
     return names
 
 
+def _per_group_export(outdir: Path) -> str:
+    """Dump each group's own probabilities, not just the average over them.
+
+    **This turns a sweep over the group count into one run.** Group g covers global kernel indices
+    [g*kpg, (g+1)*kpg), and the prediction is the argmax of the MEAN of the groups' probabilities.
+    So as long as kernels_per_group is held fixed -- which means scaling --num-kernels with
+    --n-groups, since kernels_per_group is num_kernels // n_groups -- a G-group run reads exactly
+    groups 0..G-1 of the bank a 40-group run reads, and averaging the first G groups here
+    reproduces its predictions exactly rather than approximately.
+
+    Concretely: `--n-groups 10 --num-kernels 2500` is the 40-group run's first ten groups. It is
+    NOT `--n-groups 10 --num-kernels 10000`, which would make each group 1000 kernels wide -- 2000
+    features against tabicl's 512 cap -- and is a different experiment.
+
+    One row per (group, row, class): 40 x n_test x n_classes, a few MB at UCR sizes. Behind a flag
+    because it is dead weight for a normal run.
+    """
+    return f"""
+.once '{(outdir / "per_group.json").as_posix()}'
+SELECT grp, id, e.key AS cls, e.value AS p
+FROM all_groups, UNNEST(map_entries(proba)) AS t(e)
+ORDER BY grp, id, cls;
+"""
+
+
 def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               memory_limit: str, temp_dir: Path, test_chunk: int | None,
               onnx_threads: int, load_rocket: str = "", device: str = "cpu",
               model: str = MODEL, anofox_extension: Path | None = None,
               register_dir: Path | None = None, features: str = "rocket",
-              ts_names: list[str] | None = None) -> str:
+              ts_names: list[str] | None = None, per_group: bool = False) -> str:
     # Which feature families the classifier sees. `rocket` is the 500 random-convolution features
     # per group that every result so far uses. `ts` is anofox_forecast's 116 statistics, which beat
     # 10,000 ROCKET features on three of six hard datasets under a ridge. `both` is the open
@@ -542,6 +567,7 @@ SELECT id, yhat, y FROM predictions ORDER BY id;
 -- -- so it costs nothing, and the alternative is discovering it was needed after the pod is gone.
 -- That has already happened once: six hard datasets had to be re-run because only accuracy was kept.
 SELECT id, cls, mean_p FROM per_class ORDER BY id, cls;
+{_per_group_export(outdir) if per_group else ""}
 
 .once '{(outdir / "timings.json").as_posix()}'
 -- Seconds spent computing ROCKET features, versus seconds spent in tabfm_classify. The gap
@@ -671,6 +697,14 @@ def main() -> int:
              "tensor_map_tabicl_classification.json. Registered under the model id so the run "
              "uses that graph. On CPU the patched graph is bit-identical to the shipped one.",
     )
+    parser.add_argument(
+        "--per-group-soft",
+        action="store_true",
+        help="also archive each group's own probabilities, not just their average. One run then "
+             "answers the whole group-count sweep exactly: averaging the first G groups is what a "
+             "G-group run computes, provided --num-kernels is scaled with --n-groups to hold "
+             "kernels-per-group fixed.",
+    )
     parser.add_argument("--keep-sql", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
@@ -735,7 +769,8 @@ def main() -> int:
                     device=args.device, model=args.model,
                     anofox_extension=args.anofox_extension,
                     register_dir=args.register_model_dir,
-                    features=args.features, ts_names=ts_names)
+                    features=args.features, ts_names=ts_names,
+                    per_group=args.per_group_soft)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")
@@ -1030,6 +1065,36 @@ def main() -> int:
         # Loud, because a distillation run that silently has no teacher labels looks like a
         # student that learned nothing.
         print(f"WARNING: no soft labels at {soft_src}; distillation arms cannot use this run")
+
+    # Per-group probabilities, when asked for. Written as nested arrays keyed by explicit `ids` and
+    # `classes` lists rather than as one object per (group, row, class): the object form of a
+    # 40 x 760 x 10 dump is ~8 MB of repeated key strings, and the array form is a fifth of that.
+    pg_src = workdir / "per_group.json"
+    if args.per_group_soft and pg_src.exists():
+        recs = json.loads(pg_src.read_text(encoding="utf-8"))
+        ids = sorted({int(r["id"]) for r in recs})
+        classes = sorted({str(r["cls"]) for r in recs})
+        ri = {v: i for i, v in enumerate(ids)}
+        ci = {v: i for i, v in enumerate(classes)}
+        cube = [[[0.0] * len(classes) for _ in ids] for _ in range(config.n_groups)]
+        for r in recs:
+            cube[int(r["grp"])][ri[int(r["id"])]][ci[str(r["cls"])]] = round(float(r["p"]), 6)
+        pg_path = out.with_name(out.stem + "_pergroup.json")
+        pg_path.write_text(json.dumps({
+            "dataset": args.dataset, "model": args.model,
+            "n_train": meta["n_train"], "n_test": meta["n_test"],
+            "n_groups": config.n_groups,
+            # The number that makes a prefix of these groups equal to a shorter run. Recorded so a
+            # consumer can check it matches the run it wants to compare against instead of assuming.
+            "kernels_per_group": config.kernels_per_group,
+            "note": "proba[g][i][c] is group g's probability of classes[c] for row ids[i]; "
+                    "averaging g < G reproduces a G-group run at the same kernels_per_group",
+            "ids": ids, "classes": classes, "proba": cube,
+        }), encoding="utf-8")
+        print(f"wrote {pg_path}  ({config.n_groups} groups x {len(ids)} rows x "
+              f"{len(classes)} classes)")
+    elif args.per_group_soft:
+        print(f"WARNING: --per-group-soft was asked for but {pg_src} does not exist")
 
     if not args.keep_sql:
         script.unlink(missing_ok=True)

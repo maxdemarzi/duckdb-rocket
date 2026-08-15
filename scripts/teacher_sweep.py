@@ -118,6 +118,15 @@ def main() -> int:
     ap.add_argument("--anofox-extension", type=Path)
     ap.add_argument("--register-model-dir", type=Path)
     ap.add_argument("--test-chunk", type=int, default=128)
+    # Passed through rather than left at phase5's defaults because those defaults size themselves
+    # from the VISIBLE cores, and several of these running at once each claiming the whole box is
+    # what killed a pod sweep before. Running N shards concurrently means setting these so that
+    # N x threads x onnx-threads lands near the vCPU count, not above it.
+    ap.add_argument("--threads", type=int, help="DuckDB threads per phase5 run")
+    ap.add_argument("--onnx-threads", type=int, help="ONNX intra-op threads per session")
+    ap.add_argument("--per-group-soft", action="store_true",
+                    help="archive each group's own probabilities, which makes the group-count "
+                         "sweep exact from a single run (scripts/perf_levers.py --groups)")
     ap.add_argument("--timeout-min", type=float, default=90.0,
                     help="per-dataset timeout; a single pathological dataset must not eat the budget")
     args = ap.parse_args()
@@ -167,6 +176,12 @@ def main() -> int:
                "--model", args.model,
                "--test-chunk", str(args.test_chunk),
                "--out", str(args.out_dir / report_name(name, args.model))]
+        if args.threads:
+            cmd += ["--threads", str(args.threads)]
+        if args.onnx_threads:
+            cmd += ["--onnx-threads", str(args.onnx_threads)]
+        if args.per_group_soft:
+            cmd += ["--per-group-soft"]
         if args.anofox_extension:
             cmd += ["--anofox-extension", str(args.anofox_extension)]
         if args.register_model_dir:

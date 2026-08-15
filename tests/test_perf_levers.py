@@ -194,3 +194,32 @@ def test_steadiness_flags_scatter_and_ignores_the_warm_first_group(tmp_path):
         encoding="utf-8")
     cv, _ = steadiness(tmp_path)
     assert cv > 0.05, f"a visibly contended run read as clean ({cv:.3f})"
+
+
+def test_report_kernels_warns_when_rows_cover_different_datasets(capsys):
+    """A failed fit makes one row's mean cover a different subset; that must not be invisible.
+
+    The first pod run lost 44 of 168 fits to a dataset-cache race and printed a table whose rows
+    silently averaged over different subsets. The per-row `n` and this warning are the fix.
+    """
+    def row(ds, k, v):
+        return {"dataset": ds, "n_kernels": k, "n_test": 100, "student": v,
+                "routed": {"0.1": v, "0.2": v, "0.3": v},
+                "fit_seconds": 1.0, "transform_seconds": 1.0}
+
+    rows = [row("A", 10_000, 0.5), row("B", 10_000, 0.9), row("A", 250, 0.5)]
+    report_kernels(rows, [250, 10_000])
+    out = capsys.readouterr().out
+    assert "WARNING: the rows do not cover the same datasets" in out
+    assert "  250   1 " in out and "10000   2 " in out, "per-row n should show 1 then 2"
+
+
+def test_report_kernels_is_quiet_when_coverage_is_even(capsys):
+    def row(ds, k, v):
+        return {"dataset": ds, "n_kernels": k, "n_test": 100, "student": v,
+                "routed": {"0.1": v, "0.2": v, "0.3": v},
+                "fit_seconds": 1.0, "transform_seconds": 1.0}
+
+    rows = [row(d, k, 0.5) for d in ("A", "B") for k in (250, 10_000)]
+    report_kernels(rows, [250, 10_000])
+    assert "WARNING" not in capsys.readouterr().out

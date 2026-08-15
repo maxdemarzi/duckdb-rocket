@@ -219,6 +219,27 @@ def run_kernels(args) -> int:
     print(f"student kernels: {len(names)} datasets x {len(grid)} sizes, teacher fixed at its "
           f"archived 40-group labels\n")
 
+    # Warm the dataset cache SERIALLY before forking. aeon downloads and extracts on first use, and
+    # the job list puts one worker per (dataset, size) -- so six workers reach for the same cold
+    # archive at once and read each other's half-written files. That is not hypothetical: the first
+    # run of this on a fresh pod lost 44 of 168 fits to "Inconsistent number of dimensions in case
+    # 33" and "zero-size array to reduction operation maximum", which look like modelling failures
+    # and are not. It also left each row of the table averaged over a different subset of datasets.
+    missing = []
+    for n in names:
+        try:
+            load(n, "train")
+            load(n, "test")
+        except Exception as e:  # noqa: BLE001
+            missing.append((n, f"{type(e).__name__}: {e}"[:90]))
+    for n, err in missing:
+        print(f"  {n}: will not load even serially -- {err}")
+    names = [n for n in names if n not in {m for m, _ in missing}]
+    if not names:
+        print("no dataset loads")
+        return 1
+    print(f"  dataset cache warm for {len(names)} datasets\n")
+
     jobs = [(n, k, args.seed) for n in names for k in grid]
     got: dict[tuple[str, int], tuple] = {}
     with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
@@ -265,8 +286,11 @@ def report_kernels(rows: list[dict], grid: list[int]) -> None:
         by.setdefault(r["n_kernels"], []).append(r)
     full = {r["dataset"]: r for r in by[grid[-1]]}
     names = sorted(full)
-    print(f"\nSTUDENT KERNELS -- {len(names)} datasets, teacher unchanged\n")
-    print(f"  {'kernels':>8s} {'student':>9s} {'vs full':>9s} {'p':>7s}   "
+    print(f"\nSTUDENT KERNELS -- {len(names)} datasets at the full bank, teacher unchanged\n")
+    # `n` is printed per row and is not decoration. When a fit fails, that row is averaged over a
+    # different subset from the others, and a table without this column reads as though every row
+    # covered the same datasets.
+    print(f"  {'kernels':>8s} {'n':>3s} {'student':>9s} {'vs full':>9s} {'p':>7s}   "
           + "  ".join(f"route@{int(b * 100)}%" for b in BUDGETS) + f"  {'tx ms/row':>10s}")
     for k in grid:
         sub = {r["dataset"]: r for r in by.get(k, [])}
@@ -276,8 +300,13 @@ def report_kernels(rows: list[dict], grid: list[int]) -> None:
         cells = [f"{np.mean([sub[n]['routed'][str(b)] for n in common]):9.4f}" for b in BUDGETS]
         ms = np.mean([sub[n]["transform_seconds"] / sub[n]["n_test"] * 1000 for n in common])
         p = sign_test(d) if k != grid[-1] else float("nan")
-        print(f"  {k:8d} {s.mean():9.4f} {d.mean():+9.4f} {p:7.4f}   " + "  ".join(cells)
-              + f"  {ms:10.2f}")
+        print(f"  {k:8d} {len(common):3d} {s.mean():9.4f} {d.mean():+9.4f} {p:7.4f}   "
+              + "  ".join(cells) + f"  {ms:10.2f}")
+    if len({len([n for n in names if n in {r['dataset'] for r in by.get(k, [])}])
+            for k in grid}) > 1:
+        print("\n  WARNING: the rows do not cover the same datasets, so the columns are not "
+              "directly comparable down the table. The 'vs full' column still is -- it pairs by "
+              "dataset name -- but the means are over different subsets.")
 
     # Routing gain is the thing that must survive, not student accuracy: a smaller bank can lose a
     # little accuracy and still route as well, and that trade is worth taking on the path every row

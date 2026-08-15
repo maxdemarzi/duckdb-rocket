@@ -36,7 +36,12 @@ sys.path.insert(0, str(ROOT))
 
 from duckdb_rocket.datasets import load  # noqa: E402
 
-#: tabicl-v2's hard limit, from its export report. Not a tuning knob.
+sys.path.insert(0, str(ROOT / "scripts"))
+from phase5_pipeline import LABELLERS, MODEL  # noqa: E402
+
+#: The hard limit, and it is not tabicl's alone: every one of the six registered models reports
+#: max_classes = 10. v2026.08.15 made the ceiling per-model rather than hardcoded, which changed
+#: nothing here -- Phoneme's 39 classes are out of reach for the whole family, not for one model.
 MAX_CLASSES = 10
 
 #: Measured on an A40: ECG5000, 4500 test rows, 18.6 minutes end to end.
@@ -68,9 +73,21 @@ def candidates(cache_only: bool) -> list[dict]:
     return out
 
 
-def already_done(outdir: Path, name: str) -> bool:
+def report_name(name: str, model: str) -> str:
+    """Where a run's report lands, kept distinct per model.
+
+    Every archived report so far is tabicl-v2 and is named without a model, so that spelling is
+    preserved: renaming them would orphan reference/distill_gate.json and every result built on it.
+    A second labeller gets its own suffix instead, and the two never collide.
+    """
+    return f"phase5_{name}_gpu.json" if model == MODEL else f"phase5_{name}_{model}.json"
+
+
+def already_done(outdir: Path, name: str, model: str = MODEL) -> bool:
     """A report that recorded failures does not count as done: its accuracy is not the teacher's."""
-    for p in (outdir / f"phase5_{name}_gpu.json", outdir / f"phase5_{name}.json"):
+    cands = ((outdir / report_name(name, model),) if model != MODEL
+             else (outdir / f"phase5_{name}_gpu.json", outdir / f"phase5_{name}.json"))
+    for p in cands:
         if p.exists():
             try:
                 if not json.loads(p.read_text(encoding="utf-8")).get("failures"):
@@ -89,6 +106,14 @@ def main() -> int:
     ap.add_argument("--max-test-rows", type=int, default=0,
                     help="skip datasets with more test rows than this (0 = no limit)")
     ap.add_argument("--out-dir", type=Path, default=ROOT / "reference")
+    ap.add_argument("--model", default=MODEL, choices=LABELLERS,
+                    help="which in-context model to run as the teacher")
+    ap.add_argument("--datasets", nargs="*",
+                    help="restrict to these datasets; without it, everything inside the class cap")
+    ap.add_argument("--from-gate", type=Path,
+                    help="restrict to a gate run's unsaturated subgroup, so a second labeller is "
+                         "measured on exactly the datasets the first one's gate opened on")
+    ap.add_argument("--max-student", type=float, default=0.90)
     ap.add_argument("--device", default="cpu", choices=("cpu", "cuda"))
     ap.add_argument("--anofox-extension", type=Path)
     ap.add_argument("--register-model-dir", type=Path)
@@ -98,9 +123,17 @@ def main() -> int:
     args = ap.parse_args()
 
     cands = candidates(cache_only=False)
+    if args.from_gate:
+        rows = json.loads(args.from_gate.read_text(encoding="utf-8"))["rows"]
+        keep = {r["dataset"] for r in rows
+                if r.get("students") and max(r["students"].values()) < args.max_student}
+        cands = [c for c in cands if c["dataset"] in keep]
+    if args.datasets:
+        want = set(args.datasets)
+        cands = [c for c in cands if c["dataset"] in want]
     if args.max_test_rows:
         cands = [c for c in cands if c["n_test"] <= args.max_test_rows]
-    todo = [c for c in cands if not already_done(args.out_dir, c["dataset"])]
+    todo = [c for c in cands if not already_done(args.out_dir, c["dataset"], args.model)]
     have = len(cands) - len(todo)
 
     est = sum(c["n_test"] for c in todo) * SECONDS_PER_TEST_ROW / 60
@@ -131,8 +164,9 @@ def main() -> int:
         name = c["dataset"]
         cmd = [sys.executable, str(ROOT / "scripts" / "phase5_pipeline.py"),
                "--dataset", name, "--device", args.device,
+               "--model", args.model,
                "--test-chunk", str(args.test_chunk),
-               "--out", str(args.out_dir / f"phase5_{name}_gpu.json")]
+               "--out", str(args.out_dir / report_name(name, args.model))]
         if args.anofox_extension:
             cmd += ["--anofox-extension", str(args.anofox_extension)]
         if args.register_model_dir:

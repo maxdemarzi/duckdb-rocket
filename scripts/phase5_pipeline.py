@@ -58,6 +58,11 @@ ROOT = Path(__file__).resolve().parent.parent
 SHELL = built_shell()
 MODEL = "tabicl-v2"
 
+#: Every in-context model the extension can run for classification, measured on the 2026.08.14
+#: community build after scripts/convert_model_weights.sh. The non-commercial two are absent by
+#: choice, not by capability -- see that script.
+LABELLERS = ("tabicl-v2", "mitra", "tabpfn-v2", "orion-bix")
+
 
 def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict, np.ndarray]:
     """Write the dataset as one table of (id, split, label, values DOUBLE[]).
@@ -589,6 +594,9 @@ SELECT (SELECT count(*) FROM predictions)          AS predicted_rows,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", default="GunPoint")
+    parser.add_argument("--model", default=MODEL, choices=LABELLERS,
+                        help="which in-context model labels the test rows; the three besides "
+                             "tabicl-v2 need scripts/convert_model_weights.sh first")
     parser.add_argument("--num-kernels", type=int, default=10_000)
     parser.add_argument("--n-groups", type=int, default=40)
     parser.add_argument("--seed", type=int, default=0)
@@ -724,7 +732,7 @@ def main() -> int:
 
     sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
                     args.test_chunk, onnx_threads, load_rocket,
-                    device=args.device, model=MODEL,
+                    device=args.device, model=args.model,
                     anofox_extension=args.anofox_extension,
                     register_dir=args.register_model_dir,
                     features=args.features, ts_names=ts_names)
@@ -864,7 +872,7 @@ def main() -> int:
     y_pred = np.asarray([by_id[i] for i in ordered_ids])
     accuracy = float((y_pred == y_test).mean()) if len(y_pred) == n_test else float("nan")
 
-    print(f"\n  accuracy ({MODEL}, e=1, G={config.n_groups}): {accuracy:.4f}")
+    print(f"\n  accuracy ({args.model}, e=1, G={config.n_groups}): {accuracy:.4f}")
     print(f"  row alignment: {facts['distinct_ids']}/{n_test} ids, "
           f"{facts['group_rows']} group-rows, "
           f"{facts['min_groups_per_row']}-{facts['max_groups_per_row']} groups per row")
@@ -942,7 +950,7 @@ def main() -> int:
 
     report = {
         "dataset": args.dataset,
-        "model": MODEL,
+        "model": args.model,
         # Which device produced this number, and whether it came from the shipped graph or a
         # patched one. Without both, a GPU result is indistinguishable from a CPU result that
         # silently fell back -- and on CUDA the graph is not the shipped graph.
@@ -1007,10 +1015,10 @@ def main() -> int:
             by_row.setdefault(int(r["id"]), {})[str(r["cls"])] = float(r["mean_p"])
         soft_path.write_text(json.dumps({
             "dataset": args.dataset,
-            # MODEL, not `model`: that name is a parameter of build_sql and does not exist in this
+            # args.model, not `model`: that name is a parameter of build_sql and does not exist
             # scope. It cost two datasets on a rented pod, because this block only runs at the very
             # end of a full run and nothing local reaches it.
-            "model": MODEL,
+            "model": args.model,
             "n_train": meta["n_train"],
             "n_test": meta["n_test"],
             "note": "test row k of the dataset's test split is id n_train + k",

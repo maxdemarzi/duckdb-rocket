@@ -237,6 +237,39 @@ Three things about deploying the teacher that the accuracy tables do not show:
   if your inputs move, the realised escalation rate moves with them. The realised rate is worth
   monitoring in production for exactly that reason, since it is observable without labels.
 
+### Calibrating the threshold: it keeps the accuracy, not the budget
+
+`scripts/distill_gate.py --calibrate`, 28 datasets, threshold taken as a quantile of 5-fold
+out-of-fold margins on the train split and then applied row by row:
+
+| target | realised (ridge) | spread | gain over the student | vs sorting at the **same realised rate** |
+|---|---|---|---|---|
+| 10% | 12.6% | 4.1–25.7% | +0.0142 (p=0.015) | −0.0002 |
+| 20% | 24.4% | 12.0–48.7% | +0.0219 (p=0.009) | +0.0008 |
+| 30% | 35.1% | 15.0–66.9% | +0.0241 (p=0.009) | −0.0003 |
+
+(MultiRocketHydra is the same shape: 13.2%, 25.2%, 34.7% realised, gains +0.0129 to +0.0218.)
+
+**The good news is the last column.** Against sorting the batch *at the rate it actually spent*, a
+threshold is worth +0.0008 to −0.0004 and nothing is significant. Not having the batch costs nothing
+in accuracy, which is the question this was built to answer.
+
+**The bad news is the second column.** It overspends its budget by 20–25% relative, every time, and
+the per-dataset spread is wide enough that a 20% target can cost 49%. The cause is a distribution
+difference rather than a bug: test margins are systematically smaller than out-of-fold train margins,
+so the model is *less* confident on test rows than on held-out training rows and more of them fall
+under any threshold. UCR's train/test splits are predefined and not always exchangeable.
+
+Two consequences for a deployment. **Set the target below the budget you want** — ask for 16% to
+spend 20% — knowing the multiplier is dataset-specific and cannot be known in advance for a new one.
+And **close the loop on the realised rate**, which is observable without labels: measure what
+fraction actually escalates and move the threshold until it matches. That is the only version of
+this that survives a distribution shift.
+
+Note what this does *not* say. Comparing the threshold at a 20% target against sorting at 20% makes
+the threshold look better by +0.0018 — but only because it spent 24.4%. That comparison was made
+here first and it was wrong; the same artifact made a two-dataset smoke test read +0.0160.
+
 ## What is not established
 
 * **28 datasets, one seed, one split.** The escalation fractions are fixed rather than tuned, which
@@ -250,10 +283,19 @@ Three things about deploying the teacher that the accuracy tables do not show:
   which is all the rule needs. Comparing margins *across* models would need calibration, and the one
   place that was tried — picking the more confident of two labellers per row — reached only 6% of
   the available complementary information.
-* **Nothing here is wired into the extension.** This is an offline analysis over archived teacher
-  predictions and cached student margins. A serving implementation would need the student's margin
-  computed inline and a threshold rather than a fraction, since a live system does not have the
-  whole test set to sort.
+* **`scripts/route_serve.py` runs the whole thing end to end, and is a demonstration rather than a
+  server.** It deploys the artifacts, serves a batch through the real extension with a calibrated
+  threshold, and reports the split — verified on Herring: 14 of 64 rows escalated (21.9% against a
+  20% target), routed 0.6406 against the student's 0.6250, both matching the offline analysis. What
+  it is not is a service: no threshold control loop, no batching of escalations across requests, and
+  no attempt at concurrency.
+* **No trustworthy timing exists yet.** The first attempt compared a contended 8-core Windows run
+  against an archived 96-core CUDA run and produced a "138x" that meant nothing. `--compare` now
+  runs the student, the escalated teacher and the teacher-on-everything on one box at one moment,
+  which is the only arrangement in which a cost ratio is measurable. Until that has been run on an
+  idle machine, the 14x in this document is a whole-dataset batch figure and the per-call economics
+  of a *small* escalation batch are unmeasured — and the fixed-plus-linear shape of a forward means
+  they will be worse.
 
 ## Where the numbers live
 

@@ -478,12 +478,18 @@ right" to "the teacher is right where the student is unsure".
 `scripts/distill_gate.py --route`, the same 28 datasets, full test splits, escalation fraction fixed
 in advance rather than tuned:
 
-| escalate | rocket+ridge | mr-hydra |
-|---|---|---|
-| 10% | +0.0095 (20/28, p=0.0192) | +0.0083 (19/28, p=0.0290) |
-| **20%** | **+0.0200 (20/28, p=0.0041)** | **+0.0145 (19/28, p=0.0146)** |
-| 30% | +0.0223 (20/28, p=0.0192) | +0.0201 (19/28, p=0.0522) |
-| 50% | +0.0283 (21/28, p=0.0059) | +0.0230 (19/28, p=0.0522) |
+| escalate | rocket+ridge | random rows | **signal** | mr-hydra | random rows | **signal** |
+|---|---|---|---|---|---|---|
+| 10% | +0.0095 (p=0.019) | +0.0033 | **+0.0061** (p=0.013) | +0.0083 (p=0.029) | +0.0025 | **+0.0059** (p=0.036) |
+| **20%** | **+0.0200** (p=0.004) | +0.0065 | **+0.0135** (p=0.013) | **+0.0145** (p=0.015) | +0.0044 | **+0.0101** (p=0.036) |
+| 30% | +0.0223 (p=0.019) | +0.0084 | +0.0139 (p=0.013) | +0.0201 (p=0.052) | +0.0054 | +0.0146 (p=0.013) |
+| 50% | +0.0283 (p=0.006) | +0.0154 | +0.0129 (p=0.036) | +0.0230 (p=0.052) | +0.0104 | +0.0127 (p=0.013) |
+
+**The "random rows" column is the control, and without it the rest is unreadable.** Escalating *any*
+rows to a teacher that is better on average buys something, so a rising curve is not evidence that
+the student knows what it does not know — the difference between the two columns is. At a 20% budget
+the student's own uncertainty picks rows about three times better than chance, significantly, for
+both students and at every budget.
 
 And the strict claim — the routed system beating **both** models alone, not just the student:
 

@@ -1003,6 +1003,36 @@ def mr_hydra_scored(xtr, ytr, xte, seed: int = 0):
 SCORERS = {"rocket+ridge": rocket_ridge_scored, "mr-hydra": mr_hydra_scored}
 
 
+def route_curve_random(spred, tpred, y, fracs, seed: int = 0, draws: int = 20
+                       ) -> list[tuple[float, float]]:
+    """The control: escalate a RANDOM fraction instead of the least-confident one.
+
+    Escalating any rows at all to a teacher that is better on average buys something, so a routing
+    curve that rises proves nothing by itself -- the claim is that the STUDENT'S UNCERTAINTY picks
+    better rows than chance. Without this line the gain and the signal are not separable, and the
+    obvious reading of the result would be the wrong one.
+
+    Averaged over `draws` because a single random subset of a 100-row test set is very noisy.
+    """
+    rng = np.random.default_rng(seed)
+    s = np.asarray(spred, dtype=object)
+    t = np.asarray(tpred, dtype=object)
+    truth = np.asarray(y, dtype=object)
+    n = len(truth)
+    out = []
+    for f in fracs:
+        k = int(round(f * n))
+        accs = []
+        for _ in range(draws):
+            pred = s.copy()
+            if k:
+                idx = rng.choice(n, size=k, replace=False)
+                pred[idx] = t[idx]
+            accs.append(float((pred == truth).mean()))
+        out.append((f, float(np.mean(accs))))
+    return out
+
+
 def route_curve(spred, sconf, tpred, y, fracs) -> list[tuple[float, float]]:
     """Accuracy when the student's least-confident `f` of the rows are handed to the teacher.
 
@@ -1092,6 +1122,7 @@ def run_route(args) -> int:
                 continue
             pred, conf = got[(name, lname)]
             curve = route_curve(pred, np.asarray(conf), tpred, yte, fracs)
+            control = route_curve_random(pred, tpred, yte, fracs, seed=args.seed)
             acc = [a for _, a in curve]
             best_i = int(np.argmax(acc))
             gain = acc[best_i] - max(acc[0], acc[-1])
@@ -1099,7 +1130,7 @@ def run_route(args) -> int:
                   f"{fracs[best_i]:5.0%} {gain:+8.4f}")
             rows.append({"dataset": name, "learner": lname, "student": acc[0], "teacher": acc[-1],
                          "best": acc[best_i], "best_frac": fracs[best_i], "gain_over_both": gain,
-                         "curve": curve})
+                         "curve": curve, "control": control})
 
     if not rows:
         return 1
@@ -1116,10 +1147,15 @@ def run_route(args) -> int:
         for f in (0.10, 0.20, 0.30, 0.50):
             j = fracs.index(f)
             d = np.array([r["curve"][j][1] - r["student"] for r in sub])
+            c = np.array([r["control"][j][1] - r["student"] for r in sub])
+            edge = d - c
             print(f"    escalate {f:4.0%}: {d.mean():+.4f} over the student alone "
-                  f"({int((d > 0).sum())}/{len(d)} datasets, p = {sign_test(d):.4f})")
+                  f"({int((d > 0).sum())}/{len(d)} datasets, p = {sign_test(d):.4f})   "
+                  f"| random rows {c.mean():+.4f}, so the confidence signal is worth "
+                  f"{edge.mean():+.4f} (p = {sign_test(edge):.4f})")
     # Selecting the best fraction per dataset on the same data it is measured on is an oracle and
     # cannot be shipped; it is reported to bound what a tuned rule could reach, never as the result.
+    print("\n  The random-rows column is the control that makes the rest readable: escalating\n  ANY rows to a teacher that is better on average buys something, so a rising curve is not\n  evidence that the student knows what it does not know. The difference between the two is.")
     print("\n  'best' selects the escalation fraction on the test set itself, so it is an oracle "
           "bound on what a tuned rule could reach, not an achievable number. The fixed-budget rows "
           "above are the ones a product could actually run.")

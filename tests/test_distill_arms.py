@@ -420,6 +420,30 @@ class TestRouting:
         # leave the error in place and score 0.75 -- a plausible number from an inverted sort.
         assert dg.route_curve(s, np.array([9.0, 8.0, 1.0, 7.0]), t, y, [0.25])[0][1] == 1.0
 
+    def test_the_random_control_lands_between_the_two_models(self):
+        # Escalating a random fraction to a better teacher must interpolate the two, which is
+        # exactly why it is the right control: it is the gain available with no signal at all.
+        rng = np.random.default_rng(0)
+        y = np.array([str(i % 2) for i in range(200)])
+        s = y.copy(); s[rng.choice(200, 60, replace=False)] = "9"   # student 0.70
+        t = y.copy(); t[rng.choice(200, 20, replace=False)] = "9"   # teacher 0.90
+        c = dict(dg.route_curve_random(s, t, y, [0.0, 0.5, 1.0], seed=0, draws=40))
+        assert c[0.0] == pytest.approx(0.70, abs=0.01)
+        assert c[1.0] == pytest.approx(0.90, abs=0.01)
+        assert 0.70 < c[0.5] < 0.90
+
+    def test_the_control_is_beaten_by_routing_on_the_signal_it_is_built_to_isolate(self):
+        # A student whose margin is perfectly informative: its wrong rows are its least confident.
+        # Routing must reach the teacher's accuracy far sooner than chance does.
+        y = np.array([str(i % 2) for i in range(100)])
+        s = y.copy(); s[:20] = "9"                     # wrong on exactly the first 20
+        t = y.copy()                                   # teacher is right everywhere
+        conf = np.arange(100, dtype=float)             # rows 0..19 are the least confident
+        routed = dict(dg.route_curve(s, conf, t, y, [0.2]))[0.2]
+        chance = dict(dg.route_curve_random(s, t, y, [0.2], seed=0, draws=40))[0.2]
+        assert routed == pytest.approx(1.0)
+        assert chance < 0.9
+
     def test_string_labels_of_different_widths_survive_the_substitution(self):
         # A fixed-width numpy string array silently truncates a longer label assigned into it.
         y = np.array(["long_label", "b"])

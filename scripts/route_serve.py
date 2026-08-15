@@ -97,7 +97,8 @@ def student_predict(meta: dict, art: Path, x: np.ndarray):
 
 
 def teacher_predict(dataset: str, idx: np.ndarray, workdir: Path, n_groups: int,
-                    num_kernels: int, seed: int, shell: Path) -> np.ndarray:
+                    num_kernels: int, seed: int, shell: Path,
+                    memory_limit: str | None = None) -> np.ndarray:
     """The teacher on the escalated rows only, through the real extension.
 
     Built as a one-off dataset whose test split IS the escalated batch, so `build_sql` produces
@@ -128,7 +129,19 @@ def teacher_predict(dataset: str, idx: np.ndarray, workdir: Path, n_groups: int,
     meta = {"dataset": dataset, "n_train": n_train, "n_test": n_q, "n_channels": 1,
             "n_timepoints": int(xtr.shape[-1]), "multivariate": False,
             "raw_parquet": raw.as_posix()}
-    sql = p5.build_sql(cfg, meta, workdir, 4, "8GB", workdir, 128, 4, device="cpu")
+    # Not a hardcoded "8GB", which is what this was and which is an order of magnitude under
+    # phase5's own cgroup-aware default (44GB on the dev box, ~87GB on the 124GB pod).
+    #
+    # What is measured: SemgHandMovementCh2 -- the longest series here at 1500 timepoints -- scored
+    # group 1 of 40 in the full-batch arm and then died, with nothing on stderr but the usual ONNX
+    # schema noise, minutes after its own smaller escalated arm had succeeded. 578 rows against 474.
+    # What is inferred: that the limit was the cause. No OOM appeared in dmesg and the captured
+    # stdout was truncated to its last 800 characters, so this is the probable explanation rather
+    # than a proven one -- but a budget that is fine for the escalated call and fatal for the full
+    # one is exactly the shape that loses a --compare run only the arm it exists to measure, and
+    # there is no reason to run the teacher under a budget the rest of the codebase does not.
+    sql = p5.build_sql(cfg, meta, workdir, 4, memory_limit or p5.default_memory_limit(),
+                       workdir, 128, 4, device="cpu")
     (workdir / "serve.sql").write_text(sql, encoding="utf-8")
     # encoding is explicit: DuckDB's box-drawing output is UTF-8 and Windows would otherwise decode
     # it as cp1252 and raise mid-run, after the work has been done.
@@ -238,7 +251,7 @@ def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
 
 
 def serve(dataset: str, art: Path, batch: int, n_groups: int, seed: int, shell: Path,
-          workdir: Path, compare: bool = False) -> int:
+          workdir: Path, compare: bool = False, memory_limit: str | None = None) -> int:
     meta = json.loads((art / "meta.json").read_text(encoding="utf-8"))
     xte, yte = load(dataset, "test")
     xte_n = normalize_series(xte)
@@ -261,7 +274,8 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int, seed: int, shell: 
     t_teacher = 0.0
     if len(idx):
         t0 = time.perf_counter()
-        tpred = teacher_predict(dataset, idx, workdir, n_groups, meta["n_kernels"], seed, shell)
+        tpred = teacher_predict(dataset, idx, workdir, n_groups, meta["n_kernels"], seed, shell,
+                                memory_limit)
         t_teacher = time.perf_counter() - t0
         final[idx] = tpred
         print(f"  teacher answered {len(idx)} rows in {t_teacher:.1f} s "
@@ -282,7 +296,7 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int, seed: int, shell: 
     if compare and len(idx):
         t0 = time.perf_counter()
         tall = teacher_predict(dataset, np.arange(take), workdir / "all", n_groups,
-                               meta["n_kernels"], seed, shell)
+                               meta["n_kernels"], seed, shell, memory_limit)
         t_all = time.perf_counter() - t0
         acc_teacher = float((np.asarray(tall, dtype=object) == truth).mean())
         print(f"  teacher  {acc_teacher:.4f}   {t_all:.1f} s   (every row, same box, same moment)")
@@ -334,6 +348,9 @@ def main() -> int:
             s.add_argument("--compare", action="store_true",
                            help="also run the teacher on every row, on this box at this moment, so the cost ratio is measured rather than assembled from runs on different hardware")
             s.add_argument("--shell", type=Path, default=built_shell())
+            s.add_argument("--memory-limit",
+                           help="DuckDB memory_limit for the teacher call, e.g. '20GB'. Defaults "
+                                "to phase5's own cgroup-aware budget.")
     args = ap.parse_args()
     art = args.artifacts or (ROOT / "data" / "serve" / args.dataset)
 
@@ -341,7 +358,8 @@ def main() -> int:
         deploy(args.dataset, args.target, args.n_kernels, args.seed, args.folds, art)
         return 0
     return serve(args.dataset, art, args.batch, args.n_groups, args.seed, args.shell,
-                 ROOT / "data" / "serve" / args.dataset / "work", args.compare)
+                 ROOT / "data" / "serve" / args.dataset / "work", args.compare,
+                 args.memory_limit)
 
 
 if __name__ == "__main__":

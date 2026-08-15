@@ -199,6 +199,28 @@ class TestBreakEven:
         assert dg.break_even([(0.0, 0.1), (0.1, -0.1), (0.2, 0.1), (0.3, -0.1)]) == pytest.approx(0.05)
 
 
+class TestNoiseCurve:
+    CURVE = [(0.0, 0.10), (0.10, 0.06), (0.20, 0.02), (0.40, -0.06)]
+
+    def test_interpolates_between_swept_rates(self):
+        assert dg.noise_curve_at(self.CURVE, 0.05) == (pytest.approx(0.08), False)
+        assert dg.noise_curve_at(self.CURVE, 0.30) == (pytest.approx(-0.02), False)
+
+    def test_hits_the_measured_points_exactly(self):
+        for x, y in self.CURVE:
+            assert dg.noise_curve_at(self.CURVE, x)[0] == pytest.approx(y)
+
+    def test_flags_extrapolation_past_the_last_rate(self):
+        v, extrapolated = dg.noise_curve_at(self.CURVE, 0.50)
+        assert extrapolated and v == pytest.approx(-0.10)
+
+    def test_interpolation_is_not_the_same_as_snapping(self):
+        # Snapping to the nearest swept rate is biased whenever the rates sit below the value asked
+        # for, which is the usual case here: it compares against a LESS corrupted pool and flatters
+        # the random-noise side of the comparison.
+        assert dg.noise_curve_at(self.CURVE, 0.19)[0] != pytest.approx(0.02)
+
+
 class TestTeacherProba:
     def test_columns_follow_the_sidecars_class_order(self):
         soft = _sidecar(2, 2, [{"1": 0.9, "2": 0.1}, {"1": 0.2, "2": 0.8}])

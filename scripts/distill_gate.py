@@ -380,6 +380,17 @@ def known_arm(arm: str) -> bool:
     return arm in ARM_DOC or noise_rate(arm) is not None
 
 
+def arm_doc(arm: str) -> str:
+    """One description per arm, for printing and for the report.
+
+    A function rather than `ARM_DOC[arm]` because the noise arms are generated from their names and
+    have no dict entry, and indexing the dict for them crashed the run that produced the whole
+    break-even table -- after the analysis had printed, while writing the JSON.
+    """
+    e = noise_rate(arm)
+    return ARM_DOC[arm] if e is None else f"train + truly-labelled pool corrupted at {e:.0%}"
+
+
 def teacher_proba(soft: dict, n_test: int) -> tuple[list[str], np.ndarray]:
     """The teacher's full distribution over the test split, as (classes, n_test x n_classes)."""
     classes = list(soft["classes"])
@@ -537,6 +548,21 @@ def break_even(points: list[tuple[float, float]]) -> float | None:
     return None
 
 
+def noise_curve_at(curve: list[tuple[float, float]], e: float) -> tuple[float, bool]:
+    """The gain a pool would give at label-error rate `e`, read off the measured curve.
+
+    Interpolating rather than snapping to the nearest swept rate, because snapping is not neutral:
+    the swept rates sit BELOW the teacher's error on nine of ten datasets here, so the nearest arm
+    is a less corrupted pool than the teacher's, and every comparison against it would flatter the
+    random-noise side. Returns whether the answer required extrapolating past the last rate swept.
+    """
+    for (x0, y0), (x1, y1) in zip(curve, curve[1:]):
+        if x0 <= e <= x1:
+            return (y0 if x1 == x0 else y0 + (y1 - y0) * (e - x0) / (x1 - x0)), False
+    (x0, y0), (x1, y1) = curve[-2], curve[-1]
+    return (y1 + (y1 - y0) * (e - x1) / (x1 - x0)), True
+
+
 def gate_selection(path: Path, max_student: float) -> list[str]:
     """Datasets from a gate run whose best student is below `max_student`.
 
@@ -582,9 +608,7 @@ def run_arm_b(args) -> int:
     print(f"\narms {'/'.join(arms)} over {args.repeats} split(s), {len(names)} datasets, "
           f"{len(learners)} learner(s), {args.jobs} worker(s)")
     for a in arms:
-        e = noise_rate(a)
-        print(f"    {a:3s} " + (ARM_DOC[a] if e is None else
-                                f"train + truly-labelled pool corrupted at {e:.0%}"))
+        print(f"    {a:3s} {arm_doc(a)}")
 
     # Repeat-major, biggest-first within a repeat. Two reasons, and the ordering is worth the line:
     # a fan-out's tail is set by its slowest job, so the 760-row datasets must not start last; and
@@ -715,6 +739,49 @@ def run_arm_b(args) -> int:
         if dead:
             print(f"    {len(dead)} case(s) had no headroom even with TRUE labels and say nothing "
                   f"about label quality")
+
+        # The question the break-even alone cannot answer, and the one that turned out to matter.
+        # If a pool tolerates 25% random noise and the teacher errs at 22%, arm B should have paid.
+        # It did not, so the RATE is not what governs -- and the comparison below is the test:
+        # the teacher's own labels against a random corruption of the TRUE labels at the teacher's
+        # exact error rate, on the same split, same pool rows, same student.
+        if "B" in arms:
+            print("\n  STRUCTURED vs RANDOM error, matched on rate:")
+            print(f"    {'dataset':26s} {'learner':13s} {'T err':>7s} {'B-A':>8s} "
+                  f"{'random@Terr':>12s} {'gap':>8s}")
+            gaps, exact = [], []
+            for r in rows:
+                if "B" not in r["mean"] or "C" not in r["mean"]:
+                    continue
+                have = [e for e in swept if f"N{int(round(e * 100)):02d}" in r["mean"]]
+                if len(have) < 2:
+                    continue
+                curve = [(0.0, r["mean"]["C"] - r["mean"]["A"])] + [
+                    (e, r["mean"][f"N{int(round(e * 100)):02d}"] - r["mean"]["A"]) for e in have]
+                terr = 1.0 - r["teacher"]
+                ny, extrapolated = noise_curve_at(curve, terr)
+                gap = ny - (r["mean"]["B"] - r["mean"]["A"])
+                gaps.append(gap)
+                if not extrapolated:
+                    exact.append(gap)
+                print(f"    {r['dataset']:26s} {r['learner']:13s} {terr:7.1%} "
+                      f"{r['mean']['B'] - r['mean']['A']:+8.4f} {ny:+12.4f} {gap:+8.4f}"
+                      + ("  (extrapolated)" if extrapolated else ""))
+            if gaps:
+                g = np.array(gaps)
+                print(f"\n    random noise at the teacher's OWN error rate beats the teacher's own "
+                      f"labels on {int((g > 0).sum())}/{len(g)}, mean {g.mean():+.4f}, "
+                      f"p = {sign_test(g):.4f}")
+                if exact and len(exact) < len(gaps):
+                    x = np.array(exact)
+                    print(f"    without the extrapolated rows: {int((x > 0).sum())}/{len(x)}, "
+                          f"mean {x.mean():+.4f}, p = {sign_test(x):.4f}")
+                print("    A teacher's mistakes are not noise. They are systematic -- concentrated "
+                      "on the same ambiguous rows, and consistent -- so the student learns a "
+                      "coherent wrong rule, where random errors of the same size largely cancel. "
+                      "That, not the error rate, is what closes hard-label distillation here, and "
+                      "it is why an ensemble has to decorrelate error STRUCTURE and not merely "
+                      "lower the rate.")
         for b in be_rows:
             verd = verdicts.setdefault("break_even", {})
             verd[f"{b['dataset']}:{b['learner']}"] = b
@@ -726,7 +793,7 @@ def run_arm_b(args) -> int:
     if args.out:
         args.out.write_text(json.dumps(
             {"design": "arms A/B/C/Bc on 50/50 pool/holdout, averaged over repeats",
-             "arms": {a: ARM_DOC[a] for a in arms}, "repeats": args.repeats, "seed": args.seed,
+             "arms": {a: arm_doc(a) for a in arms}, "repeats": args.repeats, "seed": args.seed,
              "selection": (f"best student < {args.max_student} in {args.from_gate}"
                            if args.from_gate else "explicit"),
              "n_datasets": len({r['dataset'] for r in rows}), "verdicts": verdicts, "rows": rows},

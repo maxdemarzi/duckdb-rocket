@@ -211,9 +211,24 @@ def cmd_create(args) -> int:
                 return 1
             time.sleep(20)
             continue
+        # A pod can sit in RUNNING indefinitely with publicIp '' and portMappings None: reachable by
+        # nothing, billing throughout. Create used to return success on one of those, so the failure
+        # surfaced only when ssh was tried, and the retry loop that exists precisely for a bad
+        # placement never fired. Measured once here: 10 minutes at $0.48/hr, uptimeSeconds null the
+        # whole time, and by the time it was terminated by hand the region had run out of capacity.
+        if wait_for_endpoint(pod_id, args.reachable_timeout) is None:
+            print(f"attempt {attempt}/{args.attempts}: {pod_id} never published a 22/tcp mapping "
+                  f"in {args.reachable_timeout}s; terminating and retrying")
+            request(f"/pods/{pod_id}", method="DELETE")
+            if attempt == args.attempts:
+                print(f"\nREFUSING: all {args.attempts} attempts produced an unreachable pod. "
+                      f"Nothing is billing.")
+                return 1
+            time.sleep(20)
+            continue
         print(json.dumps(pod, indent=2)[:1500])
-        print(f"\ncreated {pod_id} -- it is billing now. "
-              f"Next: runpod_cpu.py ssh {pod_id}")
+        print(f"\ncreated {pod_id} -- it is billing now, and it is reachable. "
+              f"Next: runpod_cpu.py gate {pod_id}")
         print("Remember to terminate it; a forgotten pod is the expensive failure mode.")
         return 0
     return 1
@@ -233,6 +248,23 @@ def cmd_ssh(args) -> int:
     print(f"ssh -p {port} root@{ip}")
     print(f"ssh -p {port} root@{ip} 'bash -s' < scripts/pod/bootstrap.sh")
     return 0
+
+
+def wait_for_endpoint(pod_id: str, timeout_s: int, poll_s: int = 10) -> tuple[str, int] | None:
+    """Poll until the pod publishes a public 22/tcp mapping, or give up and say so.
+
+    Separate from `endpoint` because the two answer different questions: `endpoint` asks whether a
+    pod is reachable NOW, which is what a read-only command wants, and this asks whether it will
+    ever be -- which only `create` needs, and only so it can terminate one that will not.
+    """
+    deadline = time.time() + timeout_s
+    while True:
+        where = endpoint(pod_id)
+        if where is not None:
+            return where
+        if time.time() >= deadline:
+            return None
+        time.sleep(poll_s)
 
 
 def endpoint(pod_id: str) -> tuple[str, int] | None:
@@ -333,6 +365,9 @@ def main() -> int:
     create = subparsers.add_parser("create")
     add_recipe_flags(create)
     create.add_argument("--yes-i-will-pay", action="store_true")
+    create.add_argument("--reachable-timeout", type=int, default=300,
+                        help="seconds to wait for a public 22/tcp mapping before treating the pod "
+                             "as a bad placement, terminating it and retrying")
     create.add_argument("--attempts", type=int, default=6,
                         help="retries when a pod lands in a denied region or on a denied machine")
     create.add_argument("--allow-region", action="store_true",

@@ -307,10 +307,73 @@ def run_gate(args) -> int:
     return 0
 
 
-ARMS = ("A", "B", "C", "Bc")
+ARMS = ("A", "B", "C", "Bc", "Bs")
 ARM_DOC = {"A": "train labels only", "B": "train + teacher-labelled pool",
            "C": "train + truly-labelled pool (the ceiling)",
-           "Bc": "train + the most confident half of the teacher-labelled pool"}
+           "Bc": "train + the most confident half of the teacher-labelled pool",
+           "Bs": "train + the pool under the teacher's full distribution (soft targets, ridge only)"}
+
+
+def noise_rate(arm: str) -> float | None:
+    """`N20` -> 0.20. The break-even sweep: the pool with TRUE labels corrupted at a known rate.
+
+    Arm B answers "does this teacher work". These answer the question that governs the whole family
+    of pseudo-labelling ideas -- ensembles, better teachers, anything -- which is *how accurate would
+    a labeller have to be*. Once the crossing point is known, every candidate labeller is judged by
+    one comparison against a number already measured, instead of by another run of arm B.
+
+    N00 is not offered: it is arm C, which is already cached on the same split.
+    """
+    if len(arm) == 3 and arm[0] == "N" and arm[1:].isdigit():
+        return int(arm[1:]) / 100.0
+    return None
+
+
+def known_arm(arm: str) -> bool:
+    return arm in ARM_DOC or noise_rate(arm) is not None
+
+
+def teacher_proba(soft: dict, n_test: int) -> tuple[list[str], np.ndarray]:
+    """The teacher's full distribution over the test split, as (classes, n_test x n_classes)."""
+    classes = list(soft["classes"])
+    off, mean_p = soft["n_train"], soft["mean_proba"]
+    if soft["n_test"] != n_test:
+        raise ValueError(f"teacher ran on {soft['n_test']} test rows, the loader gives {n_test}")
+    out = np.zeros((n_test, len(classes)), dtype=float)
+    for k in range(n_test):
+        row = mean_p.get(str(off + k))
+        if row is None:
+            raise ValueError(f"teacher has no probabilities for test row {k} (id {off + k})")
+        tot = sum(row.values()) or 1.0
+        for j, c in enumerate(classes):
+            out[k, j] = row.get(c, 0.0) / tot
+    return classes, out
+
+
+def soft_target_ridge(xtr, ytr, xpool, ppool, classes, xte, n_kernels: int = 10_000, seed: int = 0):
+    """Distillation with the textbook soft-target loss: ridge REGRESSION onto the teacher's
+    probability vectors, argmax at prediction time.
+
+    Hard argmax discards everything the teacher knew about the rows it was unsure of, which on a
+    dataset where it is 60% accurate is most of what it knew. Regressing on the distribution keeps it,
+    and a wrong-but-hedged pseudo-label then costs the fit far less than a wrong-but-confident one.
+    Without this arm, a negative arm B bounds hard-label distillation and not distillation.
+    """
+    from sklearn.linear_model import RidgeCV
+
+    nch = xtr.shape[1] if xtr.ndim == 3 else 1
+    bank = generate_kernels(seed, xtr.shape[-1], n_kernels, n_channels=nch)
+    ftr = transform(np.concatenate([xtr, xpool]), bank)
+    sc = StandardScaler().fit(ftr)
+    idx = {c: i for i, c in enumerate(classes)}
+    missing = sorted({y for y in ytr} - set(idx))
+    if missing:
+        raise ValueError(f"train labels {missing} are absent from the teacher's class list")
+    targets = np.zeros((len(ytr) + len(ppool), len(classes)), dtype=float)
+    targets[np.arange(len(ytr)), [idx[y] for y in ytr]] = 1.0
+    targets[len(ytr):] = ppool
+    reg = RidgeCV(alphas=ALPHAS).fit(sc.transform(ftr), targets)
+    return np.asarray(classes)[reg.predict(sc.transform(transform(xte, bank))).argmax(1)]
 
 
 def pool_holdout(yte: np.ndarray, seed: int, rep: int):
@@ -365,6 +428,7 @@ def arm_split(name: str, learner: str, seed: int, rep: int, arms: tuple[str, ...
 
     out = dict(have)
     for a in todo:
+        e = noise_rate(a)
         if a == "A":
             out["A"] = score(xtr, ytr)
         elif a == "B":
@@ -378,6 +442,24 @@ def arm_split(name: str, learner: str, seed: int, rep: int, arms: tuple[str, ...
             keep = pool_i[order[: max(1, len(pool_i) // 2)]]
             out["Bc"] = score(np.concatenate([xtr, xte[keep]]),
                               np.concatenate([ytr, tlab[keep]]))
+        elif a == "Bs":
+            if learner != "rocket+ridge":
+                continue  # soft targets need a regressor; aeon's classifier takes hard labels only
+            classes, proba = teacher_proba(soft, len(yte))
+            pred = soft_target_ridge(xtr, ytr, xte[pool_i], proba[pool_i], classes, hx, seed=seed)
+            out["Bs"] = float((pred == hy).mean())
+        elif e is not None:
+            # Seeded on (seed, rep, rate) so each rate is an independent corruption of the same
+            # split, and so a cached rate is reproducible on its own rather than only as part of a
+            # sweep run in one particular order.
+            rng = np.random.default_rng([seed, rep, int(round(e * 100))])
+            ylab = yte[pool_i].copy()
+            classes = np.unique(np.concatenate([ytr, yte]))
+            for i in np.nonzero(rng.random(len(ylab)) < e)[0]:
+                alt = classes[classes != ylab[i]]
+                if len(alt):
+                    ylab[i] = rng.choice(alt)
+            out[a] = score(np.concatenate([xtr, xte[pool_i]]), np.concatenate([ytr, ylab]))
     if cp is not None:
         cp.parent.mkdir(parents=True, exist_ok=True)
         cp.write_text(json.dumps({"dataset": name, "learner": learner, "seed": seed, "repeat": rep,
@@ -392,6 +474,20 @@ def _armb_worker(t):
         return name, learner, rep, arm_split(name, learner, seed, rep, arms, teacher_dir, cache), ""
     except Exception as e:  # noqa: BLE001
         return name, learner, rep, None, f"{type(e).__name__}: {e}"[:120]
+
+
+def break_even(points: list[tuple[float, float]]) -> float | None:
+    """Where the gain from the pool crosses zero, linearly interpolated between swept noise rates.
+
+    `points` is [(label error rate, mean gain over arm A)] ascending in error, starting at 0.0 where
+    the gain is the true-label headroom. Returns None when there is no crossing inside the range --
+    either the pool never paid at all, or it still pays at the highest rate swept, and calling either
+    of those a break-even would invent a number the sweep did not measure.
+    """
+    for (e0, d0), (e1, d1) in zip(points, points[1:]):
+        if d0 > 0 >= d1:
+            return e0 + (e1 - e0) * d0 / (d0 - d1)
+    return None
 
 
 def gate_selection(path: Path, max_student: float) -> list[str]:
@@ -430,18 +526,27 @@ def run_arm_b(args) -> int:
         return 1
 
     learners = {k: v for k, v in LEARNERS.items() if k in args.learners}
-    arms = tuple(a for a in ARMS if a in args.arms)
+    bad = [a for a in args.arms if not known_arm(a)]
+    if bad:
+        print(f"unknown arm(s) {bad}; known: {', '.join(ARM_DOC)} and N05/N10/... noise rates")
+        return 1
+    arms = tuple(dict.fromkeys(args.arms))
     cache = str(args.armb_cache) if args.armb_cache else None
     print(f"\narms {'/'.join(arms)} over {args.repeats} split(s), {len(names)} datasets, "
           f"{len(learners)} learner(s), {args.jobs} worker(s)")
     for a in arms:
-        print(f"    {a:3s} {ARM_DOC[a]}")
+        e = noise_rate(a)
+        print(f"    {a:3s} " + (ARM_DOC[a] if e is None else
+                                f"train + truly-labelled pool corrupted at {e:.0%}"))
 
-    # Biggest first: the tail of a fan-out is set by its slowest job, so starting the 760-row
-    # datasets last would leave six workers idle while one finishes.
+    # Repeat-major, biggest-first within a repeat. Two reasons, and the ordering is worth the line:
+    # a fan-out's tail is set by its slowest job, so the 760-row datasets must not start last; and
+    # finishing every dataset's repeat 0 before starting any repeat 1 means the cache holds a
+    # *complete* lower-repeat answer at all times, so a run this long can be reported on -- or
+    # interrupted -- at any point rather than only at the end.
     jobs = sorted(((n, l, args.seed, r, arms, str(args.teacher), cache)
                    for n in names for l in learners for r in range(args.repeats)),
-                  key=lambda j: -reports[j[0]]["shape"]["n_test"])
+                  key=lambda j: (j[3], -reports[j[0]]["shape"]["n_test"]))
     got: dict[tuple[str, str], dict[int, dict[str, float]]] = {}
     t0 = time.perf_counter()
     with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
@@ -519,6 +624,54 @@ def run_arm_b(args) -> int:
                           f"B-A {ba[m].mean():+.4f} ({int((ba[m] > 0).sum())} wins)   "
                           f"C-A {ca[m].mean():+.4f}   p = {sign_test(ba[m]):.4f}")
 
+    swept = sorted((noise_rate(a) for a in arms if noise_rate(a) is not None))
+    if swept and "C" in arms:
+        print("\n  BREAK-EVEN -- how accurate a labeller would have to be for the pool to pay:")
+        print(f"    {'dataset':30s} {'learner':13s} {'C-A':>8s} {'e*':>7s} {'teacher err':>12s} "
+              f"{'verdict':>9s}")
+        be_rows = []
+        for r in rows:
+            pts = [(0.0, r["mean"]["C"] - r["mean"]["A"])] + [
+                (e, r["mean"][f"N{int(round(e * 100)):02d}"] - r["mean"]["A"])
+                for e in swept if f"N{int(round(e * 100)):02d}" in r["mean"]]
+            if len(pts) < 2:
+                continue
+            e_star = break_even(pts)
+            terr = 1.0 - r["teacher"]
+            # Three outcomes, and collapsing the first two would be a reporting error of the exact
+            # kind this project has had to retract: a pool that never paid even with TRUE labels is
+            # silent about label noise, and calling it "tolerates more than 40%" reads as the
+            # opposite of what it is.
+            if pts[0][1] <= 0:
+                shown, ok, e_star = "n/a", "no headroom", None
+            elif e_star is None:
+                shown, ok = f">{max(swept):.0%}", "PAYS"
+            else:
+                shown, ok = f"{e_star:.1%}", ("PAYS" if terr < e_star else "no")
+            print(f"    {r['dataset']:30s} {r['learner']:13s} {pts[0][1]:+8.4f} {shown:>7s} "
+                  f"{terr:12.1%} {ok:>11s}")
+            be_rows.append({"dataset": r["dataset"], "learner": r["learner"],
+                            "headroom": pts[0][1], "break_even": e_star, "teacher_error": terr,
+                            "outcome": ok})
+        crossed = [b for b in be_rows if b["break_even"] is not None]
+        if crossed:
+            es = np.array([b["break_even"] for b in crossed])
+            te = np.array([b["teacher_error"] for b in crossed])
+            print(f"\n    median break-even {float(np.median(es)):.1%} against a median teacher error "
+                  f"of {float(np.median(te)):.1%}; the teacher is accurate enough on "
+                  f"{int((te < es).sum())} of {len(crossed)}")
+        never = [b for b in be_rows if b["outcome"] == "PAYS" and b["break_even"] is None]
+        dead = [b for b in be_rows if b["outcome"] == "no headroom"]
+        if never:
+            print(f"    {len(never)} case(s) still paid at {max(swept):.0%} noise, so their "
+                  f"break-even is above the swept range")
+        if dead:
+            print(f"    {len(dead)} case(s) had no headroom even with TRUE labels and say nothing "
+                  f"about label quality")
+        for b in be_rows:
+            verd = verdicts.setdefault("break_even", {})
+            verd[f"{b['dataset']}:{b['learner']}"] = b
+
     print("\nArm B uses the teacher's hard argmax. A soft-label student can exceed it, so a negative "
           "here bounds hard-label distillation and not distillation. C is the same pool with real "
           "labels: where C-A is itself near zero, no labelling of the pool could have helped and the "
@@ -546,7 +699,9 @@ def main() -> int:
     ap.add_argument("--learners", nargs="*", default=list(LEARNERS))
     ap.add_argument("--repeats", type=int, default=5, help="pool/holdout splits to average (arm B)")
     ap.add_argument("--arms", nargs="*", default=["A", "B", "C"],
-                    help=f"which arms to score: {', '.join(f'{k} = {v}' for k, v in ARM_DOC.items())}")
+                    help=f"which arms to score: {', '.join(f'{k} = {v}' for k, v in ARM_DOC.items())}"
+                         "; plus N05/N10/N20/... = the pool with TRUE labels corrupted at that rate, "
+                         "which with C measures how accurate any labeller would have to be")
     ap.add_argument("--from-gate", type=Path,
                     help="select datasets from a gate run instead of naming them, so the subgroup "
                          "under test is recoverable from the command line")

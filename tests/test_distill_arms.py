@@ -159,6 +159,86 @@ class TestGateSelection:
         assert dg.gate_selection(p, 1.00) == ["Easy", "Hard"]
 
 
+class TestNoiseArms:
+    def test_a_rate_is_read_off_the_arm_name(self):
+        assert dg.noise_rate("N20") == pytest.approx(0.20)
+        assert dg.noise_rate("N05") == pytest.approx(0.05)
+
+    def test_ordinary_arms_are_not_rates(self):
+        for a in ("A", "B", "C", "Bc", "Bs"):
+            assert dg.noise_rate(a) is None
+
+    def test_two_digits_are_required(self):
+        # `N5` would be ambiguous between 5% and 50%, and guessing either would silently mislabel
+        # the whole sweep's x-axis.
+        assert dg.noise_rate("N5") is None
+        assert not dg.known_arm("N5")
+        assert dg.known_arm("N05")
+
+    def test_corruption_is_reproducible_and_hits_about_the_right_fraction(self, fake):
+        tmp, _ = fake
+        a = dg.arm_split("Fake", "fake", 0, 0, ("N30",), str(tmp), None)
+        b = dg.arm_split("Fake", "fake", 0, 0, ("N30",), str(tmp), None)
+        assert a["N30"] == b["N30"]
+
+
+class TestBreakEven:
+    def test_interpolates_the_crossing(self):
+        assert dg.break_even([(0.0, 0.10), (0.10, 0.05), (0.20, -0.05)]) == pytest.approx(0.15)
+
+    def test_none_when_it_still_pays_at_the_highest_rate(self):
+        assert dg.break_even([(0.0, 0.10), (0.40, 0.02)]) is None
+
+    def test_none_when_there_was_never_any_headroom(self):
+        # Distinct from the case above and not interchangeable with it: a pool that never paid even
+        # with TRUE labels is silent about label quality, and reporting it as "tolerates >40% noise"
+        # states the opposite of what was measured.
+        assert dg.break_even([(0.0, -0.02), (0.20, -0.05)]) is None
+
+    def test_takes_the_first_crossing(self):
+        assert dg.break_even([(0.0, 0.1), (0.1, -0.1), (0.2, 0.1), (0.3, -0.1)]) == pytest.approx(0.05)
+
+
+class TestTeacherProba:
+    def test_columns_follow_the_sidecars_class_order(self):
+        soft = _sidecar(2, 2, [{"1": 0.9, "2": 0.1}, {"1": 0.2, "2": 0.8}])
+        soft["classes"] = ["2", "1"]
+        classes, p = dg.teacher_proba(soft, 2)
+        assert classes == ["2", "1"]
+        assert p[0].tolist() == pytest.approx([0.1, 0.9])
+
+    def test_rows_are_renormalised(self):
+        soft = _sidecar(0, 1, [{"1": 0.3, "2": 0.1}])
+        assert dg.teacher_proba(soft, 1)[1][0].tolist() == pytest.approx([0.75, 0.25])
+
+    def test_a_class_absent_from_a_row_is_zero_not_missing(self):
+        soft = _sidecar(0, 1, [{"1": 1.0}])
+        assert dg.teacher_proba(soft, 1)[1][0].tolist() == pytest.approx([1.0, 0.0])
+
+
+class TestSoftTargetRidge:
+    def test_recovers_a_separable_problem_from_the_teachers_distribution(self):
+        rng = np.random.default_rng(0)
+        n, L = 40, 32
+        xtr = np.vstack([rng.normal(0, 1, (n, L)), rng.normal(6, 1, (n, L))])
+        ytr = np.array(["1"] * n + ["2"] * n)
+        xpool = np.vstack([rng.normal(0, 1, (10, L)), rng.normal(6, 1, (10, L))])
+        # A hedged but correct teacher: the arm exists to show hedging costs less than a wrong
+        # argmax, so the fit has to survive probabilities nowhere near one-hot.
+        ppool = np.array([[0.7, 0.3]] * 10 + [[0.3, 0.7]] * 10)
+        xte = np.vstack([rng.normal(0, 1, (5, L)), rng.normal(6, 1, (5, L))])
+        pred = dg.soft_target_ridge(xtr, ytr, xpool, ppool, ["1", "2"], xte, n_kernels=200, seed=0)
+        assert list(pred) == ["1"] * 5 + ["2"] * 5
+
+    def test_a_train_label_outside_the_teachers_classes_raises(self):
+        rng = np.random.default_rng(0)
+        xtr = rng.normal(size=(6, 16))
+        with pytest.raises(ValueError, match="absent from the teacher"):
+            dg.soft_target_ridge(xtr, np.array(["1", "2", "3", "1", "2", "3"]),
+                                 rng.normal(size=(2, 16)), np.array([[0.5, 0.5]] * 2),
+                                 ["1", "2"], rng.normal(size=(2, 16)), n_kernels=64)
+
+
 class TestSignTest:
     def test_all_wins_is_the_two_sided_coin_tail(self):
         assert dg.sign_test(np.ones(6)) == pytest.approx(2 / 2**6)

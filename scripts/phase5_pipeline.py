@@ -428,6 +428,23 @@ SELECT CASE
          ELSE 0
        END AS prime_check;
 
+-- Every name in the requested feature list must exist in train_cur. A name that matches no column
+-- is SILENTLY DROPPED -- the macro filters with COLUMNS(lambda), which keeps what matches and says
+-- nothing about what does not, so by bind time a typo is indistinguishable from a deliberate
+-- omission. The call then succeeds having trained on fewer features than asked for, and no accuracy
+-- this project has recorded would show it. DataZooDE/anofox-tabfm#34, fixed 2026-08-15; the
+-- community build serves 2026.08.14, so it is still silent for us today.
+--
+-- Our names and our schema come from one list, so this can only fire on a regression. That is the
+-- point: it costs one statement per run to assert, and the alternative is to keep assuming it.
+SELECT CASE
+         WHEN (SELECT count(*) FROM (SELECT unnest({feature_list}) AS n)
+                WHERE lower(n) NOT IN (SELECT lower(column_name) FROM (DESCRIBE train_cur))) > 0
+         THEN CAST('the requested feature list names a column that train_cur does not have; the '
+                   'extension drops it silently and trains on the rest' AS BIGINT)
+         ELSE 0
+       END AS features_check;
+
 -- test_cur omits the target: tabfm_classify unions train and test BY NAME, and a target present
 -- in both is a duplicate-name binder error naming neither cause (Phase 2).
 -- GROUP BY, not a bare join: byte-identical test series join many-to-many and would otherwise be

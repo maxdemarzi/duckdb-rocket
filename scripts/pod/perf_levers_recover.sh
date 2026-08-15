@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# The three things the first levers run did not deliver, in the order their measurements need.
+#
+# **What went wrong the first time, because the order here is the fix.** The kernel sweep put one
+# worker per (dataset, kernel size), so six workers reached for the same cold aeon archive at once.
+# That corrupted reads -- 44 of 168 fits died on half-written .ts files -- and it hammered Zenodo
+# hard enough that the group sweep, starting five minutes later, could not download its datasets at
+# all and lost 24 of 28 to a failure that reads as rc=1 with an empty stderr.
+#
+# Nothing here downloads under concurrency. The cache is warmed once, serially, up front; every
+# dataset is then local and no later stage can race for one.
+#
+#   BUDGET_MIN=240 bash scripts/pod/perf_levers_recover.sh
+set -uo pipefail
+cd /workspace/duckdb-rocket
+export PATH="$HOME/.local/bin:$PATH"
+
+OUT=/workspace/levers
+BUDGET_MIN="${BUDGET_MIN:-240}"
+TIMEOUT_MIN="${TIMEOUT_MIN:-60}"
+SHARDS="${SHARDS:-4}"
+NPROC=$(nproc)
+
+log() { printf '\n=== %s  [%s]\n' "$*" "$(date -u +%H:%M:%S)"; }
+
+log "repository"
+git pull -q --ff-only || true
+git log --oneline -1
+uv sync -q
+mkdir -p "$OUT"
+
+log "warming the dataset cache, serially, before anything runs concurrently"
+# This is the step whose absence cost the first run. Serial, retried, and loud about what it cannot
+# get -- a dataset missing here is one to drop from the plan, not one to discover inside a worker.
+uv run python - <<'PY' 2>&1 | tail -20
+import json, sys, time
+sys.path.insert(0, ".")
+from duckdb_rocket.datasets import load
+rows = json.load(open("reference/distill_gate.json"))["rows"]
+want = sorted(r["dataset"] for r in rows
+              if r.get("students") and max(r["students"].values()) < 0.90)
+bad = []
+for n in want:
+    for attempt in (1, 2, 3):
+        try:
+            load(n, "train"); load(n, "test"); break
+        except Exception as e:
+            if attempt == 3:
+                bad.append(n); print(f"  UNAVAILABLE {n}: {type(e).__name__}: {e}"[:150])
+            else:
+                time.sleep(20)
+print(f"  warm: {len(want) - len(bad)}/{len(want)} datasets local")
+open("/workspace/levers/warm.json", "w").write(json.dumps({"ok": [n for n in want if n not in bad],
+                                                          "bad": bad}))
+PY
+
+# ---------------------------------------------------------------------------------------------
+log "1/4 the timing arm the 8GB budget killed -- idle box, nothing else started yet"
+# SemgHandMovementCh2 is the longest series measured here (1500 timepoints) and the one whose
+# full-batch arm died after group 1 of 40. It is first because it is the only stage whose answer is
+# a wall-clock number.
+uv run python scripts/route_serve.py serve --dataset SemgHandMovementCh2 --batch 128 --compare \
+    > "$OUT/timing_SemgHandMovementCh2.log" 2>&1
+echo "  rc=$?"
+sed -n '/batch of/,$p' "$OUT/timing_SemgHandMovementCh2.log" | head -30
+
+# ---------------------------------------------------------------------------------------------
+log "2/4 per-group cubes at G=40, ${SHARDS} shards x 2 duckdb threads"
+mapfile -t SHARD_LIST < <(uv run python - "$SHARDS" <<'PY'
+import json, sys
+shards = int(sys.argv[1])
+ok = set(json.load(open("/workspace/levers/warm.json"))["ok"])
+rows = [r for r in json.load(open("reference/distill_gate.json"))["rows"]
+        if r.get("students") and max(r["students"].values()) < 0.90 and r["dataset"] in ok]
+rows.sort(key=lambda r: -r.get("n_test", 0))
+buckets = [[] for _ in range(shards)]
+for i, r in enumerate(rows):
+    buckets[i % shards].append(r["dataset"])
+for b in buckets:
+    print(" ".join(b))
+PY
+)
+for i in "${!SHARD_LIST[@]}"; do echo "  shard $i: ${SHARD_LIST[$i]}"; done
+
+PIDS=()
+for i in "${!SHARD_LIST[@]}"; do
+    # shellcheck disable=SC2086
+    uv run python scripts/teacher_sweep.py --model tabicl-v2 \
+        --datasets ${SHARD_LIST[$i]} \
+        --out-dir "$OUT/pergroup" --device cpu --per-group-soft \
+        --threads 2 --onnx-threads 2 --test-chunk 128 \
+        --budget-min "$BUDGET_MIN" --timeout-min "$TIMEOUT_MIN" \
+        > "$OUT/shard_${i}.log" 2>&1 &
+    PIDS+=($!)
+done
+echo "  ${#PIDS[@]} shards running"
+for p in "${PIDS[@]}"; do wait "$p"; done
+echo "  cubes: $(ls "$OUT"/pergroup/*_pergroup.json 2>/dev/null | wc -l)"
+
+log "3/4 accuracy and routing as a function of G"
+uv run python scripts/perf_levers.py --groups --pergroup "$OUT/pergroup" \
+    --out "$OUT/perf_groups.json" > "$OUT/groups.log" 2>&1
+echo "  rc=$?"
+sed -n '/TEACHER GROUPS/,$p' "$OUT/groups.log"
+
+log "4/4 student kernels, re-run with the cache already warm"
+uv run python scripts/perf_levers.py --kernels \
+    --from-gate reference/distill_gate.json --max-student 0.90 \
+    --jobs "$NPROC" --out "$OUT/perf_kernels.json" > "$OUT/kernels.log" 2>&1
+echo "  rc=$?"
+sed -n '/STUDENT KERNELS/,$p' "$OUT/kernels.log"
+
+log "done"

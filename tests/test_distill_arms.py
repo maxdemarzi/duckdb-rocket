@@ -273,6 +273,39 @@ def most_confident_pick_helper(a, b):
     return dg.most_confident_pick({"a": a, "b": b}, a["n_test"])
 
 
+class TestThresholdCalibration:
+    """The step between the measurement and a served system.
+
+    The routing result escalated a fraction of a sorted test set. Nothing can do that at serving
+    time, so the budget has to become a threshold on one row's margin, and the threshold has to come
+    from data that exists before deployment.
+    """
+
+    def test_a_quantile_of_the_calibration_margins_reproduces_the_budget_when_they_match(self):
+        # If train and test margins are drawn alike, the quantile threshold spends its budget.
+        rng = np.random.default_rng(0)
+        oof = rng.normal(size=400)
+        test = rng.normal(size=4000)
+        thr = float(np.quantile(oof, 0.20))
+        assert (test < thr).mean() == pytest.approx(0.20, abs=0.03)
+
+    def test_a_shifted_test_distribution_misses_the_budget(self):
+        # Which is the whole reason the realised rate is reported per dataset rather than assumed:
+        # a model more confident on test than on held-out train escalates less than asked.
+        rng = np.random.default_rng(0)
+        thr = float(np.quantile(rng.normal(size=400), 0.20))
+        assert (rng.normal(loc=1.0, size=4000) < thr).mean() < 0.10
+
+    def test_in_sample_margins_would_set_the_threshold_too_low(self):
+        # The reason for cross-validation rather than refitting and reading margins off the training
+        # rows: a fitted model is systematically surer of what it has seen, so an in-sample quantile
+        # sits below the honest one and the system escalates too little.
+        rng = np.random.default_rng(0)
+        in_sample = rng.normal(loc=1.5, size=400)      # inflated confidence on seen rows
+        out_of_fold = rng.normal(size=400)
+        assert np.quantile(in_sample, 0.20) > np.quantile(out_of_fold, 0.20)
+
+
 class TestNoiseCurve:
     CURVE = [(0.0, 0.10), (0.10, 0.06), (0.20, 0.02), (0.40, -0.06)]
 

@@ -1074,6 +1074,148 @@ def _route_worker(t):
         return name, learner, None, None, f"{type(e).__name__}: {e}"[:140]
 
 
+def oof_margins(name: str, learner: str, seed: int, folds: int, cache: str | None) -> np.ndarray:
+    """Out-of-fold decision margins on the TRAIN split.
+
+    A served system cannot sort a batch it has not received, so the escalation rule has to be a
+    THRESHOLD on one row's margin rather than a fraction of a set. The threshold has to come from
+    data that exists before any test row does, which means the training split -- and it has to come
+    from margins the model produced on rows it had not seen, since a fitted model is systematically
+    more confident on its own training rows and an in-sample threshold would sit far too low.
+
+    Cross-validated rather than a single holdout because these training sets are small: ArrowHead has
+    36 rows, so a 25% holdout would estimate a 20% quantile from nine numbers. Every row gets a
+    margin this way, which is the most calibration data the problem allows.
+    """
+    if cache:
+        cp = Path(cache) / f"{name}__{learner.replace('+', '_')}__seed{seed}__k{folds}.json"
+        if cp.exists():
+            try:
+                return np.asarray(json.loads(cp.read_text(encoding="utf-8"))["margins"], dtype=float)
+            except Exception:  # noqa: BLE001
+                pass
+    from sklearn.model_selection import StratifiedKFold, KFold
+
+    xtr, ytr = load(name, "train")
+    xtr = normalize_series(xtr)
+    k = max(2, min(folds, int(np.bincount(np.unique(ytr, return_inverse=True)[1]).min())))
+    try:
+        splitter = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
+        parts = list(splitter.split(xtr, ytr))
+    except ValueError:
+        parts = list(KFold(n_splits=k, shuffle=True, random_state=seed).split(xtr))
+    out = np.zeros(len(ytr), dtype=float)
+    for fit_i, held_i in parts:
+        _, conf = SCORERS[learner](xtr[fit_i], ytr[fit_i], xtr[held_i], seed=seed)
+        out[held_i] = conf
+    if cache:
+        cp = Path(cache) / f"{name}__{learner.replace('+', '_')}__seed{seed}__k{folds}.json"
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps({"dataset": name, "learner": learner, "seed": seed, "folds": k,
+                                  "margins": out.tolist()}), encoding="utf-8")
+    return out
+
+
+def _oof_worker(t):
+    name, learner, seed, folds, cache = t
+    try:
+        return name, learner, oof_margins(name, learner, seed, folds, cache).tolist(), ""
+    except Exception as e:  # noqa: BLE001
+        return name, learner, None, f"{type(e).__name__}: {e}"[:140]
+
+
+def run_calibrate(args) -> int:
+    """Turn the escalation FRACTION into a servable THRESHOLD, and measure what that costs.
+
+    The routing result was produced by sorting a whole test set and escalating its least confident
+    fraction. No serving system can do that. This picks the threshold from out-of-fold margins on the
+    training split -- data available before deployment -- and then applies it row by row, which is
+    what a served system would actually run.
+
+    Two things can go wrong and both are reported rather than assumed: the realised escalation rate
+    can miss its target, because train and test margins are not identically distributed; and the
+    accuracy can fall short of the sorted-fraction version even when the rate is right.
+    """
+    reports = teacher_reports(args.teacher)
+    wanted = (gate_selection(args.from_gate, args.max_student) if args.from_gate
+              else (args.datasets or sorted(reports)))
+    names = [n for n in wanted if n in reports and load_soft(args.teacher, n) is not None]
+    learners = [k for k in SCORERS if k in args.learners]
+    targets = [float(t) for t in args.targets]
+    print(f"calibrating a margin threshold from {args.folds}-fold out-of-fold margins on the train "
+          f"split\n{len(names)} datasets, {len(learners)} learner(s), targets "
+          f"{', '.join(f'{t:.0%}' for t in targets)}\n")
+
+    jobs = sorted(((n, l, args.seed, args.folds, str(args.oof_cache))
+                   for n in names for l in learners),
+                  key=lambda j: -reports[j[0]]["shape"]["n_test"])
+    oof: dict[tuple[str, str], np.ndarray] = {}
+    with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        for i, fut in enumerate(as_completed([ex.submit(_oof_worker, j) for j in jobs]), start=1):
+            n, l, m, err = fut.result()
+            if m is None:
+                print(f"  {n} {l} failed: {err}", flush=True)
+            else:
+                oof[(n, l)] = np.asarray(m, dtype=float)
+            if i % 10 == 0 or i == len(jobs):
+                print(f"  ... {i}/{len(jobs)} calibration sets built", flush=True)
+
+    print(f"\n{'dataset':26s} {'learner':13s} {'target':>7s} {'actual':>7s} "
+          f"{'threshold':>10s} {'acc':>8s} {'sorted':>8s} {'gap':>8s}")
+    rows = []
+    for name in names:
+        soft = load_soft(args.teacher, name)
+        _, yte = load(name, "test")
+        tpred = teacher_labels(soft, len(yte))
+        for lname in learners:
+            if (name, lname) not in oof:
+                continue
+            got = _route_worker((name, lname, args.seed, str(args.teacher), str(args.route_cache)))
+            if got[2] is None:
+                continue
+            spred, sconf = np.asarray(got[2], dtype=object), np.asarray(got[3], dtype=float)
+            for t in targets:
+                thr = float(np.quantile(oof[(name, lname)], t))
+                esc = sconf < thr
+                pred = spred.copy()
+                pred[esc] = np.asarray(tpred, dtype=object)[esc]
+                acc = float((pred == np.asarray(yte, dtype=object)).mean())
+                # The same budget spent by sorting the test set, which is the number the routing
+                # result reported and the thing a threshold has to be judged against.
+                sorted_acc = route_curve(spred, sconf, tpred, yte, [t])[0][1]
+                print(f"{name:26s} {lname:13s} {t:7.0%} {esc.mean():7.1%} {thr:10.4f} "
+                      f"{acc:8.4f} {sorted_acc:8.4f} {acc - sorted_acc:+8.4f}")
+                rows.append({"dataset": name, "learner": lname, "target": t,
+                             "realised": float(esc.mean()), "threshold": thr, "accuracy": acc,
+                             "sorted_accuracy": sorted_acc,
+                             "student": route_curve(spred, sconf, tpred, yte, [0.0])[0][1]})
+
+    if not rows:
+        return 1
+    print("\nCALIBRATION -- does a threshold chosen before deployment hit its budget and its number?")
+    for lname in learners:
+        for t in targets:
+            sub = [r for r in rows if r["learner"] == lname and r["target"] == t]
+            if not sub:
+                continue
+            rate = np.array([r["realised"] for r in sub])
+            gap = np.array([r["accuracy"] - r["sorted_accuracy"] for r in sub])
+            gain = np.array([r["accuracy"] - r["student"] for r in sub])
+            print(f"  {lname:13s} target {t:4.0%}: realised {rate.mean():5.1%} "
+                  f"(median {float(np.median(rate)):5.1%}, {rate.min():4.1%}-{rate.max():5.1%})   "
+                  f"gain over the student {gain.mean():+.4f} (p = {sign_test(gain):.4f})   "
+                  f"vs sorting the batch {gap.mean():+.4f}")
+    print("\n  The spread on the realised rate is the cost of not having the batch: a threshold set "
+          "on training margins spends more or less than its budget on any given dataset, because "
+          "train and test margins are not identically distributed. The gain column is what a served "
+          "system would actually get.")
+    if args.out:
+        args.out.write_text(json.dumps({"folds": args.folds, "targets": targets, "rows": rows},
+                                       indent=2), encoding="utf-8")
+        print(f"wrote {args.out}")
+    return 0
+
+
 def run_route(args) -> int:
     """Route, do not distil: run the student, escalate only the rows it is unsure of.
 
@@ -1176,6 +1318,15 @@ def main() -> int:
                          "what prices an ensemble against the break-even")
     ap.add_argument("--labellers", nargs="*", default=["tabicl-v2"],
                     help="models whose archived soft labels to read and average")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="turn the escalation fraction into a servable margin threshold, chosen "
+                         "from out-of-fold margins on the train split, and measure what it costs")
+    ap.add_argument("--folds", type=int, default=5,
+                    help="cross-validation folds for the out-of-fold calibration margins")
+    ap.add_argument("--targets", nargs="*", default=[0.10, 0.20, 0.30],
+                    help="escalation budgets to calibrate a threshold for")
+    ap.add_argument("--oof-cache", type=Path, default=ROOT / "data" / "oof_margins",
+                    help="per-(dataset, learner, seed, folds) out-of-fold margins")
     ap.add_argument("--route", action="store_true",
                     help="escalate the student's least-confident rows to the teacher instead of "
                          "distilling from it")
@@ -1208,7 +1359,8 @@ def main() -> int:
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 
-    if not (args.gate or args.arm_b or args.route or args.labeller_accuracy):
+    if not (args.gate or args.arm_b or args.route or args.labeller_accuracy
+            or args.calibrate):
         args.gate = True
     t0 = time.perf_counter()
     rc = run_gate(args) if args.gate else 0
@@ -1218,6 +1370,8 @@ def main() -> int:
         rc = run_route(args) or rc
     if args.labeller_accuracy:
         rc = run_labellers(args) or rc
+    if args.calibrate:
+        rc = run_calibrate(args) or rc
     print(f"\n{(time.perf_counter() - t0) / 60:.1f} min")
     return rc
 

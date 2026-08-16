@@ -90,10 +90,28 @@ build/release/duckdb -c "INSTALL httpfs;" >/dev/null 2>&1
 build/release/duckdb -c "INSTALL anofox_tabfm FROM community;" >/dev/null 2>&1
 build/release/duckdb -c "LOAD anofox_tabfm; SELECT extension_version FROM duckdb_extensions()
   WHERE extension_name = 'anofox_tabfm';" 2>/dev/null | tail -3
-build/release/duckdb -c "LOAD httpfs; LOAD anofox_tabfm;
-  SET anofox_tabfm_accept_hf_license = true;
-  FROM tabfm_download('classification', model := '${LABELLER}');" >/dev/null 2>&1 \
-  && echo "  ${LABELLER} weights ok" || { echo "FATAL: no ${LABELLER} weights"; exit 1; }
+# All four, not just the new one. The baseline arm of the cost probe needs tabicl-v2 -- omitting it
+# is how a probe reported "missing an arm" for a run that had in fact been asked to classify with
+# no weights at all -- and convert_model_weights.sh verifies all four before it will exit clean.
+for m in tabicl-v2 mitra tabpfn-v2 "${LABELLER}"; do
+    build/release/duckdb -c "LOAD httpfs; LOAD anofox_tabfm;
+      SET anofox_tabfm_accept_hf_license = true;
+      FROM tabfm_download('classification', model := '${m}');" >/dev/null 2>&1 \
+      && echo "  ${m} downloaded" || echo "  ${m} DOWNLOAD FAILED"
+done
+
+log "converting the checkpoints the engine cannot read"
+# `tabfm_download` fetches checkpoints that two of these models cannot actually load: the tabpfn
+# graphs were exported against different tensor names, and orion-bix is a torch zip whose pickle
+# stream uses an opcode the reader does not implement. v2026.08.11 made the engine prefer a sibling
+# model.safetensors and made the error say so; it did not make the conversion happen. Skipping this
+# is why an orion-bix probe died with "unsupported pickle opcode 0x65" after the download reported
+# success -- RESULTS.md's "verified classifying through the real extension" was always post-
+# conversion.
+DUCKDB_SHELL=build/release/duckdb bash scripts/convert_model_weights.sh > "$OUT/convert.log" 2>&1
+CONV=$?
+grep -E "^  [a-z]|wrote [0-9]+ tensors|FATAL" "$OUT/convert.log" | sed 's/^/  /'
+[ "$CONV" -eq 0 ] || { echo "FATAL: conversion did not leave every labeller classifying"; exit 1; }
 
 # ---------------------------------------------------------------------------------------------
 # PROBE 2 (cheap, so it goes first): does the paper's model load yet?
@@ -114,9 +132,15 @@ else
       CREATE TABLE q AS SELECT * FROM VALUES (1.05,2.05),(9.05,8.05) AS v(f0,f1);
       FROM tabfm_classify('t','y', test := 'q', model := 'tabpfn-v2-5');" \
       > "$OUT/tabpfn25_classify.log" 2>&1
-    if grep -qiE "^Error|Exception" "$OUT/tabpfn25_classify.log"; then
+    # Anchoring on ^Error missed `Invalid Input Error: ...` and reported a failure as a success.
+    # It cannot simply be an unanchored grep either: ONNX Runtime prints thousands of harmless
+    # "Schema error: Trying to register schema ..." lines to stderr on every model load, which is
+    # the reason probe_anofox.py carries a real_errors() filter. Strip those, then look.
+    if grep -iE "error|exception" "$OUT/tabpfn25_classify.log" \
+         | grep -viE "Schema error|registered from|already registered" | grep -q .; then
         echo "  tabpfn-v2-5 downloads but DOES NOT CLASSIFY:"
-        grep -iE "^Error|Exception" "$OUT/tabpfn25_classify.log" | head -3
+        grep -iE "error|exception" "$OUT/tabpfn25_classify.log" \
+          | grep -viE "Schema error|registered from|already registered" | head -3
     else
         echo "  *** tabpfn-v2-5 LOADS AND CLASSIFIES -- the paper's backbone is available ***"
         tail -6 "$OUT/tabpfn25_classify.log"

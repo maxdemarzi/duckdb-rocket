@@ -127,22 +127,19 @@ echo "  done"
 # ---------------------------------------------------------------------------------------------
 log "${MODEL} with --features ${FEATURES}"
 NG=1; [ "$FEATURES" = "both" ] && NG=40
-for ds in "${TARGETS[@]}"; do
-    echo "  --- $ds"
-    uv run python scripts/teacher_sweep.py --model "$MODEL" --datasets "$ds" \
-        --out-dir "$OUT" --device cpu --per-group-soft \
-        --features "$FEATURES" --n-groups "$NG" \
-        --threads 4 --onnx-threads $(( NPROC / 4 )) --test-chunk 128 \
-        --budget-min "$BUDGET_MIN" --timeout-min "$TIMEOUT_MIN" \
-        > "$OUT/${ds}.log" 2>&1
-    SUF=$([ "$MODEL" = tabicl-v2 ] && echo "${FEATURES}" || echo "${MODEL}_${FEATURES}")
-    if [ -f "$OUT/phase5_${ds}_${SUF}_soft.json" ]; then
-        grep -E "^accuracy" "$OUT/${ds}.log" | tail -1 | sed 's/^/    /'
-    else
-        echo "    NO SOFT LABELS"
-        grep -E "rc=1|last stderr|Error" "$OUT/${ds}.log" | tail -2 | sed 's/^/      /'
-    fi
-done
+# ONE invocation for all of them, not one per dataset. teacher_sweep already runs its list serially
+# in a single process, and its candidates() loads every dataset in the UCR archive to count classes
+# -- the class cap is not in aeon's metadata tables -- so a per-dataset loop repeats that scan once
+# per dataset. Measured here: ~1 minute each after the archive is cached, and the first call has to
+# fetch the whole archive from Zenodo, which this project has already been rate-limited by once.
+uv run python scripts/teacher_sweep.py --model "$MODEL" --datasets "${TARGETS[@]}" \
+    --out-dir "$OUT" --device cpu --per-group-soft \
+    --features "$FEATURES" --n-groups "$NG" \
+    --threads 4 --onnx-threads $(( NPROC / 4 )) --test-chunk 128 \
+    --budget-min "$BUDGET_MIN" --timeout-min "$TIMEOUT_MIN" \
+    > "$OUT/sweep.log" 2>&1
+echo "  rc=$?"
+grep -E "^\[|^accuracy|rc=1|last stderr|clean in" "$OUT/sweep.log" | tail -40 | sed 's/^/  /'
 
 log "the overlap, with the new arm folded in"
 cp "$OUT"/phase5_*_soft.json "$OUT"/phase5_*.json reference/ 2>/dev/null

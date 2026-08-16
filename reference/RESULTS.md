@@ -685,6 +685,48 @@ on half-written files, and each row averaged over a different subset of datasets
 single count. The table above is 28 datasets at every size with no failures.
 `reference/perf_kernels.json`.
 
+#### Sending the teacher a smaller context: do not, except to make a run possible (2026-08-15)
+
+The context is the third lever and the only one that attacks the fixed term without an upstream
+change. `tabfm_classify` re-encodes the labelled rows on every call, so sending half of them should
+halve the dominant cost. It does not, and it is not free.
+
+Six datasets at G=10, `--max-train-rows` with a stratified draw and a floor of one row per class:
+
+| context | classify | accuracy vs full | worst | not worse |
+|---|---|---|---|---|
+| 25% | **1.94x** faster (of a possible 4x) | −0.0632 | −0.1776 | 1/4 |
+| 50% | **1.48x** faster (of a possible 2x) | −0.0168 | −0.0526 | 2/4 |
+
+**Sub-proportional and expensive.** Sub-proportional because only the fixed term shrinks — the
+~9 ms per query row is untouched and becomes the floor, exactly as the cost model predicts (176 s
+-> 119 -> 89 on ScreenType against a predicted 187/111/74). Expensive because the context is the
+model's *only* knowledge of the task, unlike the groups, which are an ensemble over feature subsets
+and are genuinely redundant.
+
+The damage tracks **examples per class**, not the fraction removed:
+
+| dataset | classes | rows at 25% | per class | accuracy |
+|---|---|---|---|---|
+| MedicalImages | 10 | 95 | **9.5** | **−0.1776** |
+| ProximalPhalanxTW | 6 | 100 | 16.7 | +0.0049 |
+| ScreenType | 3 | 94 | 31.3 | −0.0400 |
+| Computers | 2 | 62 | 31.0 | −0.0400 |
+
+So the comparison across all three levers is not close. **The group count divides the dominant term
+four times over for −0.0033; the context divides it 1.48x for −0.0168 and can cost 0.18 on a
+many-class dataset; the kernel count divides 1.7% of the bill.** Cut groups.
+
+The one thing this lever does that nothing else does is make an impossible run possible.
+`EthanolLevel` and `DistalPhalanxOutlineCorrect` cannot run at full context on a CPU pod at all —
+their 504 and 600 row contexts exceed the 29.8 GiB cap — and both completed at 25% and 50%
+(0.5880/0.6120 and 0.7754/0.7862). Those numbers confound the context cut with G=10 and are not
+comparable to the archived full-context values; what they establish is feasibility, not accuracy.
+
+`reference/perf_context.json`. The 24 per-group cubes are archived compressed as
+`reference/pergroup_cubes.tar.gz` (3.3 MB), so the group analysis can be redone or extended
+without renting anything.
+
 #### What this leaves, and what it costs to find out
 
 An ensemble of labellers is the standard escape, and after `scripts/convert_model_weights.sh` there

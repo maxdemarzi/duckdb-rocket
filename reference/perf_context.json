@@ -1,0 +1,184 @@
+{
+  "design": "teacher at reduced labelled context",
+  "fracs": [
+    0.25,
+    0.5,
+    1.0
+  ],
+  "rows": [
+    {
+      "dataset": "ScreenType",
+      "frac": 0.25,
+      "context_rows": 94,
+      "n_train": 375,
+      "accuracy": 0.49333333333333335,
+      "wall_seconds": 94.58310526609421,
+      "classify_seconds": 89.25,
+      "cached": false
+    },
+    {
+      "dataset": "ScreenType",
+      "frac": 0.5,
+      "context_rows": 188,
+      "n_train": 375,
+      "accuracy": 0.496,
+      "wall_seconds": 125.29640877991915,
+      "classify_seconds": 119.08,
+      "cached": false
+    },
+    {
+      "dataset": "ScreenType",
+      "frac": 1.0,
+      "context_rows": 375,
+      "n_train": 375,
+      "accuracy": 0.5333333333333333,
+      "wall_seconds": 184.1646667420864,
+      "classify_seconds": 176.16,
+      "cached": false
+    },
+    {
+      "dataset": "Computers",
+      "frac": 0.25,
+      "context_rows": 62,
+      "n_train": 250,
+      "accuracy": 0.736,
+      "wall_seconds": 58.20575608313084,
+      "classify_seconds": 54.2,
+      "cached": false
+    },
+    {
+      "dataset": "Computers",
+      "frac": 0.5,
+      "context_rows": 125,
+      "n_train": 250,
+      "accuracy": 0.784,
+      "wall_seconds": 71.49707467854023,
+      "classify_seconds": 66.8,
+      "cached": false
+    },
+    {
+      "dataset": "Computers",
+      "frac": 1.0,
+      "context_rows": 250,
+      "n_train": 250,
+      "accuracy": 0.776,
+      "wall_seconds": 98.83407428115606,
+      "classify_seconds": 92.98,
+      "cached": false
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "frac": 0.25,
+      "context_rows": 100,
+      "n_train": 400,
+      "accuracy": 0.8048780487804879,
+      "wall_seconds": 58.451387003064156,
+      "classify_seconds": 56.41,
+      "cached": false
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "frac": 0.5,
+      "context_rows": 200,
+      "n_train": 400,
+      "accuracy": 0.8146341463414634,
+      "wall_seconds": 79.54695272445679,
+      "classify_seconds": 77.11,
+      "cached": false
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "frac": 1.0,
+      "context_rows": 400,
+      "n_train": 400,
+      "accuracy": 0.8,
+      "wall_seconds": 122.62777741998434,
+      "classify_seconds": 119.41,
+      "cached": false
+    },
+    {
+      "dataset": "MedicalImages",
+      "frac": 0.25,
+      "context_rows": 95,
+      "n_train": 381,
+      "accuracy": 0.6434210526315789,
+      "wall_seconds": 185.30103881657124,
+      "classify_seconds": 182.26,
+      "cached": false
+    },
+    {
+      "dataset": "MedicalImages",
+      "frac": 0.5,
+      "context_rows": 190,
+      "n_train": 381,
+      "accuracy": 0.7684210526315789,
+      "wall_seconds": 242.83306327462196,
+      "classify_seconds": 239.33,
+      "cached": false
+    },
+    {
+      "dataset": "MedicalImages",
+      "frac": 1.0,
+      "context_rows": 381,
+      "n_train": 381,
+      "accuracy": 0.8210526315789474,
+      "wall_seconds": 363.47098633646965,
+      "classify_seconds": 359.34,
+      "cached": false
+    },
+    {
+      "dataset": "EthanolLevel",
+      "frac": 0.25,
+      "context_rows": 126,
+      "n_train": 504,
+      "accuracy": 0.588,
+      "wall_seconds": 133.87396210432053,
+      "classify_seconds": 120.65,
+      "cached": false
+    },
+    {
+      "dataset": "EthanolLevel",
+      "frac": 0.5,
+      "context_rows": 252,
+      "n_train": 504,
+      "accuracy": 0.612,
+      "wall_seconds": 184.7217317223549,
+      "classify_seconds": 168.97,
+      "cached": false
+    },
+    {
+      "dataset": "EthanolLevel",
+      "frac": 1.0,
+      "context_rows": 504,
+      "n_train": 504,
+      "failed": "rc=1"
+    },
+    {
+      "dataset": "DistalPhalanxOutlineCorrect",
+      "frac": 0.25,
+      "context_rows": 150,
+      "n_train": 600,
+      "accuracy": 0.7753623188405797,
+      "wall_seconds": 102.28655087947845,
+      "classify_seconds": 99.48,
+      "cached": false
+    },
+    {
+      "dataset": "DistalPhalanxOutlineCorrect",
+      "frac": 0.5,
+      "context_rows": 300,
+      "n_train": 600,
+      "accuracy": 0.7862318840579711,
+      "wall_seconds": 148.2990127131343,
+      "classify_seconds": 145.43,
+      "cached": false
+    },
+    {
+      "dataset": "DistalPhalanxOutlineCorrect",
+      "frac": 1.0,
+      "context_rows": 600,
+      "n_train": 600,
+      "failed": "rc=1"
+    }
+  ]
+}

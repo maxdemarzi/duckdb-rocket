@@ -11,14 +11,15 @@
 
 You have two ways to classify a time series in DuckDB:
 
-| | what it is | accuracy on hard problems | cost |
+| | what it is | accuracy on hard problems | cost per row |
 |---|---|---|---|
-| **student** | ROCKET features + a ridge classifier, or MultiRocketHydra | baseline | 1x |
-| **teacher** | ROCKET features + `tabfm_classify` (this pipeline) | +2.9 points | **~14x** |
+| **student** | ROCKET features + a ridge classifier, or MultiRocketHydra | baseline | 23-62 ms |
+| **teacher** | ROCKET features + `tabfm_classify` (this pipeline) | +2.9 points | **55-69x that** |
 
-The 14x is measured, not estimated: 262 seconds against 3,741 seconds over ten datasets, and that is
-with a *slow Python* feature extractor on the student's side, so the real ratio favours the student
-further.
+Measured with both models on one idle 16-core machine in the same run: on a 64-row Herring batch the
+student answered in 23.3 ms/row and the teacher in 1,288 ms/row; on a 128-row ScreenType batch, 30.3
+against 2,093. An earlier version of this page said 14x, from two totals divided by their row counts
+on *different* hardware.
 
 The gap only exists where the problem is hard. On easy datasets a ridge classifier already scores
 0.95+ and the teacher ties it — running the expensive model there buys nothing at all. That is
@@ -31,10 +32,15 @@ Run the student on every row. Ask it how sure it was. Send the least sure rows t
 keep the student's answer for the rest.
 
 ```
-    every row ──▶ student ──▶ confident?  ──yes──▶ keep the student's label      (80% of rows, 1x)
+    every row ──▶ student ──▶ confident?  ──yes──▶ keep the student's label      (80% of rows, cheap)
                                   │
-                                  └────no───────▶ ask the teacher                (20% of rows, 14x)
+                                  └────no───────▶ ask the teacher                (20% of rows, dear)
 ```
+
+**Do not read "20% of the rows" as "20% of the cost".** The teacher charges a large flat fee per
+call plus a small amount per row, so escalating a fifth of a batch costs far more than a fifth. How
+much more is the first thing in "What it costs" below, and it is the single most important number
+on this page.
 
 You choose the escalation fraction. It is a budget dial, not a tuned hyperparameter.
 
@@ -42,10 +48,10 @@ You choose the escalation fraction. It is a budget dial, not a tuned hyperparame
 
 At a 20% escalation budget, over the 28 datasets where the teacher has any advantage at all:
 
-| | vs the student alone | vs the teacher on everything | cost |
-|---|---|---|---|
-| **ROCKET+ridge student** | **+0.0200** (20/28, p=0.004) | −0.0116 (6/28, p=0.023) | 3.6x |
-| **MultiRocketHydra student** | **+0.0145** (19/28, p=0.015) | −0.0060 (11/28, p=0.84) | 3.6x |
+| | vs the student alone | vs the teacher on everything |
+|---|---|---|
+| **ROCKET+ridge student** | **+0.0200** (20/28, p=0.004) | −0.0116 (6/28, p=0.023) |
+| **MultiRocketHydra student** | **+0.0145** (19/28, p=0.015) | −0.0060 (11/28, p=0.84) |
 
 Read that honestly: **routing buys most of the teacher's advantage for about a quarter of the extra
 spend, and it does not match the teacher.** Against ridge it is measurably behind the teacher; against
@@ -53,20 +59,60 @@ MultiRocketHydra it is level. It is a cost trade.
 
 The dial behaves as you would expect, so you can pick a point on it:
 
-| escalate | ridge gain | mr-hydra gain | cost vs student |
-|---|---|---|---|
-| 0% | — | — | 1.0x |
-| 10% | +0.0095 | +0.0083 | 2.3x |
-| 20% | +0.0200 | +0.0145 | 3.6x |
-| 30% | +0.0223 | +0.0201 | 4.9x |
-| 50% | +0.0283 | +0.0230 | 7.5x |
-| 100% (= the teacher) | +0.0316 | +0.0205 | 14x |
+| escalate | ridge gain | mr-hydra gain |
+|---|---|---|
+| 0% | — | — |
+| 10% | +0.0095 | +0.0083 |
+| 20% | +0.0200 | +0.0145 |
+| 30% | +0.0223 | +0.0201 |
+| 50% | +0.0283 | +0.0230 |
+| 100% (= the teacher) | +0.0316 | +0.0205 |
+
+*(This table used to carry a "cost vs student" column reading 2.3x / 3.6x / 4.9x / 7.5x / 14x. It
+was wrong — it assumed the teacher's cost is proportional to the rows you send it. Measured costs
+are in the next section.)*
 
 So a 20% budget captures **63%** of the teacher's advantage for ridge and **71%** for
 MultiRocketHydra, at 26% of the extra spend. Note the curve is concave: the first 10% of escalated
 rows buys a third of the total gain, and the last 50% buys almost none. For MultiRocketHydra the
 50% point is *above* the 100% point (+0.0230 against +0.0205) — past a certain budget you start
 handing the teacher rows the student was getting right.
+
+## What it costs
+
+Measured with all three arms on one idle 16-core machine in the same run
+(`route_serve.py serve --compare`), which is the only arrangement where a cost ratio means anything:
+
+| | Herring (64 rows) | ScreenType (128 rows) |
+|---|---|---|
+| student, whole batch | 1.5 s | 3.9 s |
+| routed, escalating ~20% | 64.7 s | 227.5 s |
+| teacher on every row | 82.4 s | 267.9 s |
+| **rows escalated** | 22% | 17% |
+| **cost of escalating them** | **77%** | **83%** |
+
+Escalating a fifth of the rows costs four fifths of running the teacher on everything. The reason is
+the teacher's contract, not this pipeline: it has no trained weights for your task, so **every call
+re-encodes your whole training set** before it looks at a single query row. Fitted from the two
+batch sizes each run produces:
+
+    Herring      1.40 s per group + 9.0 ms per query row   ->  55.9 s you pay regardless
+    ScreenType   5.05 s per group + 9.7 ms per query row   -> 202.1 s you pay regardless
+
+That fixed part is 71% and 80% of the respective full-batch costs, and escalating fewer rows does
+not touch it. **What routing saves is calls, not rows.** The saving shows up when escalation drops
+the number of `--test-chunk`-sized calls: across the 28 datasets, escalating 20% costs a median 46%
+of teacher-everywhere — 77% on test sets under 128 rows, 25% on those over 385.
+
+Three things follow, in the order they are worth doing:
+
+1. **Run the teacher at G=10.** Cost is exactly linear in the group count, and 10 costs −0.0033
+   against 40. That is a straight 4x off the expensive path.
+2. **Batch escalations.** The fixed fee is per call. One row at a time pays all of it every time.
+3. **Do not shrink the training context to save money** — 1.48x for −0.0168, a much worse trade
+   than (1). Shrink it only if a run does not fit in memory otherwise.
+
+With (1) and (2), the routed ScreenType batch above goes from 227.5 s to roughly 60 s.
 
 ## When it will not help you
 
@@ -228,11 +274,15 @@ Three things about deploying the teacher that the accuracy tables do not show:
   labelled training rows as context — literally `tabfm_classify('train_cur', 'y', test := 'test_cur',
   ...)`. Deploying the teacher means deploying the training data with it, and every escalated call
   re-processes that context.
-* **Batch the escalated rows.** The 14x figure was measured on whole-dataset batches, where the
-  context cost is amortised over many test rows. One row at a time you pay the full context cost for
-  a single prediction. That is reasoning from how the call is shaped rather than a measurement — the
-  single-row latency has not been measured here — but it is the difference between a 3.6x system and
-  something much worse.
+* **Batch the escalated rows.** This follows from the fixed fee and it is the difference between a
+  usable system and an unusable one. The context pass is paid once per call, so escalating one row
+  at a time pays the whole of it for a single prediction. Accumulate escalated rows and send them
+  together, up to whatever `--test-chunk` your memory allows — chunking finer costs 2.18x on
+  measured whole-dataset runs, because each chunk re-sends the context.
+* **Run the teacher at 10 groups, not 40.** The default of 40 was inherited from the paper's
+  configuration and never chosen for cost. Cost is exactly linear in it, and over 24 datasets G=20
+  is free (+0.0002 routed) and G=10 costs −0.0033 routed, which no test detects. That is a 4x cut
+  on the expensive path and the largest speedup available here.
 * **The threshold is one number and it can drift.** It is calibrated against a margin distribution;
   if your inputs move, the realised escalation rate moves with them. The realised rate is worth
   monitoring in production for exactly that reason, since it is observable without labels.
@@ -277,8 +327,11 @@ here first and it was wrong; the same artifact made a two-dataset smoke test rea
   ACSF1 +0.0700 and Lightning2 +0.0656 (MultiRocketHydra), SemgHandMovementCh2 +0.0667 and Worms
   +0.0649 (ridge); against Herring −0.0781 (MultiRocketHydra) and Lightning7 −0.0548 (both). The
   mean is a mean, and eight of 28 datasets go the wrong way for each student.
-* **The 14x cost ratio is from ten datasets** with a Python feature extractor on the student side.
-  The direction is certain and the exact multiple is not.
+* **The cost model is fitted on two datasets.** Herring and ScreenType each give two batch sizes,
+  which is exactly enough to solve for a fixed and a marginal term and no more. A third,
+  SemgHandMovementCh2, failed its full-batch arm twice and is unexplained. The *shape* is
+  corroborated across 51 archived runs and the marginal term agrees to within 0.7 ms three ways, but
+  the fixed term is two points per dataset.
 * **No calibration work has been done.** The margin is used as a raw ranking within a single model,
   which is all the rule needs. Comparing margins *across* models would need calibration, and the one
   place that was tried — picking the more confident of two labellers per row — reached only 6% of
@@ -289,13 +342,20 @@ here first and it was wrong; the same artifact made a two-dataset smoke test rea
   20% target), routed 0.6406 against the student's 0.6250, both matching the offline analysis. What
   it is not is a service: no threshold control loop, no batching of escalations across requests, and
   no attempt at concurrency.
-* **No trustworthy timing exists yet.** The first attempt compared a contended 8-core Windows run
-  against an archived 96-core CUDA run and produced a "138x" that meant nothing. `--compare` now
-  runs the student, the escalated teacher and the teacher-on-everything on one box at one moment,
-  which is the only arrangement in which a cost ratio is measurable. Until that has been run on an
-  idle machine, the 14x in this document is a whole-dataset batch figure and the per-call economics
-  of a *small* escalation batch are unmeasured — and the fixed-plus-linear shape of a forward means
-  they will be worse.
+* **The context cannot be cached today, and that is where the cost is.** 71-80% of a teacher call
+  is re-encoding a training context that did not change since the last call. Three things could be
+  cached: the model weights are (`tabfm_load`), the encoded context is not and cannot be from SQL —
+  `tabfm_classify(train, y, test := ...)` takes both halves in one call, so there is no
+  prepare-then-query split to cache between — and our own call pattern makes it worse by calling
+  once per group per chunk. Exposing a reusable context is an upstream change to the exported graph;
+  profiling would confirm where the time goes but has no bug to find, since the cost scales cleanly
+  with training rows.
+* **Sending a smaller context is not the workaround.** Measured over six datasets: half the context
+  runs 1.48x faster, not 2x, because the per-query-row term does not shrink — and it costs −0.0168
+  accuracy, against −0.0033 for the 4x that cutting groups buys. The damage tracks examples per
+  class: MedicalImages at 9.5 per class lost 0.18. It is worth doing only to make an otherwise
+  impossible run possible, which it does — two datasets that exceed a CPU pod's 29.8 GiB at full
+  context complete at half.
 
 ## Where the numbers live
 

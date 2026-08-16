@@ -25,10 +25,12 @@ reads 500 at a time, from one transform. `n_kernels` and `n_groups` are therefor
 
 **The default is 10 groups, not the 40 every archived run used.** Cost is exactly linear in the
 group count, and over 24 datasets G=10 costs -0.0033 routed against G=40 -- inside what this
-harness can resolve, which is about half a point at a 20% budget. That is a 4x cut on the expensive
-path. The archived pipeline keeps 40 so its numbers stay comparable; this is the serving path,
-which has no archive to protect. See RESULTS.md, "The teacher runs 40 passes and needs about ten"
-and "Both levers at once, and a noise floor worth naming".
+harness can resolve, which is about half a point at a 20% budget. Served on one box against G=40 on
+the same box, that is a measured **3.7-3.8x** off the whole request (the missing part of 4x is
+DuckDB startup and the transform, which do not scale with G). The archived pipeline keeps 40 so its
+numbers stay comparable; this is the serving path, which has no archive to protect. See RESULTS.md,
+"The teacher runs 40 passes and needs about ten", "Both levers at once, and a noise floor worth
+naming", and "The shipped default, actually served".
 
 **Why the teacher call reuses `phase5_pipeline.build_sql`.** The escalated rows are just a small test
 split against the same training context, so the generated pipeline is exactly right for them -- and

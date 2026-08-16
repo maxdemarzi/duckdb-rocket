@@ -81,15 +81,21 @@ handing the teacher rows the student was getting right.
 ## What it costs
 
 Measured with all three arms on one idle 16-core machine in the same run
-(`route_serve.py serve --compare`), which is the only arrangement where a cost ratio means anything:
+(`route_serve.py serve --compare`), which is the only arrangement where a cost ratio means anything.
+At the shipped default — G=10, a 2,500-kernel student:
 
 | | Herring (64 rows) | ScreenType (128 rows) |
 |---|---|---|
-| student, whole batch | 1.5 s | 3.9 s |
-| routed, escalating ~20% | 64.7 s | 227.5 s |
-| teacher on every row | 82.4 s | 267.9 s |
-| **rows escalated** | 22% | 17% |
-| **cost of escalating them** | **77%** | **83%** |
+| student, whole batch | 0.4 s | 0.9 s |
+| routed, escalating ~20% | 17.6 s | 60.1 s |
+| teacher on every row | 21.4 s | 70.4 s |
+| **rows escalated** | 34% | 17% |
+| **cost of escalating them** | **81%** | **84%** |
+
+The same three datasets at G=40 on the same box within the hour cost 3.7-3.8x that, so the default
+is worth roughly a 4x — see "Run the teacher at G=10" below. Herring escalating 34% against a 20%
+target is not a typo: the threshold is a quantile of out-of-fold margins on your *training* rows,
+and the realized rate on a live batch can miss it in either direction.
 
 Escalating a fifth of the rows costs four fifths of running the teacher on everything. The reason is
 the teacher's contract, not this pipeline: it has no trained weights for your task, so **every call
@@ -106,13 +112,22 @@ of teacher-everywhere — 77% on test sets under 128 rows, 25% on those over 385
 
 Three things follow, in the order they are worth doing:
 
-1. **Run the teacher at G=10.** Cost is exactly linear in the group count, and 10 costs −0.0033
-   against 40. That is a straight 4x off the expensive path.
+1. **Run the teacher at G=10.** This is the default since 1d290bd. Cost is exactly linear in the
+   group count, and 10 costs −0.0033 against 40. Measured against G=40 on one box: **3.70x, 3.77x
+   and 3.72x** off the whole request on the three datasets above. Not the full 4x, because DuckDB
+   startup and the ROCKET transform do not scale with `G`.
 2. **Batch escalations.** The fixed fee is per call. One row at a time pays all of it every time.
 3. **Do not shrink the training context to save money** — 1.48x for −0.0168, a much worse trade
    than (1). Shrink it only if a run does not fit in memory otherwise.
 
-With (1) and (2), the routed ScreenType batch above goes from 227.5 s to roughly 60 s.
+With (1) and (2), the routed ScreenType batch goes from 227.5 s to 60.1 s. That prediction was
+written here as "roughly 60 s" before it was run, from the fitted model alone.
+
+**If a call runs out of memory, `--test-chunk` is the lever, not `--memory-limit`.** The model
+allocates outside DuckDB's buffer manager, so the memory limit cannot contain it and a smaller one
+dies sooner. `SemgHandMovementCh2` — 450 training rows of 1500 timepoints — is killed by the
+kernel (`exit -9`) on a 128-row batch against a 32 GB container and completes at `--test-chunk 32`.
+It is not free: each chunk is another call paying the context pass again.
 
 ## When it will not help you
 
@@ -281,11 +296,14 @@ Three things about deploying the teacher that the accuracy tables do not show:
   measured whole-dataset runs, because each chunk re-sends the context.
 * **Run the teacher at 10 groups, not 40.** The default of 40 was inherited from the paper's
   configuration and never chosen for cost. Cost is exactly linear in it, and over 24 datasets G=20
-  is free (+0.0002 routed) and G=10 costs −0.0033 routed, which no test detects. That is a 4x cut
-  on the expensive path and the largest speedup available here.
+  is free (+0.0002 routed) and G=10 costs −0.0033 routed, which no test detects. Served against
+  G=40 on one box, it is a measured 3.7-3.8x and the largest speedup available here. It is the
+  default as of 1d290bd.
 * **The threshold is one number and it can drift.** It is calibrated against a margin distribution;
   if your inputs move, the realised escalation rate moves with them. The realised rate is worth
-  monitoring in production for exactly that reason, since it is observable without labels.
+  monitoring in production for exactly that reason, since it is observable without labels. Changing
+  the *bank size* moves it too: the same Herring batch escalated 21.9% against a 10,000-kernel
+  student and 34.4% against a 2,500-kernel one, both aiming at 20%.
 
 ### Calibrating the threshold: it keeps the accuracy, not the budget
 

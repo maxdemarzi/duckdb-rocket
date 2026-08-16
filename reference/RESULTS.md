@@ -599,7 +599,9 @@ Not established here: `SemgHandMovementCh2`'s full-batch arm failed on both atte
 group 1 of 40 on 128 test rows while its 24-row escalated arm succeeded every time. An 8 GB DuckDB
 memory limit was blamed and then exonerated when the failure recurred at ~87 GB; `route_serve.py`
 now reports the shell's exit code and archives a `crash.log`, which is what should have been
-reported instead of a guess.
+reported instead of a guess. **Resolved on 2026-08-16** — exit `-9`, an OOM kill against a 32 GB
+cgroup cap, fixed by `--test-chunk 32` rather than by any memory setting. See "The shipped default,
+actually served".
 
 #### The teacher runs 40 passes and needs about ten (2026-08-15)
 
@@ -766,6 +768,100 @@ routed request today but 43% of one at G=10 with an upstream context cache. Cut 
 tolerance (~0.005) rather than claiming the cut is free.
 
 `reference/perf_joint.json`.
+
+#### The shipped default, actually served (2026-08-16)
+
+Everything above about G=10 was offline: per-group cubes averaged at a prefix, plus a linear cost
+model. `route_serve` was switched to G=10 / 2,500 kernels on the strength of it and then never run,
+so the "227.5 s → ~60 s" in circulation was a division, not a measurement. This is that
+configuration served — three arms, one 16-vCPU pod, **both group counts on the same box inside one
+hour** (`scripts/pod/serve_compare_cpu.sh`).
+
+**First, the archived cost measurements reproduce to under a percent on different hardware.** The
+G=40 arms against the 2026-08-15 pod, which is the only reason to trust anything below:
+
+| | Herring, escalated | Herring, all | ScreenType, escalated | ScreenType, all |
+|---|---|---|---|---|
+| 2026-08-15 | 63.2 s | 82.4 s | 223.6 s | 267.9 s |
+| 2026-08-16 | 63.7 s | 82.8 s | 222.6 s | 266.1 s |
+
+and the fitted costs with them: 1.398 s + 9.0 ms → **1.411 s + 9.0 ms**, 5.053 s + 9.7 ms →
+**5.033 s + 9.5 ms**. A wall-clock measurement of an in-context model reproducing within 1% on a
+different rented box, a day apart, is not what this project expected going in.
+
+**The default is 3.8x cheaper, not 4x:**
+
+| | Herring | ScreenType | Semg (chunk 32) |
+|---|---|---|---|
+| teacher-everywhere, G=40 | 82.8 s | 266.1 s | 1013.5 s |
+| teacher-everywhere, G=10 | 21.4 s | 70.4 s | 258.5 s |
+| | **3.87x** | **3.78x** | **3.92x** |
+| whole routed request, G=40 | 65.2 s | 226.3 s | 280.8 s |
+| whole routed request, G=10 | 17.6 s | 60.1 s | 75.4 s |
+| | **3.70x** | **3.77x** | **3.72x** |
+
+The shortfall from 4x is the per-run work that does not scale with `G` — DuckDB startup and the
+ROCKET transform, 0.5-2.4 s of each call. The student's own cut *is* 4x, as linear-in-kernels
+requires: 22.49 → 5.69, 29.37 → 7.26, 58.07 → 14.86 ms/row (3.95x, 4.05x, 3.91x).
+
+Accuracy on these batches, all six arms:
+
+| | routed G=40 | routed G=10 | teacher G=40 | teacher G=10 | student 10k | student 2.5k |
+|---|---|---|---|---|---|---|
+| Herring (64 rows) | 0.6406 | 0.6719 | 0.6562 | 0.6406 | 0.6250 | 0.6562 |
+| ScreenType (128) | 0.5312 | 0.5391 | 0.5938 | 0.6094 | 0.4922 | 0.4766 |
+| Semg (128) | 0.7422 | 0.7266 | 0.8281 | 0.8281 | 0.6953 | 0.6641 |
+
+Three batches of 64-128 rows settle nothing on their own — one row is 0.8-1.6 points, and the
+differences sign-flip exactly as the 24-dataset noise floor above says they should. What matters is
+that they do not contradict it, and that Semg's teacher scores **identically** at both group counts
+for a quarter of the time.
+
+**One caveat the offline analysis could not have produced.** The realized escalation rate moved:
+Herring escalated 34.4% of its batch at G=10 against 21.9% at G=40, both aiming at 20%. The
+threshold is a quantile of out-of-fold margins on the *training* rows, and a 2,500-kernel student's
+test margins do not fall the same way a 10,000-kernel one's do. ScreenType and Semg stayed near
+target (17.2% both, 21.9% vs 18.8%), so it is not universal — but **the 3.8x is on the teacher
+call, not guaranteed on the request**, and a batch that escalates half again as many rows hands
+some of it back. Herring still came in at 3.70x because escalating more rows is cheap and calling
+the teacher at all is not.
+
+**SemgHandMovementCh2, finally diagnosed.** It has failed its full-batch arm on every previous
+attempt; an 8 GB memory limit was blamed and then exonerated at ~87 GB. The exit code says it
+plainly: **-9, SIGKILL, after scoring 1 group of 40 on 128 test rows** — an OOM kill against the
+container's 32 GB cgroup cap, on a host whose `free` reports 124 GB. It reproduces identically at
+G=10 (1 of 10), which rules the group count out: the allocation is per *call*, and the only thing
+that sizes a call is how many rows it is handed. At `--test-chunk 32` the dataset completed for the
+first time, at both group counts. DuckDB sat at 26-27 GB RSS throughout, against a 29.8 GiB ceiling.
+
+**And it puts the cost thesis at its limit.** Semg's context is 450 labelled rows of 1500
+timepoints, and the fit at G=40 reads:
+
+    6.111 s fixed per group per call + 0.1 ms per query row
+
+The fixed pass is **100%** of the full-batch cost, to the printed precision. Query rows are free;
+the labelled context is the entire bill. This is also the one dataset where routing looks good on
+cost — 25-29% of teacher-everywhere — and the reason is not that it escalated fewer rows but that
+the full batch needed four calls where the escalated batch needed one. *Routing saves calls.*
+
+That number only exists because `cost_model` learned about chunking first. The old two-point fit
+would have charged the full arm's three extra context passes to its 104 extra rows and reported
+**~178 ms per query row against a true 0.1** — a wrong answer, in the confident direction, on the
+one quantity the whole routing argument turns on.
+
+**The run also caught the contention detector crying wolf at the count we had just shipped.** The
+same box, minutes apart, read 2.6-3.9% per-group spread at G=40 ("the box looks idle") and 5.1-6.5%
+at G=10 ("SOMETHING ELSE WAS RUNNING"). Nothing else was running in either case. The cause is a
+single excursion — Herring ran group 9 at 1.19x and 1.28x in the two arms of the *same* run,
+ScreenType ran group 1 at 1.16x and 1.17x in both — which is reproducible across arms and therefore
+not background load. One 20% outlier divided over 39 samples adds ~3% to a standard deviation and
+passes; over the 9 that a default serve leaves, it adds ~7% and fails. `steadiness` now sets the
+single slowest group aside and reports it; the archived contended fixture, which has four of nine
+elevated, still reads 28%.
+
+`reference/serve_compare.json` carries all eight runs and the per-group timings behind the last
+paragraph. Not established: whether the 3.8x holds on datasets whose test sets are large enough to
+chunk at 128, where the group count and the chunk count multiply.
 
 #### What this leaves, and what it costs to find out
 

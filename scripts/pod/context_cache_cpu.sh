@@ -101,13 +101,18 @@ log "generate the workload (S=$S context, Q=$Q per call, $CALLS calls, H=$H feat
 python3 - "$MODEL_DIR" "$S" "$Q" "$CALLS" "$H" "$EXT" > "$OUT/bench.sql" <<'PY'
 import sys
 model_dir, S, Q, CALLS, H, ext = sys.argv[1], *map(int, sys.argv[2:6]), sys.argv[6]
-# `i` is carried through so the two arms can be joined row by row, but it must NOT
-# be a feature: it would be a 501st column past anofox_tabfm_max_features, and it
-# encodes the label directly (label = 'c' || i % 3), so the model would be handed
-# the answer. Naming the features explicitly keeps H at exactly 500 -- #37's shape.
-FEATURE_LIST = "[" + ", ".join(f"'f{i}'" for i in range(H)) + "]"
-# Deterministic features from the row index, so both arms and any rerun see the same table.
-feats = ", ".join(f"sin({i + 1} * (i + 1) * 0.017)::DOUBLE AS f{i}" for i in range(H))
+# The relation carries exactly H columns besides the target, and `i` is one of
+# them. Two constraints force that shape. `features := [...]` cannot be used to
+# hold `i` out, because the macro filters the row struct down to the named
+# features and the id would not come back to join the arms on; and leaving `i`
+# in ON TOP of H features is one column past anofox_tabfm_max_features.
+#
+# So `i` is a feature, and the label must therefore NOT be a function of it --
+# 'c' || i % 3 would hand the model the answer through the join key. It comes
+# from a feature instead.
+feats = ", ".join(f"sin({j + 1} * (i + 1) * 0.017)::DOUBLE AS f{j}" for j in range(H - 1))
+LABEL = "CASE WHEN sin(1 * (i + 1) * 0.017) > 0.3 THEN 'c0' " \
+        "WHEN sin(1 * (i + 1) * 0.017) > -0.3 THEN 'c1' ELSE 'c2' END"
 p = print
 p(".timer on")
 p(f"LOAD '{ext}';")
@@ -122,7 +127,7 @@ p(f"""CALL tabfm_register_model(
   weights_repo := 'local:{model_dir}', weights_revision := 'split-v1',
   preprocessing_profile := 'tabicl_v2_raw',
   max_rows := 4096, max_features := 512, max_classes := 3);""")
-p(f"CREATE TABLE ctx AS SELECT i, {feats}, ('c' || (i % 3)) AS label FROM range({S}) t(i);")
+p(f"CREATE TABLE ctx AS SELECT i, {feats}, {LABEL} AS label FROM range({S}) t(i);")
 p(f"CREATE TABLE qry AS SELECT i, {feats}, NULL::VARCHAR AS label FROM range({S}, {S + Q * CALLS}) t(i);")
 for k in range(CALLS):
     lo, hi = S + k * Q, S + (k + 1) * Q
@@ -130,12 +135,12 @@ for k in range(CALLS):
 p("-- the model loads on the first scoring call; warm it OUTSIDE the timed arms so")
 p("-- session creation is not charged to whichever arm happens to run first.")
 p("SET anofox_tabfm_context_cache = false;")
-p(f"CREATE TABLE warm AS SELECT i, yhat FROM tabfm_classify('call0', 'label', features := {FEATURE_LIST}, model := 'tabicl-split');")
+p("CREATE TABLE warm AS SELECT i, yhat FROM tabfm_classify('call0', 'label', model := 'tabicl-split');")
 for arm, flag in (("off", "false"), ("on", "true")):
     p(f"SET anofox_tabfm_context_cache = {flag};")
     for k in range(CALLS):
         p(f"CREATE TABLE {arm}{k} AS SELECT i, yhat, yhat_score, is_training "
-          f"FROM tabfm_classify('call{k}', 'label', features := {FEATURE_LIST}, model := 'tabicl-split');")
+          f"FROM tabfm_classify('call{k}', 'label', model := 'tabicl-split');")
 p(".timer off")
 p("-- Do the two arms give the same answer on the rows that are actually predictions?")
 u_off = " UNION ALL ".join(f"SELECT * FROM off{k} WHERE NOT is_training" for k in range(CALLS))

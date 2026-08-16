@@ -1705,13 +1705,11 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   **review, then a release, then a re-export of the published weights** — the pair is discovered on
   disk, and no published model ships one. Worth 4-11x on the escalation case.
 
-  Two things from building it that change what we should expect here. The win needs the *same*
-  context scored more than once — chunked scoring against a fixed training table — and a single call
-  against a fresh context is *slower*, because it pays for a context it will not reuse. Our per-group
-  arms each carry their own context, so they gain nothing; `--test-chunk` runs are exactly the case
-  that gains. And the fitted values on context rows move, because the query half has no label path;
-  test-row predictions do not. Neither costs us anything (we read test rows), but a like-for-like
-  comparison after a re-export has to compare test rows only.
+  Now measured through DuckDB on real weights rather than argued from a prototype: **7.18x** on
+  repeated calls against the same context, **0.40x** (2.5x slower) on the first, break-even between
+  the third and fourth call, and identical test-row predictions. See "The context cache is 7x on
+  repeated calls, and 2.5x slower on the first" above. Our per-group arms each carry their own
+  context and would land on the slow side of that; `--test-chunk` runs are the case that gains.
 - **`tabpfn-v2-5` and `tabpfn-v3`, the paper's own backbones.** Both download and neither loads,
   by two different faults with one remedy: `tabpfn-v2-5`'s checkpoint is published under tensor
   names the exported graph was not built against (missing 248 of 250), and `tabpfn-v3` is a torch

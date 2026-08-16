@@ -17,10 +17,18 @@ end to end through the real extension, so the numbers include the parts an analy
 * the ridge head: a scaler and a coefficient matrix, kilobytes.
 * one float: the margin threshold, taken as a quantile of out-of-fold margins on the train split.
 
-**One feature computation serves both models.** The teacher's 40 groups of 250 kernels are slices
-[0,250) ... [9750,10000) of exactly the 10,000-kernel bank the student's ridge uses -- verified to
-1.8e-15 against `rocket_transform(values, 250, seed, offset)`. So the student reads all 20,000
-features and the teacher reads 500 at a time, from one transform.
+**One feature computation serves both models.** The teacher's groups of 250 kernels are slices
+[250g, 250(g+1)) of exactly the bank the student's ridge uses -- verified to 1.8e-15 against
+`rocket_transform(values, 250, seed, offset)`. So the student reads every feature and the teacher
+reads 500 at a time, from one transform. `n_kernels` and `n_groups` are therefore one decision, and
+`deploy` derives the first from the second rather than taking both.
+
+**The default is 10 groups, not the 40 every archived run used.** Cost is exactly linear in the
+group count, and over 24 datasets G=10 costs -0.0033 routed against G=40 -- inside what this
+harness can resolve, which is about half a point at a 20% budget. That is a 4x cut on the expensive
+path. The archived pipeline keeps 40 so its numbers stay comparable; this is the serving path,
+which has no archive to protect. See RESULTS.md, "The teacher runs 40 passes and needs about ten"
+and "Both levers at once, and a noise floor worth naming".
 
 **Why the teacher call reuses `phase5_pipeline.build_sql`.** The escalated rows are just a small test
 split against the same training context, so the generated pipeline is exactly right for them -- and
@@ -57,9 +65,35 @@ import phase5_pipeline as p5  # noqa: E402
 from distill_gate import ALPHAS, decision_margin, oof_margins  # noqa: E402
 
 
-def deploy(dataset: str, target: float, n_kernels: int, seed: int, folds: int,
-           out: Path) -> dict:
-    """Fit the student, choose the threshold, write everything a server needs."""
+#: Kernels per teacher group, and the one number that must not drift. 250 kernels is 500 features
+#: per `tabfm_classify` call, which is what every archived accuracy was measured at and what fits
+#: `tabicl-v2`'s 512-column cap. `n_kernels` and `n_groups` are two ways of saying the same thing
+#: and are checked against each other rather than set independently.
+KERNELS_PER_GROUP = 250
+
+#: Ten groups, not forty. Cost is exactly linear in the group count and 24 datasets put G=10 at
+#: -0.0033 routed against G=40, which no test here can detect (reference/RESULTS.md, "The teacher
+#: runs 40 passes and needs about ten"). The archived runs stay at 40 so their numbers remain
+#: comparable; this is the serving path, which has no archive to protect.
+DEFAULT_GROUPS = 10
+
+
+def deploy(dataset: str, target: float, n_groups: int, seed: int, folds: int,
+           out: Path, n_kernels: int | None = None) -> dict:
+    """Fit the student, choose the threshold, write everything a server needs.
+
+    The kernel bank follows the group count rather than being set beside it: the teacher's groups
+    are slices [250g, 250(g+1)) of the student's bank, so `n_kernels` and `n_groups` are one
+    decision. Passing them separately is how a serve at G=40 against a 2,500-kernel deploy would
+    silently run 62-kernel groups -- 124 features against the 500 every measurement used -- and
+    still produce plausible answers.
+    """
+    n_kernels = n_kernels if n_kernels is not None else n_groups * KERNELS_PER_GROUP
+    if n_kernels != n_groups * KERNELS_PER_GROUP:
+        raise ValueError(
+            f"{n_kernels} kernels over {n_groups} groups is "
+            f"{n_kernels / n_groups:.1f} kernels per group; every accuracy here was measured at "
+            f"{KERNELS_PER_GROUP} (500 features per call). Scale them together.")
     xtr, ytr = load(dataset, "train")
     xtr = normalize_series(xtr)
     bank = generate_kernels(seed, xtr.shape[-1], n_kernels)
@@ -70,18 +104,25 @@ def deploy(dataset: str, target: float, n_kernels: int, seed: int, folds: int,
     # The threshold comes from margins the model produced on rows it had NOT seen. A fitted model is
     # systematically surer of its own training rows, so an in-sample quantile sits too high and the
     # server would escalate too little.
-    margins = oof_margins(dataset, "rocket+ridge", seed, folds, str(ROOT / "data" / "oof_margins"))
+    # n_kernels, not the function's default: the threshold is a quantile of THIS model's margins,
+    # and a bank of a different size has a different decision scale.
+    margins = oof_margins(dataset, "rocket+ridge", seed, folds,
+                          str(ROOT / "data" / "oof_margins"), n_kernels=n_kernels)
     threshold = float(np.quantile(margins, target))
 
     out.mkdir(parents=True, exist_ok=True)
     (out / "student.pkl").write_bytes(pickle.dumps({"scaler": scaler, "clf": clf}))
-    meta = {"dataset": dataset, "seed": seed, "n_kernels": n_kernels, "n_timepoints":
-            int(xtr.shape[-1]), "target": target, "threshold": threshold, "folds": folds,
-            "n_train": int(len(ytr)), "classes": [str(c) for c in clf.classes_]}
+    # n_groups is deployed, not chosen again at serve time. It is half of the same decision as
+    # n_kernels, and a server that took it as a separate flag could not be checked.
+    meta = {"dataset": dataset, "seed": seed, "n_kernels": n_kernels, "n_groups": n_groups,
+            "n_timepoints": int(xtr.shape[-1]), "target": target, "threshold": threshold,
+            "folds": folds, "n_train": int(len(ytr)), "classes": [str(c) for c in clf.classes_]}
     (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"deployed {dataset} -> {out}")
     print(f"  student: {n_kernels} kernels, {ftr.shape[1]} features, ridge over "
           f"{len(clf.classes_)} classes")
+    print(f"  teacher: {n_groups} groups x {KERNELS_PER_GROUP} kernels = "
+          f"{KERNELS_PER_GROUP * 2} features per call")
     print(f"  threshold {threshold:.4f} at a {target:.0%} target, from {folds}-fold out-of-fold "
           f"margins over {len(margins)} training rows")
     return meta
@@ -253,9 +294,20 @@ def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
           f"of the full-batch cost and routing does not touch it")
 
 
-def serve(dataset: str, art: Path, batch: int, n_groups: int, seed: int, shell: Path,
+def serve(dataset: str, art: Path, batch: int, n_groups: int | None, seed: int, shell: Path,
           workdir: Path, compare: bool = False, memory_limit: str | None = None) -> int:
     meta = json.loads((art / "meta.json").read_text(encoding="utf-8"))
+    # The group count is part of what was deployed, so it is read rather than re-chosen. An
+    # override is still allowed -- it is how the group sweep was run -- but it has to keep
+    # kernels-per-group at the width every measurement used, or the call silently changes shape.
+    deployed = meta.get("n_groups")
+    if n_groups is None:
+        n_groups = deployed if deployed else meta["n_kernels"] // KERNELS_PER_GROUP
+    if meta["n_kernels"] % n_groups or meta["n_kernels"] // n_groups != KERNELS_PER_GROUP:
+        raise ValueError(
+            f"serving {meta['n_kernels']} deployed kernels over {n_groups} groups is "
+            f"{meta['n_kernels'] / n_groups:.1f} kernels per group, not {KERNELS_PER_GROUP}. "
+            f"Re-deploy with --n-groups {n_groups} instead of overriding it here.")
     xte, yte = load(dataset, "test")
     xte_n = normalize_series(xte)
     take = min(batch, len(yte))
@@ -343,11 +395,20 @@ def main() -> int:
         s.add_argument("--seed", type=int, default=0)
         if name == "deploy":
             s.add_argument("--target", type=float, default=0.20)
-            s.add_argument("--n-kernels", type=int, default=10_000)
+            s.add_argument("--n-groups", type=int, default=DEFAULT_GROUPS,
+                           help=f"teacher groups; the student's bank follows at "
+                                f"{KERNELS_PER_GROUP} kernels each (default {DEFAULT_GROUPS}, "
+                                f"which is 4x cheaper than 40 for -0.0033 routed)")
+            s.add_argument("--n-kernels", type=int,
+                           help="override the student's bank size. Must equal n_groups x "
+                                f"{KERNELS_PER_GROUP}; it exists to make that explicit, not to "
+                                "let the two drift apart.")
             s.add_argument("--folds", type=int, default=5)
         else:
             s.add_argument("--batch", type=int, default=128)
-            s.add_argument("--n-groups", type=int, default=40)
+            s.add_argument("--n-groups", type=int,
+                           help="override the deployed group count (default: whatever deploy "
+                                "recorded)")
             s.add_argument("--compare", action="store_true",
                            help="also run the teacher on every row, on this box at this moment, so the cost ratio is measured rather than assembled from runs on different hardware")
             s.add_argument("--shell", type=Path, default=built_shell())
@@ -358,7 +419,8 @@ def main() -> int:
     art = args.artifacts or (ROOT / "data" / "serve" / args.dataset)
 
     if args.cmd == "deploy":
-        deploy(args.dataset, args.target, args.n_kernels, args.seed, args.folds, art)
+        deploy(args.dataset, args.target, args.n_groups, args.seed, args.folds, art,
+               args.n_kernels)
         return 0
     return serve(args.dataset, art, args.batch, args.n_groups, args.seed, args.shell,
                  ROOT / "data" / "serve" / args.dataset / "work", args.compare,

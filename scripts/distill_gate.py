@@ -1002,6 +1002,10 @@ def mr_hydra_scored(xtr, ytr, xte, seed: int = 0):
 
 SCORERS = {"rocket+ridge": rocket_ridge_scored, "mr-hydra": mr_hydra_scored}
 
+#: Which scorers have a kernel bank whose size changes their margin scale. mr-hydra's transform is
+#: fixed by aeon, so its margins carry no bank size and its cache key must not pretend otherwise.
+KERNEL_SCORERS = frozenset({"rocket+ridge"})
+
 
 def route_curve_random(spred, tpred, y, fracs, seed: int = 0, draws: int = 20
                        ) -> list[tuple[float, float]]:
@@ -1074,8 +1078,15 @@ def _route_worker(t):
         return name, learner, None, None, f"{type(e).__name__}: {e}"[:140]
 
 
-def oof_margins(name: str, learner: str, seed: int, folds: int, cache: str | None) -> np.ndarray:
+def oof_margins(name: str, learner: str, seed: int, folds: int, cache: str | None,
+                n_kernels: int = 10_000) -> np.ndarray:
     """Out-of-fold decision margins on the TRAIN split.
+
+    **`n_kernels` must match the model the threshold will be applied to.** A margin is a distance in
+    the fitted model's decision space, so a bank of a different size produces a different scale, and
+    a quantile taken from the wrong one sets the escalation rate to something nobody chose. It is
+    also part of the cache key for the same reason -- a hit that ignored it would return margins
+    from another model and look like a fast path.
 
     A served system cannot sort a batch it has not received, so the escalation rule has to be a
     THRESHOLD on one row's margin rather than a fraction of a set. The threshold has to come from
@@ -1087,13 +1098,21 @@ def oof_margins(name: str, learner: str, seed: int, folds: int, cache: str | Non
     36 rows, so a 25% holdout would estimate a 20% quantile from nine numbers. Every row gets a
     margin this way, which is the most calibration data the problem allows.
     """
+    stem = f"{name}__{learner.replace('+', '_')}__seed{seed}__k{folds}"
+    keyed = stem if learner not in KERNEL_SCORERS else f"{stem}__n{n_kernels}"
     if cache:
-        cp = Path(cache) / f"{name}__{learner.replace('+', '_')}__seed{seed}__k{folds}.json"
-        if cp.exists():
-            try:
-                return np.asarray(json.loads(cp.read_text(encoding="utf-8"))["margins"], dtype=float)
-            except Exception:  # noqa: BLE001
-                pass
+        cp = Path(cache) / f"{keyed}.json"
+        # The un-suffixed name is the pre-existing cache, which was always computed at 10,000
+        # kernels. Read it only for that size; for any other, a hit on it would be the exact
+        # mismatch the suffix exists to stop.
+        legacy = Path(cache) / f"{stem}.json"
+        for path in ((cp, legacy) if n_kernels == 10_000 else (cp,)):
+            if path.exists():
+                try:
+                    return np.asarray(json.loads(path.read_text(encoding="utf-8"))["margins"],
+                                      dtype=float)
+                except Exception:  # noqa: BLE001
+                    pass
     from sklearn.model_selection import StratifiedKFold, KFold
 
     xtr, ytr = load(name, "train")
@@ -1106,13 +1125,15 @@ def oof_margins(name: str, learner: str, seed: int, folds: int, cache: str | Non
         parts = list(KFold(n_splits=k, shuffle=True, random_state=seed).split(xtr))
     out = np.zeros(len(ytr), dtype=float)
     for fit_i, held_i in parts:
-        _, conf = SCORERS[learner](xtr[fit_i], ytr[fit_i], xtr[held_i], seed=seed)
+        kw = {"n_kernels": n_kernels} if learner in KERNEL_SCORERS else {}
+        _, conf = SCORERS[learner](xtr[fit_i], ytr[fit_i], xtr[held_i], seed=seed, **kw)
         out[held_i] = conf
     if cache:
-        cp = Path(cache) / f"{name}__{learner.replace('+', '_')}__seed{seed}__k{folds}.json"
+        cp = Path(cache) / f"{keyed}.json"
         cp.parent.mkdir(parents=True, exist_ok=True)
         cp.write_text(json.dumps({"dataset": name, "learner": learner, "seed": seed, "folds": k,
-                                  "margins": out.tolist()}), encoding="utf-8")
+                                  "n_kernels": n_kernels, "margins": out.tolist()}),
+                      encoding="utf-8")
     return out
 
 

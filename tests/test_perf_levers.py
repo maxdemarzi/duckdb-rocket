@@ -270,3 +270,57 @@ def test_subsample_context_respects_a_class_smaller_than_its_share():
     counts = dict(zip(*np.unique(ys, return_counts=True)))
     assert counts["c"] == 1 and counts["b"] <= 2
     assert len(ys) == 50, "the budget should still be spent, on the classes that have rows"
+
+
+# ------------------------------------------------------- n_kernels and n_groups are one decision
+
+def test_deploy_rejects_a_bank_that_is_not_250_per_group(tmp_path):
+    """The teacher's groups are slices of the student's bank, so the two cannot be set apart.
+
+    Without this, deploying 2,500 kernels and serving 40 groups gives 62-kernel groups -- 124
+    features against the 500 every accuracy here was measured at -- and still answers plausibly.
+    """
+    from route_serve import deploy
+    with pytest.raises(ValueError, match="kernels per group"):
+        deploy("GunPoint", 0.2, n_groups=40, seed=0, folds=5, out=tmp_path, n_kernels=2_500)
+
+
+def test_serve_rejects_a_group_count_the_deployment_cannot_support(tmp_path):
+    from route_serve import serve
+    (tmp_path / "meta.json").write_text(json.dumps(
+        {"dataset": "GunPoint", "seed": 0, "n_kernels": 2_500, "n_groups": 10,
+         "n_timepoints": 150, "target": 0.2, "threshold": 0.1, "folds": 5, "n_train": 50,
+         "classes": ["1", "2"]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="kernels per group"):
+        serve("GunPoint", tmp_path, batch=8, n_groups=40, seed=0, shell=Path("duckdb"),
+              workdir=tmp_path / "w")
+
+
+def test_the_serving_default_is_ten_groups_not_forty():
+    """The archived pipeline stays at 40; the serving path does not, and that is deliberate."""
+    import route_serve
+    assert route_serve.DEFAULT_GROUPS == 10
+    assert route_serve.KERNELS_PER_GROUP == 250
+    # 10 x 250 = 2,500 kernels = 5,000 student features, and 500 features per teacher call.
+    assert route_serve.DEFAULT_GROUPS * route_serve.KERNELS_PER_GROUP == 2_500
+
+
+def test_oof_margins_cache_key_separates_bank_sizes(tmp_path):
+    """A hit that ignored the kernel count would return another model's margins as a fast path."""
+    from distill_gate import oof_margins
+    a = oof_margins("GunPoint", "rocket+ridge", 0, 3, str(tmp_path), n_kernels=500)
+    b = oof_margins("GunPoint", "rocket+ridge", 0, 3, str(tmp_path), n_kernels=2_000)
+    files = sorted(f.name for f in tmp_path.glob("*.json"))
+    assert len(files) == 2, f"both sizes shared one cache entry: {files}"
+    assert any("__n500" in f for f in files) and any("__n2000" in f for f in files)
+    # Different banks, different decision scale -- that is the whole reason for the key.
+    assert not np.allclose(a, b), "two bank sizes produced identical margins"
+
+
+def test_oof_margins_still_reads_the_legacy_cache_at_10000(tmp_path):
+    """The pre-existing un-suffixed entries were all computed at 10,000; do not orphan them."""
+    from distill_gate import oof_margins
+    (tmp_path / "GunPoint__rocket_ridge__seed0__k3.json").write_text(
+        json.dumps({"margins": [0.5] * 50}), encoding="utf-8")
+    got = oof_margins("GunPoint", "rocket+ridge", 0, 3, str(tmp_path), n_kernels=10_000)
+    assert np.allclose(got, 0.5), "legacy cache ignored"

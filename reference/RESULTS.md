@@ -927,6 +927,50 @@ per call. It declares `max_features = 100` against `tabicl`'s 512 and the engine
 chance) and pays five times over for it. On 16 vCPU that is ~100 minutes for a 61-row test set, and
 it timed out on 28 of 29 datasets at the 30-minute limit that suits the other three.
 
+##### The overlap, measured: the two backbones fail together (2026-08-16)
+
+It cost nothing to answer. `tabpfn-v2` had already been run on 18 datasets at exactly the archived
+configuration — 10,000 kernels, G=40, 250 per group, e=1, seed 0, `--test-chunk 128` — and
+`phase5_pipeline.py` writes per-row soft labels beside every report. 17 of those datasets also have
+`tabicl-v2` soft labels, so the comparison was sitting in `reference/` unread.
+`scripts/error_overlap.py`, no pod:
+
+| | mean over 17 datasets |
+|---|---|
+| `tabicl-v2` alone | 0.7579 |
+| `tabpfn-v2` alone | 0.7568 |
+| averaging their probabilities | 0.7598 |
+| **a perfect oracle over the two** | **0.8080** |
+| rows neither gets right | **0.1920** |
+
+**Their errors are not independent, by a factor of 3.74.** Both are wrong on the same row 19.20% of
+the time against the 6.86% independence would give — median 3.30x, and every one of the 17 datasets
+is above 1 (range 1.87 to 9.52). They disagree on only 11.1% of rows.
+
+So the concern the section above raised is the case that obtains. Averaging buys **+0.0019** over
+`tabicl-v2` and +0.0030 over `tabpfn-v2`, which is inside this harness's ~0.005 noise floor, and it
+is *behind* picking the better backbone per dataset (0.7651) — though that is itself an oracle over
+model choice and not a deployable strategy. Meanwhile a per-row oracle would reach 0.8080. **There
+is 4.3 points of headroom between the two models and no combination rule tried reaches any of it**,
+because the rows where one is right and the other wrong are exactly the 11% they disagree on, and
+the 19% neither gets is a floor no ensemble of these two can go below.
+
+`Earthquakes` is the degenerate case worth naming: both score 0.7482, the oracle is also 0.7482 and
+they never disagree. That is the majority-class rate on a heavily imbalanced set — two models
+agreeing perfectly because both have given up.
+
+**What this suggests, and does not establish.** Both models read the same 500 ROCKET features per
+call. Correlated failure is what you would expect if the *features* — not the models — are what
+discards the signal on those 19% of rows, and the ts-features result above already shows 116
+statistics beating 10,000 ROCKET features on three of six hard datasets under a ridge. That points
+at the feature family rather than the model zoo as the axis with headroom on it. Two backbones of
+broadly one lineage cannot separate those explanations: `orion-bix` (MIT, and cheap, unlike `mitra`)
+on the same datasets would, since a comparable 3.7x excess across a third architecture is evidence
+for the features and a materially lower one is evidence for the models.
+
+Caveats: 17 datasets, one seed, two backbones, and `tabpfn-v2` covers 18 of the 29 rather than all
+of them. `reference/error_overlap.json`.
+
 ### The second feature family, measured on all 112 datasets (2026-08-14)
 
 `anofox_forecast` -- the same vendor's forecasting extension -- exposes `ts_features_by(table, group,

@@ -1,0 +1,565 @@
+{
+  "rows": [
+    {
+      "dataset": "ACSF1",
+      "n_test": 100,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 10,
+      "accuracy": {
+        "tabicl-v2": 0.94,
+        "tabpfn-v2": 0.93
+      },
+      "oracle": 0.96,
+      "none_right": 0.040000000000000036,
+      "mean_proba_ensemble": 0.95,
+      "best_single": 0.94,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.94,
+            0.93
+          ],
+          "both_wrong": 0.04,
+          "both_wrong_if_independent": 0.004200000000000001,
+          "excess": 9.523809523809522,
+          "disagree": 0.05
+        }
+      ]
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_test": 175,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 3,
+      "accuracy": {
+        "tabicl-v2": 0.8628571428571429,
+        "tabpfn-v2": 0.8571428571428571
+      },
+      "oracle": 0.92,
+      "none_right": 0.07999999999999996,
+      "mean_proba_ensemble": 0.8857142857142857,
+      "best_single": 0.8628571428571429,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8628571428571429,
+            0.8571428571428571
+          ],
+          "both_wrong": 0.08,
+          "both_wrong_if_independent": 0.019591836734693877,
+          "excess": 4.083333333333334,
+          "disagree": 0.13714285714285715
+        }
+      ]
+    },
+    {
+      "dataset": "Computers",
+      "n_test": 250,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 2,
+      "accuracy": {
+        "tabicl-v2": 0.784,
+        "tabpfn-v2": 0.82
+      },
+      "oracle": 0.86,
+      "none_right": 0.14,
+      "mean_proba_ensemble": 0.82,
+      "best_single": 0.82,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.784,
+            0.82
+          ],
+          "both_wrong": 0.14,
+          "both_wrong_if_independent": 0.03888,
+          "excess": 3.6008230452674903,
+          "disagree": 0.116
+        }
+      ]
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_test": 139,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 3,
+      "accuracy": {
+        "tabicl-v2": 0.7410071942446043,
+        "tabpfn-v2": 0.7482014388489209
+      },
+      "oracle": 0.8057553956834532,
+      "none_right": 0.19424460431654678,
+      "mean_proba_ensemble": 0.7338129496402878,
+      "best_single": 0.7482014388489209,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7410071942446043,
+            0.7482014388489209
+          ],
+          "both_wrong": 0.19424460431654678,
+          "both_wrong_if_independent": 0.06521401583768956,
+          "excess": 2.978571428571429,
+          "disagree": 0.1223021582733813
+        }
+      ]
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_test": 139,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 6,
+      "accuracy": {
+        "tabicl-v2": 0.7194244604316546,
+        "tabpfn-v2": 0.7266187050359713
+      },
+      "oracle": 0.7769784172661871,
+      "none_right": 0.2230215827338129,
+      "mean_proba_ensemble": 0.7122302158273381,
+      "best_single": 0.7266187050359713,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7194244604316546,
+            0.7266187050359713
+          ],
+          "both_wrong": 0.22302158273381295,
+          "both_wrong_if_independent": 0.07670410434242533,
+          "excess": 2.907557354925776,
+          "disagree": 0.11510791366906475
+        }
+      ]
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_test": 139,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 2,
+      "accuracy": {
+        "tabicl-v2": 0.7482014388489209,
+        "tabpfn-v2": 0.7482014388489209
+      },
+      "oracle": 0.7482014388489209,
+      "none_right": 0.2517985611510791,
+      "mean_proba_ensemble": 0.7482014388489209,
+      "best_single": 0.7482014388489209,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7482014388489209,
+            0.7482014388489209
+          ],
+          "both_wrong": 0.2517985611510791,
+          "both_wrong_if_independent": 0.06340251539775374,
+          "excess": 3.971428571428571,
+          "disagree": 0.0
+        }
+      ]
+    },
+    {
+      "dataset": "Ham",
+      "n_test": 105,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 2,
+      "accuracy": {
+        "tabicl-v2": 0.780952380952381,
+        "tabpfn-v2": 0.7333333333333333
+      },
+      "oracle": 0.8285714285714286,
+      "none_right": 0.17142857142857137,
+      "mean_proba_ensemble": 0.7619047619047619,
+      "best_single": 0.780952380952381,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.780952380952381,
+            0.7333333333333333
+          ],
+          "both_wrong": 0.17142857142857143,
+          "both_wrong_if_independent": 0.05841269841269841,
+          "excess": 2.9347826086956523,
+          "disagree": 0.14285714285714285
+        }
+      ]
+    },
+    {
+      "dataset": "Haptics",
+      "n_test": 308,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 5,
+      "accuracy": {
+        "tabicl-v2": 0.5551948051948052,
+        "tabpfn-v2": 0.551948051948052
+      },
+      "oracle": 0.6266233766233766,
+      "none_right": 0.37337662337662336,
+      "mean_proba_ensemble": 0.5551948051948052,
+      "best_single": 0.5551948051948052,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.5551948051948052,
+            0.551948051948052
+          ],
+          "both_wrong": 0.37337662337662336,
+          "both_wrong_if_independent": 0.19929583403609377,
+          "excess": 1.8734793187347931,
+          "disagree": 0.22402597402597402
+        }
+      ]
+    },
+    {
+      "dataset": "Herring",
+      "n_test": 64,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 2,
+      "accuracy": {
+        "tabicl-v2": 0.640625,
+        "tabpfn-v2": 0.65625
+      },
+      "oracle": 0.6875,
+      "none_right": 0.3125,
+      "mean_proba_ensemble": 0.65625,
+      "best_single": 0.65625,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.640625,
+            0.65625
+          ],
+          "both_wrong": 0.3125,
+          "both_wrong_if_independent": 0.12353515625,
+          "excess": 2.5296442687747036,
+          "disagree": 0.078125
+        }
+      ]
+    },
+    {
+      "dataset": "Lightning2",
+      "n_test": 61,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 2,
+      "accuracy": {
+        "tabicl-v2": 0.8524590163934426,
+        "tabpfn-v2": 0.8360655737704918
+      },
+      "oracle": 0.9016393442622951,
+      "none_right": 0.09836065573770492,
+      "mean_proba_ensemble": 0.8360655737704918,
+      "best_single": 0.8524590163934426,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8524590163934426,
+            0.8360655737704918
+          ],
+          "both_wrong": 0.09836065573770492,
+          "both_wrong_if_independent": 0.024187046492878256,
+          "excess": 4.066666666666667,
+          "disagree": 0.11475409836065574
+        }
+      ]
+    },
+    {
+      "dataset": "Lightning7",
+      "n_test": 73,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 7,
+      "accuracy": {
+        "tabicl-v2": 0.7671232876712328,
+        "tabpfn-v2": 0.7945205479452054
+      },
+      "oracle": 0.8493150684931506,
+      "none_right": 0.15068493150684936,
+      "mean_proba_ensemble": 0.7808219178082192,
+      "best_single": 0.7945205479452054,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7671232876712328,
+            0.7945205479452054
+          ],
+          "both_wrong": 0.1506849315068493,
+          "both_wrong_if_independent": 0.04785137924563707,
+          "excess": 3.1490196078431376,
+          "disagree": 0.136986301369863
+        }
+      ]
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_test": 154,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 3,
+      "accuracy": {
+        "tabicl-v2": 0.6168831168831169,
+        "tabpfn-v2": 0.6103896103896104
+      },
+      "oracle": 0.6818181818181818,
+      "none_right": 0.31818181818181823,
+      "mean_proba_ensemble": 0.5974025974025974,
+      "best_single": 0.6168831168831169,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.6168831168831169,
+            0.6103896103896104
+          ],
+          "both_wrong": 0.3181818181818182,
+          "both_wrong_if_independent": 0.14926631809748694,
+          "excess": 2.131638418079096,
+          "disagree": 0.14935064935064934
+        }
+      ]
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_test": 154,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 6,
+      "accuracy": {
+        "tabicl-v2": 0.6103896103896104,
+        "tabpfn-v2": 0.5909090909090909
+      },
+      "oracle": 0.6753246753246753,
+      "none_right": 0.3246753246753247,
+      "mean_proba_ensemble": 0.5909090909090909,
+      "best_single": 0.6103896103896104,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.6103896103896104,
+            0.5909090909090909
+          ],
+          "both_wrong": 0.3246753246753247,
+          "both_wrong_if_independent": 0.1593860684769776,
+          "excess": 2.0370370370370368,
+          "disagree": 0.16883116883116883
+        }
+      ]
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_test": 205,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 3,
+      "accuracy": {
+        "tabicl-v2": 0.8292682926829268,
+        "tabpfn-v2": 0.8585365853658536
+      },
+      "oracle": 0.8585365853658536,
+      "none_right": 0.14146341463414636,
+      "mean_proba_ensemble": 0.8439024390243902,
+      "best_single": 0.8585365853658536,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8292682926829268,
+            0.8585365853658536
+          ],
+          "both_wrong": 0.14146341463414633,
+          "both_wrong_if_independent": 0.02415229030339084,
+          "excess": 5.857142857142856,
+          "disagree": 0.02926829268292683
+        }
+      ]
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_test": 205,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 6,
+      "accuracy": {
+        "tabicl-v2": 0.8,
+        "tabpfn-v2": 0.7804878048780488
+      },
+      "oracle": 0.8292682926829268,
+      "none_right": 0.1707317073170732,
+      "mean_proba_ensemble": 0.7951219512195122,
+      "best_single": 0.8,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8,
+            0.7804878048780488
+          ],
+          "both_wrong": 0.17073170731707318,
+          "both_wrong_if_independent": 0.04390243902439025,
+          "excess": 3.888888888888889,
+          "disagree": 0.08292682926829269
+        }
+      ]
+    },
+    {
+      "dataset": "Worms",
+      "n_test": 77,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 5,
+      "accuracy": {
+        "tabicl-v2": 0.8181818181818182,
+        "tabpfn-v2": 0.8181818181818182
+      },
+      "oracle": 0.8441558441558441,
+      "none_right": 0.1558441558441559,
+      "mean_proba_ensemble": 0.8181818181818182,
+      "best_single": 0.8181818181818182,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8181818181818182,
+            0.8181818181818182
+          ],
+          "both_wrong": 0.15584415584415584,
+          "both_wrong_if_independent": 0.03305785123966942,
+          "excess": 4.714285714285714,
+          "disagree": 0.07792207792207792
+        }
+      ]
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_test": 77,
+      "models": [
+        "tabicl-v2",
+        "tabpfn-v2"
+      ],
+      "n_classes": 2,
+      "accuracy": {
+        "tabicl-v2": 0.8181818181818182,
+        "tabpfn-v2": 0.8051948051948052
+      },
+      "oracle": 0.8831168831168831,
+      "none_right": 0.11688311688311692,
+      "mean_proba_ensemble": 0.8311688311688312,
+      "best_single": 0.8181818181818182,
+      "pairs": [
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8181818181818182,
+            0.8051948051948052
+          ],
+          "both_wrong": 0.11688311688311688,
+          "both_wrong_if_independent": 0.03541912632821724,
+          "excess": 3.3,
+          "disagree": 0.14285714285714285
+        }
+      ]
+    }
+  ]
+}

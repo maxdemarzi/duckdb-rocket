@@ -177,8 +177,9 @@ def report(rows: list[dict]) -> None:
     if not rows:
         print("no dataset has two comparable models; nothing to compare")
         return
-    print(f"\nERROR OVERLAP -- {len(rows)} datasets with two comparable backbones\n")
     models = sorted({m for r in rows for m in r["models"]})
+    print(f"\nERROR OVERLAP -- {len(rows)} datasets, {len(models)} backbones "
+          f"({', '.join(models)})\n")
     print(f"{'dataset':30s} " + " ".join(f"{m:>11s}" for m in models)
           + f" {'ensemble':>9s} {'oracle':>7s} {'none':>6s}")
     for r in sorted(rows, key=lambda r: r["dataset"]):
@@ -199,16 +200,24 @@ def report(rows: list[dict]) -> None:
           f"({mean('oracle') - best:+.4f} of headroom)")
     print(f"    rows no backbone gets right       {mean('none_right'):.4f}")
 
-    print("\n  are they wrong in the same places?")
-    ex = [p["excess"] for r in rows for p in r["pairs"] if p["excess"] is not None]
-    bw = float(np.mean([p["both_wrong"] for r in rows for p in r["pairs"]]))
-    bi = float(np.mean([p["both_wrong_if_independent"] for r in rows for p in r["pairs"]]))
-    print(f"    both wrong on the same row        {bw:.4f}")
-    print(f"    if their errors were independent  {bi:.4f}")
-    print(f"    excess, mean over datasets        {np.mean(ex):.2f}x  "
-          f"(median {np.median(ex):.2f}x, range {min(ex):.2f}-{max(ex):.2f})")
-    print(f"    they disagree on                  "
-          f"{np.mean([p['disagree'] for r in rows for p in r['pairs']]):.4f} of rows")
+    # Per pair, not pooled. With three backbones the pooled number hides the only comparison that
+    # separates "these architectures are alike" from "the ROCKET features are the ceiling": if a
+    # third architecture overlaps the first two as much as they overlap each other, the common
+    # element is the features they all read, not the lineage two of them share.
+    print("\n  are they wrong in the same places?  (per pair, over the datasets holding both)")
+    print(f"    {'pair':34s} {'both wrong':>10s} {'if indep.':>10s} {'excess':>8s} "
+          f"{'disagree':>9s}  n")
+    by_pair: dict[tuple[str, ...], list[dict]] = {}
+    for r in rows:
+        for p in r["pairs"]:
+            by_pair.setdefault(tuple(p["models"]), []).append(p)
+    for pair, ps in sorted(by_pair.items()):
+        ex = [p["excess"] for p in ps if p["excess"] is not None]
+        print(f"    {' vs '.join(pair)[:34]:34s} "
+              f"{np.mean([p['both_wrong'] for p in ps]):10.4f} "
+              f"{np.mean([p['both_wrong_if_independent'] for p in ps]):10.4f} "
+              f"{np.mean(ex) if ex else float('nan'):7.2f}x "
+              f"{np.mean([p['disagree'] for p in ps]):9.4f}  {len(ps)}")
     print("\n  An excess above 1 means the failures are correlated: the second model is most often"
           "\n  wrong exactly where the first one is, which is the case that makes an ensemble"
           "\n  disappointing however it combines them.")

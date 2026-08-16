@@ -1,0 +1,67 @@
+{
+  "dataset": "Herring",
+  "model": "orion-bix",
+  "device": "cpu",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "threads": 2,
+    "memory_limit": "41GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128,
+    "onnx_threads": 4,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "Herring",
+    "n_train": 64,
+    "n_test": 64,
+    "n_channels": 1,
+    "n_timepoints": 512,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/Herring/raw.parquet"
+  },
+  "accuracy": 0.625,
+  "row_alignment": {
+    "predicted_rows": 64,
+    "distinct_ids": 64,
+    "group_rows": 2560,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 3.19,
+    "classify_seconds": 225.73,
+    "classify_share": 0.9861,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 5.017,
+      "classify_median": 5.641,
+      "classify_max": 6.232,
+      "max_over_median": 1.1
+    }
+  },
+  "failures": [],
+  "seconds": 229.9,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-51-generic",
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "cpu_count": 32,
+    "containerised": true
+  },
+  "caveat": null
+}

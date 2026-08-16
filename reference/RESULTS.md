@@ -968,8 +968,49 @@ broadly one lineage cannot separate those explanations: `orion-bix` (MIT, and ch
 on the same datasets would, since a comparable 3.7x excess across a third architecture is evidence
 for the features and a materially lower one is evidence for the models.
 
-Caveats: 17 datasets, one seed, two backbones, and `tabpfn-v2` covers 18 of the 29 rather than all
-of them. `reference/error_overlap.json`.
+##### A third architecture answers it: it is the features (2026-08-16)
+
+`orion-bix` on the same 17 datasets, same G=40, same 250-kernel groups, one 32-vCPU pod. It is a
+*cheaper* labeller than the teacher, not a dearer one — 0.83x and 0.92x of `tabicl-v2` on the two
+probe datasets, nothing like `mitra`'s 5x — so this cost about 40 minutes.
+
+| pair | both wrong | if independent | **excess** | disagree |
+|---|---|---|---|---|
+| `orion-bix` vs `tabicl-v2` | 0.2010 | 0.0736 | **3.75x** | 0.1174 |
+| `orion-bix` vs `tabpfn-v2` | 0.2022 | 0.0741 | **3.78x** | 0.1175 |
+| `tabicl-v2` vs `tabpfn-v2` | 0.1920 | 0.0686 | **3.74x** | 0.1111 |
+
+**Three architectures, three pairs, and the excess is the same to within 1%.** A third model
+overlaps the other two exactly as much as they overlap each other. Whatever produces the correlated
+failure is not the lineage two of them share — it is what all three are given, which is 500 ROCKET
+features per call. `Earthquakes` makes the point in miniature: all three score 0.7482, the oracle is
+0.7482, and no pair ever disagrees. Three architectures giving up on the same rows.
+
+Adding the third model makes the ensemble **worse**, not better: averaging falls from 0.7598 to
+0.7544, because `orion-bix` is the weakest of the three (0.7371) and averaging pulls toward it. The
+oracle rises (0.8080 to 0.8254, now +0.0586 over the best single backbone) and the rows nobody gets
+right fall from 0.1920 to 0.1746 — so a third architecture does recover a few rows in principle, and
+no combination rule tried reaches them.
+
+**So the model zoo is the wrong axis.** More labellers of this kind cost linearly and buy nothing
+an averaging rule can collect; ~17% of these rows are unclassifiable from the features they are all
+being handed. The ts-features result above — 116 statistics beating 10,000 ROCKET features on three
+of six hard datasets under a ridge — is the direction with headroom, and `phase5` already supports
+`--features both`.
+
+Caveats: 17 datasets, one seed, and all three read the same feature construction by design, which is
+the hypothesis rather than a controlled variable — the decisive follow-up is one backbone against
+*two* feature families, not more backbones. `reference/error_overlap.json`, cubes in
+`reference/pergroup_cubes_orion.tar.gz`.
+
+Two things about the run itself, since both cost real time. `orion-bix` is published as a torch zip
+whose pickle stream uses an opcode the checkpoint reader does not implement, so `tabfm_download`
+reports success and inference then dies with `unsupported pickle opcode 0x65`;
+`scripts/convert_model_weights.sh` is what fixes it, and RESULTS.md's "all four verified classifying
+through the real extension" was always a post-conversion claim. And `Earthquakes` and `Computers`
+both died with an *empty* stderr while four shards ran concurrently on a 64 GB box, then both
+completed in 6 minutes each run alone — the same concurrency-versus-memory trade that left five
+datasets without cubes for days.
 
 ### The second feature family, measured on all 112 datasets (2026-08-14)
 

@@ -430,3 +430,22 @@ def test_duplicate_series_are_collapsed_not_counted_twice():
     # wide; their predictions are identical, so the scoring insert must collapse them to one row
     # per (group, id) instead of counting every pairing.
     assert "any_value(proba)" in sql and "GROUP BY grp, id" in sql
+
+
+def test_max_memory_is_absent_unless_asked_for():
+    """It is unreleased upstream, so emitting it always would break every community-build run.
+
+    A build without the parameter fails the whole script on `SET` with an unrecognised-parameter
+    error, and that script is the only thing standing between a dataset and a report.
+    """
+    from phase5_pipeline import RocketPFNConfig, build_sql
+    cfg = RocketPFNConfig(num_kernels=500, n_groups=2, n_estimators=1)
+    meta = {"dataset": "GunPoint", "n_train": 50, "n_test": 150, "n_channels": 1,
+            "n_timepoints": 150, "multivariate": False, "raw_parquet": "raw.parquet"}
+    plain = build_sql(cfg, meta, Path("."), 4, "8GB", Path("."), 128, 4, device="cpu")
+    assert "anofox_tabfm_max_memory" not in plain
+    asked = build_sql(cfg, meta, Path("."), 4, "8GB", Path("."), 128, 4, device="cpu",
+                      tabfm_max_memory="24GB")
+    assert "SET anofox_tabfm_max_memory = '24GB';" in asked
+    # And it has to come after the extension is loaded, or the parameter does not exist yet.
+    assert asked.index("LOAD anofox_tabfm") < asked.index("anofox_tabfm_max_memory")

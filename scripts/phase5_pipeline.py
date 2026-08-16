@@ -220,7 +220,8 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               onnx_threads: int, load_rocket: str = "", device: str = "cpu",
               model: str = MODEL, anofox_extension: Path | None = None,
               register_dir: Path | None = None, features: str = "rocket",
-              ts_names: list[str] | None = None, per_group: bool = False) -> str:
+              ts_names: list[str] | None = None, per_group: bool = False,
+              tabfm_max_memory: str | None = None) -> str:
     # Which feature families the classifier sees. `rocket` is the 500 random-convolution features
     # per group that every result so far uses. `ts` is anofox_forecast's 116 statistics, which beat
     # 10,000 ROCKET features on three of six hard datasets under a ridge. `both` is the open
@@ -325,6 +326,14 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         # margin, not necessity. Left as it is because it is free, and noted here so nobody
         # investigates it a second time looking for a memory or speed win. There isn't one.
         f"SET anofox_tabfm_max_features = {max(n_features * 2, 1000)};",
+        # Opt-in, and it must stay opt-in: `anofox_tabfm_max_memory` landed upstream in #36 and is
+        # in no released build, so emitting it unconditionally would make every run against the
+        # community extension fail on an unrecognised parameter. What it buys is the difference
+        # between a diagnosis and a guess -- the setting reads VmRSS from /proc/self/status and
+        # refuses a predict call above the ceiling, where today the kernel takes the process with
+        # exit -9 and an empty stderr. That failure mode cost this project several sessions and one
+        # withdrawn explanation on SemgHandMovementCh2.
+        *( [f"SET anofox_tabfm_max_memory = '{tabfm_max_memory}';"] if tabfm_max_memory else [] ),
         # Thread count is set explicitly rather than inherited from the visible core count.
         # On a 112-core pod, four concurrent runs each sized their own pool from that number,
         # on top of ONNX's per-session threads, and every run died near completion with no
@@ -745,6 +754,13 @@ def main() -> int:
              "upstream change.",
     )
     parser.add_argument(
+        "--tabfm-max-memory",
+        help="set anofox_tabfm_max_memory, which refuses a predict call once resident memory is "
+             "above the ceiling (e.g. '24GB'). Unreleased upstream as of 2026-08-16, so it is "
+             "off by default: a build without it fails on an unrecognised parameter. This is the "
+             "only setting that turns an OOM kill into an error you can read -- memory_limit "
+             "governs DuckDB alone and the model allocates outside it.")
+    parser.add_argument(
         "--per-group-soft",
         action="store_true",
         help="also archive each group's own probabilities, not just their average. One run then "
@@ -818,7 +834,8 @@ def main() -> int:
                     anofox_extension=args.anofox_extension,
                     register_dir=args.register_model_dir,
                     features=args.features, ts_names=ts_names,
-                    per_group=args.per_group_soft)
+                    per_group=args.per_group_soft,
+                    tabfm_max_memory=args.tabfm_max_memory)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")

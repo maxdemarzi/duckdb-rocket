@@ -123,11 +123,16 @@ Three things follow, in the order they are worth doing:
 With (1) and (2), the routed ScreenType batch goes from 227.5 s to 60.1 s. That prediction was
 written here as "roughly 60 s" before it was run, from the fitted model alone.
 
-**If a call runs out of memory, `--test-chunk` is the lever, not `--memory-limit`.** The model
-allocates outside DuckDB's buffer manager, so the memory limit cannot contain it and a smaller one
-dies sooner. `SemgHandMovementCh2` — 450 training rows of 1500 timepoints — is killed by the
-kernel (`exit -9`) on a 128-row batch against a 32 GB container and completes at `--test-chunk 32`.
-It is not free: each chunk is another call paying the context pass again.
+**If a call runs out of memory, the levers are RAM first and `--test-chunk` second — never
+`--memory-limit`.** The model allocates outside DuckDB's buffer manager, so the memory limit cannot
+contain it and a smaller one dies sooner. What sizes a call is the row count: support rows plus the
+query rows you hand it, times 500 features. Series length does not enter it, because ROCKET has
+already reduced each series to those features.
+
+`SemgHandMovementCh2` — 450 training rows — is killed by the kernel (`exit -9`) on a 128-row batch
+in a 32 GB container. Two things fix it, and they are not equal: give it a 64 GB box and it runs the
+full batch unchanged, or drop to `--test-chunk 32` and it completes in 32 GB at four times the
+calls, each re-paying the context pass. Prefer the memory. Chunk only when you cannot get it.
 
 ## When it will not help you
 
@@ -295,7 +300,7 @@ Three things about deploying the teacher that the accuracy tables do not show:
   together, up to whatever `--test-chunk` your memory allows — chunking finer costs 2.18x on
   measured whole-dataset runs, because each chunk re-sends the context.
 * **Run the teacher at 10 groups, not 40.** The default of 40 was inherited from the paper's
-  configuration and never chosen for cost. Cost is exactly linear in it, and over 24 datasets G=20
+  configuration and never chosen for cost. Cost is exactly linear in it, and over 29 datasets G=20
   is free (+0.0002 routed) and G=10 costs −0.0033 routed, which no test detects. Served against
   G=40 on one box, it is a measured 3.7-3.8x and the largest speedup available here. It is the
   default as of 1d290bd.

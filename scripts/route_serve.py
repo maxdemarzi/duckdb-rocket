@@ -24,7 +24,7 @@ reads 500 at a time, from one transform. `n_kernels` and `n_groups` are therefor
 `deploy` derives the first from the second rather than taking both.
 
 **The default is 10 groups, not the 40 every archived run used.** Cost is exactly linear in the
-group count, and over 24 datasets G=10 costs -0.0033 routed against G=40 -- inside what this
+group count, and over 29 datasets G=10 costs -0.0033 routed against G=40 -- inside what this
 harness can resolve, which is about half a point at a 20% budget. Served on one box against G=40 on
 the same box, that is a measured **3.7-3.8x** off the whole request (the missing part of 4x is
 DuckDB startup and the transform, which do not scale with G). The archived pipeline keeps 40 so its
@@ -73,7 +73,7 @@ from distill_gate import ALPHAS, decision_margin, oof_margins  # noqa: E402
 #: and are checked against each other rather than set independently.
 KERNELS_PER_GROUP = 250
 
-#: Ten groups, not forty. Cost is exactly linear in the group count and 24 datasets put G=10 at
+#: Ten groups, not forty. Cost is exactly linear in the group count and 29 datasets put G=10 at
 #: -0.0033 routed against G=40, which no test here can detect (reference/RESULTS.md, "The teacher
 #: runs 40 passes and needs about ten"). The archived runs stay at 40 so their numbers remain
 #: comparable; this is the serving path, which has no archive to protect.

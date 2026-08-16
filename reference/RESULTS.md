@@ -645,10 +645,46 @@ Against the measured cost model, a routed 128-row ScreenType batch at G=10 falls
 Reproduction is worth recording separately: all 24 datasets returned **bit-identical accuracies to
 the archived runs** on different hardware with a rebuilt extension.
 
-Not measured: five datasets — `EthanolLevel`, both `*OutlineCorrect`, both `SemgHand*` — have
-450-600 row training contexts, and a classify call's memory scales with the context. A CPU pod is
-capped at **29.8 GiB** (the cgroup limit; `free` reports the host's 124 GB and is not the budget),
-which they exceed even running alone. `reference/perf_groups.json`.
+##### Completed to 29 datasets, and the answer does not move (2026-08-16)
+
+The five missing above — `EthanolLevel`, both `*OutlineCorrect`, both `SemgHand*` — were written
+off as too large for the box. They are not: they need **more RAM, not a smaller call**. Re-run on a
+64 GB pod, all five completed at the archived `--test-chunk 128`, so the recovered cubes are the
+same configuration as the other 24 and not a chunked approximation of it. `DistalPhalanxOutlineCorrect`
+peaked at 39.9 GB — above the 29.8 GiB the earlier pod allowed, below the new ceiling. The chunk
+ladder built for this never fired.
+
+| G | teacher alone | vs G=40 | p | **routed @20%** | vs G=40 | p | not worse |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.7253 | −0.0289 | **0.0009** | 0.7384 | −0.0052 | 0.076 | 11/29 |
+| 2 | 0.7368 | −0.0174 | **0.015** | 0.7375 | −0.0061 | 0.267 | 14/29 |
+| 5 | 0.7432 | −0.0110 | 0.152 | 0.7413 | −0.0023 | 1.00 | 17/29 |
+| 10 | 0.7499 | −0.0043 | 0.405 | 0.7403 | −0.0033 | 0.815 | 19/29 |
+| 20 | 0.7538 | −0.0004 | 1.000 | 0.7436 | +0.0000 | 0.267 | 25/29 |
+| 40 | 0.7542 | — | — | 0.7436 | — | — | 29/29 |
+
+**The G=10 routed cost is −0.0033 on 24 datasets and −0.0033 on 29** — the same to four decimal
+places, on a fifth more data including the five hardest. G=20 goes from +0.0002 to exactly 0.0000.
+Nothing about the recommendation moves.
+
+What the five *do* change is the case against G=1, which is the one conclusion that was ever
+significant. They are datasets where the teacher earns most — mean teacher accuracy rises from
+0.7386 to 0.7542 — so the cost of collapsing it to a single group deepens from −0.0172 to −0.0289,
+and p from 0.012 to 0.0009. G=2 becomes significant as well (p=0.015), which it was not at 24.
+Per-dataset at G=10 the five split both ways: −0.0275 (`MiddlePhalanxOutlineCorrect`), −0.0140,
+−0.0036, 0.0000, +0.0111 (`SemgHandSubjectCh2`).
+
+One control worth keeping. Chunking a call changes the probabilities by up to **9e-6**, and that is
+chunking alone: the same dataset at the same chunk size on a 16-vCPU and a 32-vCPU box is
+**bit-identical**, max|d| exactly 0. But the cubes store six decimals, so 9e-6 is nine units in the
+last stored place, every observed difference is a whole multiple of 1e-6, and prefix-averaged
+predictions agree 100% at G=1, 5, 10, 20 and 40 — the closest decision anywhere is 4.4e-3, or 489x
+the difference. So chunking cannot move a reported number, and a first version of this check that
+compared at 1e-6 was testing below its own storage precision and cried wolf.
+
+`reference/perf_groups_29.json`, and the 29 cubes in `reference/pergroup_cubes.tar.gz` (4.4 MB).
+`reference/perf_groups.json` is the 24-dataset original, kept because the kernel and joint sweeps
+are stated against it.
 
 #### The student's kernel bank, and why it is the wrong thing to cut (2026-08-15)
 
@@ -720,13 +756,19 @@ four times over for −0.0033; the context divides it 1.48x for −0.0168 and ca
 many-class dataset; the kernel count divides 1.7% of the bill.** Cut groups.
 
 The one thing this lever does that nothing else does is make an impossible run possible.
-`EthanolLevel` and `DistalPhalanxOutlineCorrect` cannot run at full context on a CPU pod at all —
-their 504 and 600 row contexts exceed the 29.8 GiB cap — and both completed at 25% and 50%
+`EthanolLevel` and `DistalPhalanxOutlineCorrect` cannot run at full context on a **29.8 GiB** CPU
+pod at all — their 504 and 600 row contexts exceed it — and both completed at 25% and 50%
 (0.5880/0.6120 and 0.7754/0.7862). Those numbers confound the context cut with G=10 and are not
 comparable to the archived full-context values; what they establish is feasibility, not accuracy.
 
-`reference/perf_context.json`. The 24 per-group cubes are archived compressed as
-`reference/pergroup_cubes.tar.gz` (3.3 MB), so the group analysis can be redone or extended
+**Superseded as advice (2026-08-16).** Both ran at full context, full test set and the archived
+`--test-chunk 128` on a 64 GB pod — `DistalPhalanxOutlineCorrect` peaked at 39.9 GB, just over the
+old ceiling. So the honest ordering is: rent the memory, then chunk the call, and only subsample the
+context if neither is available. Subsampling is the only one of the three that changes the model's
+answer.
+
+`reference/perf_context.json`. The 29 per-group cubes are archived compressed as
+`reference/pergroup_cubes.tar.gz` (4.4 MB), so the group analysis can be redone or extended
 without renting anything.
 
 #### Both levers at once, and a noise floor worth naming (2026-08-16)

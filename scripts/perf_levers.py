@@ -327,11 +327,123 @@ def report_kernels(rows: list[dict], grid: list[int]) -> None:
         print(f"    escalate {b:.0%}   " + "   ".join(line))
 
 
+# -------------------------------------------------------------------- both levers at once
+
+def _margin_worker(t):
+    """Student predictions AND margins at one kernel count. `--kernels` keeps only accuracies."""
+    name, n_kernels, seed = t
+    try:
+        xtr, ytr = load(name, "train")
+        xte, _ = load(name, "test")
+        pred, conf = rocket_ridge_scored(normalize_series(xtr), ytr, normalize_series(xte),
+                                         n_kernels=n_kernels, seed=seed)
+        return name, n_kernels, [str(p) for p in pred], [float(c) for c in conf], ""
+    except Exception as e:  # noqa: BLE001
+        return name, n_kernels, None, None, f"{type(e).__name__}: {e}"[:140]
+
+
+def run_joint(args) -> int:
+    """Do the two levers compose, or was each measured against the other's default?
+
+    The group sweep held the student at 10,000 kernels; the kernel sweep routed against the
+    archived 40-group teacher. Neither says what happens when both are cut, which is the
+    configuration worth shipping -- so this crosses them directly on the same datasets.
+    """
+    cubes = {}
+    for f in sorted(Path(args.pergroup).glob("*_pergroup.json")):
+        d = load_pergroup(f)
+        cubes[d["dataset"]] = d
+    if not cubes:
+        print(f"no cubes under {args.pergroup}")
+        return 1
+    grid = [int(k) for k in (args.kernel_grid or (500, 2_000, 5_000, 10_000))]
+    gs = [int(g) for g in (args.group_grid or (5, 10, 20, 40))]
+    names = sorted(cubes)
+    print(f"joint: {len(names)} datasets x {len(grid)} kernel sizes x {len(gs)} group counts\n")
+
+    for n in names:  # serial warm, as in run_kernels
+        load(n, "train"), load(n, "test")
+
+    jobs = [(n, k, args.seed) for n in names for k in grid]
+    students: dict[tuple[str, int], tuple] = {}
+    with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        for i, fut in enumerate(as_completed([ex.submit(_margin_worker, j) for j in jobs]), 1):
+            n, k, pred, conf, err = fut.result()
+            if pred is None:
+                print(f"  {n} k={k} failed: {err}", flush=True)
+            else:
+                students[(n, k)] = (np.asarray(pred, dtype=object), np.asarray(conf))
+            if i % 20 == 0 or i == len(jobs):
+                print(f"  ... {i}/{len(jobs)} student fits", flush=True)
+
+    rows = []
+    for n in names:
+        _, yte = load(n, "test")
+        preds_by_g = prefix_predictions(cubes[n]["proba"], cubes[n]["classes"])
+        for k in grid:
+            if (n, k) not in students:
+                continue
+            spred, sconf = students[(n, k)]
+            for g in gs:
+                if g > len(preds_by_g):
+                    continue
+                acc = route_curve(spred, sconf, preds_by_g[g - 1], yte, [args.budget])[0][1]
+                rows.append({"dataset": n, "n_kernels": k, "groups": g, "routed": acc})
+    if not rows:
+        return 1
+    report_joint(rows, grid, gs, args.budget)
+    if args.out:
+        Path(args.out).write_text(json.dumps(
+            {"design": "student kernel count crossed with teacher group count, one budget",
+             "budget": args.budget, "grid": grid, "groups": gs, "rows": rows}, indent=2),
+            encoding="utf-8")
+        print(f"\nwrote {args.out}")
+    return 0
+
+
+def report_joint(rows, grid, gs, budget) -> None:
+    by = {(r["dataset"], r["n_kernels"], r["groups"]): r["routed"] for r in rows}
+    names = sorted({r["dataset"] for r in rows})
+    base = [by.get((n, grid[-1], gs[-1])) for n in names]
+    if any(b is None for b in base):
+        names = [n for n, b in zip(names, base) if b is not None]
+        base = [b for b in base if b is not None]
+    base = np.array(base)
+    print(f"\nBOTH LEVERS -- routed accuracy at a {budget:.0%} budget, {len(names)} datasets")
+    print(f"baseline is {grid[-1]} kernels x G={gs[-1]}: {base.mean():.4f}\n")
+    print(f"  {'kernels':>8s} " + "  ".join(f"G={g:<9d}" for g in gs))
+    for k in grid:
+        cells = []
+        for g in gs:
+            vals = np.array([by.get((n, k, g), np.nan) for n in names])
+            ok = ~np.isnan(vals)
+            d = vals[ok] - base[ok]
+            cells.append(f"{vals[ok].mean():.4f} ({d.mean():+.4f})")
+        print(f"  {k:8d} " + "  ".join(cells))
+    # The shippable question: is the cheap corner distinguishable from the expensive one?
+    print(f"\n  vs the {grid[-1]}x{gs[-1]} baseline, sign test over datasets:")
+    for k in grid:
+        for g in gs:
+            if (k, g) == (grid[-1], gs[-1]):
+                continue
+            vals = np.array([by.get((n, k, g), np.nan) for n in names])
+            ok = ~np.isnan(vals)
+            d = vals[ok] - base[ok]
+            if k in (grid[0], grid[-1]) or g in (gs[0], gs[-1]):
+                print(f"    {k:5d} kernels x G={g:<3d} {d.mean():+.4f}  p={sign_test(d):.3f}  "
+                      f"{int((d >= 0).sum())}/{len(d)} not worse")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--groups", action="store_true", help="teacher group count, from archived cubes")
     ap.add_argument("--kernels", action="store_true", help="student kernel count")
+    ap.add_argument("--joint", action="store_true",
+                    help="cross the two: the group sweep held kernels at 10,000 and the kernel "
+                         "sweep routed against a 40-group teacher, so the cheap corner is unmeasured")
+    ap.add_argument("--group-grid", nargs="*", type=int)
+    ap.add_argument("--budget", type=float, default=0.20)
     ap.add_argument("--pergroup", type=Path, default=ROOT / "data" / "pergroup")
     ap.add_argument("--teacher", type=Path, default=ROOT / "reference")
     ap.add_argument("--route-cache", type=Path, default=ROOT / "data" / "route_cache")
@@ -343,13 +455,15 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
-    if not (args.groups or args.kernels):
-        ap.error("pick --groups or --kernels")
+    if not (args.groups or args.kernels or args.joint):
+        ap.error("pick --groups, --kernels or --joint")
     rc = 0
     if args.groups:
         rc |= run_groups(args)
     if args.kernels:
         rc |= run_kernels(args)
+    if args.joint:
+        rc |= run_joint(args)
     return rc
 
 

@@ -1,0 +1,2322 @@
+{
+  "design": "student kernel count crossed with teacher group count, one budget",
+  "budget": 0.2,
+  "grid": [
+    500,
+    2000,
+    5000,
+    10000
+  ],
+  "groups": [
+    5,
+    10,
+    20,
+    40
+  ],
+  "rows": [
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.9
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.9
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.9
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.9
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.93
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.92
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.92
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.92
+    },
+    {
+      "dataset": "ACSF1",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.92
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.8571428571428571
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8628571428571429
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.8571428571428571
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.8571428571428571
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.8571428571428571
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.8685714285714285
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.8628571428571429
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.8628571428571429
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.8514285714285714
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.8685714285714285
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.8685714285714285
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.8628571428571429
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.8514285714285714
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.8628571428571429
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.8571428571428571
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.8571428571428571
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.8333333333333334
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.7666666666666667
+    },
+    {
+      "dataset": "Beef",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.788
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.768
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.78
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.776
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.816
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.812
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.804
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.788
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.8
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.804
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.784
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.796
+    },
+    {
+      "dataset": "Computers",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.792
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.7553956834532374
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.7553956834532374
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.762589928057554
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7553956834532374
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.7553956834532374
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.7410071942446043
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.7410071942446043
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.7410071942446043
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.7410071942446043
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.7194244604316546
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.7338129496402878
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.7194244604316546
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.7194244604316546
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.7266187050359713
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7338129496402878
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7194244604316546
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.7194244604316546
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.7122302158273381
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.7194244604316546
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.7050359712230215
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.7050359712230215
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.7122302158273381
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.7194244604316546
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.7050359712230215
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.7050359712230215
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.7482014388489209
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.7333333333333333
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.7714285714285715
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.7714285714285715
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.7428571428571429
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.7238095238095238
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7428571428571429
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7428571428571429
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.7238095238095238
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.7428571428571429
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.7619047619047619
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.7523809523809524
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.7333333333333333
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.7333333333333333
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.7523809523809524
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.7619047619047619
+    },
+    {
+      "dataset": "Ham",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.7523809523809524
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.5357142857142857
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.5324675324675324
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.5357142857142857
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.538961038961039
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.5357142857142857
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.5324675324675324
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.5324675324675324
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.5292207792207793
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.5292207792207793
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.5194805194805194
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.5227272727272727
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.5227272727272727
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.5324675324675324
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.5324675324675324
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.5357142857142857
+    },
+    {
+      "dataset": "Haptics",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.5324675324675324
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.734375
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.703125
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.703125
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.71875
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.6875
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.6875
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.6875
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.6875
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.625
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.609375
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.625
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.625
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.625
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.609375
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.625
+    },
+    {
+      "dataset": "Herring",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.625
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.4690909090909091
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.4763636363636364
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.4763636363636364
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.4709090909090909
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.4781818181818182
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.4890909090909091
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.48727272727272725
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.4818181818181818
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.48363636363636364
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.48545454545454547
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.48545454545454547
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.48545454545454547
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.48545454545454547
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.49636363636363634
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.5
+    },
+    {
+      "dataset": "InlineSkate",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.49454545454545457
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.9013333333333333
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.9013333333333333
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.9066666666666666
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.9066666666666666
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.8986666666666666
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.9013333333333333
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.904
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.904
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.9013333333333333
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.9013333333333333
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.904
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.9013333333333333
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.9013333333333333
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.904
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.9066666666666666
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.904
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.7868852459016393
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8032786885245902
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.819672131147541
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.819672131147541
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.8032786885245902
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.8032786885245902
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.8360655737704918
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.819672131147541
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.7868852459016393
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.8032786885245902
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.819672131147541
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.819672131147541
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.819672131147541
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.819672131147541
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.8360655737704918
+    },
+    {
+      "dataset": "Lightning2",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.8360655737704918
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.821917808219178
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8082191780821918
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.821917808219178
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.821917808219178
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.821917808219178
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7945205479452054
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.8082191780821918
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.8082191780821918
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.821917808219178
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.7808219178082192
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.7945205479452054
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.7945205479452054
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.821917808219178
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.7808219178082192
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.7945205479452054
+    },
+    {
+      "dataset": "Lightning7",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.7945205479452054
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.8039473684210526
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.8013157894736842
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.7986842105263158
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.8105263157894737
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.8092105263157895
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.8092105263157895
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.8039473684210526
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.8105263157894737
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.8078947368421052
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.8092105263157895
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.8039473684210526
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.8118421052631579
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.8131578947368421
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.8105263157894737
+    },
+    {
+      "dataset": "MedicalImages",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.8078947368421052
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.6103896103896104
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.6168831168831169
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.6103896103896104
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.6168831168831169
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.5974025974025974
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.5974025974025974
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.5909090909090909
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.5909090909090909
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.5844155844155844
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.5909090909090909
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.5844155844155844
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.5844155844155844
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.5909090909090909
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.5974025974025974
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.5974025974025974
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.5974025974025974
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.577922077922078
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.5714285714285714
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.5844155844155844
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.5909090909090909
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.577922077922078
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.5714285714285714
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.5909090909090909
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.5974025974025974
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.564935064935065
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.564935064935065
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.5714285714285714
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.577922077922078
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.5714285714285714
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.564935064935065
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.577922077922078
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.5844155844155844
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.8439024390243902
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.8292682926829268
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.8439024390243902
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.8292682926829268
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.8439024390243902
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.8292682926829268
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.8390243902439024
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.8439024390243902
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.8292682926829268
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.8146341463414634
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8146341463414634
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.8146341463414634
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.8146341463414634
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.8048780487804879
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7951219512195122
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7951219512195122
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.7951219512195122
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.8195121951219512
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.8097560975609757
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.8097560975609757
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.8097560975609757
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.8195121951219512
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.8097560975609757
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.8097560975609757
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.8097560975609757
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.5466666666666666
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.544
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.5466666666666666
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.5466666666666666
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.5493333333333333
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.552
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.5493333333333333
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.552
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.5413333333333333
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.5413333333333333
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.5386666666666666
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.536
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.5573333333333333
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.552
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.552
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.552
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.47733333333333333
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.47733333333333333
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.472
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.4666666666666667
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.504
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.5066666666666667
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.504
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.504
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.528
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.528
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.528
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.5226666666666666
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.5093333333333333
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.5066666666666667
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.5093333333333333
+    },
+    {
+      "dataset": "ScreenType",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.5066666666666667
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.8213333333333334
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8186666666666667
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.824
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.8213333333333334
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.8106666666666666
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.8133333333333334
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.8133333333333334
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.8106666666666666
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.816
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.8186666666666667
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.8186666666666667
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.816
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.8213333333333334
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.8266666666666667
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.824
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.824
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.7662337662337663
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.7662337662337663
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.7662337662337663
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7662337662337663
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.7922077922077922
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.7922077922077922
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.7922077922077922
+    },
+    {
+      "dataset": "Worms",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.7922077922077922
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 500,
+      "groups": 5,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 500,
+      "groups": 10,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 500,
+      "groups": 20,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 500,
+      "groups": 40,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 2000,
+      "groups": 5,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 2000,
+      "groups": 10,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 2000,
+      "groups": 20,
+      "routed": 0.7922077922077922
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 2000,
+      "groups": 40,
+      "routed": 0.7792207792207793
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 5000,
+      "groups": 5,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 5000,
+      "groups": 10,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 5000,
+      "groups": 20,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 5000,
+      "groups": 40,
+      "routed": 0.8051948051948052
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 10000,
+      "groups": 5,
+      "routed": 0.8181818181818182
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 10000,
+      "groups": 10,
+      "routed": 0.8181818181818182
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 10000,
+      "groups": 20,
+      "routed": 0.8181818181818182
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_kernels": 10000,
+      "groups": 40,
+      "routed": 0.8181818181818182
+    }
+  ]
+}

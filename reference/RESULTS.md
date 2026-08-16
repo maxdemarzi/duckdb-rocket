@@ -727,6 +727,46 @@ comparable to the archived full-context values; what they establish is feasibili
 `reference/pergroup_cubes.tar.gz` (3.3 MB), so the group analysis can be redone or extended
 without renting anything.
 
+#### Both levers at once, and a noise floor worth naming (2026-08-16)
+
+The two sweeps above each held the other lever at its default: the group sweep ran a
+10,000-kernel student, and the kernel sweep routed against the archived 40-group teacher. **The
+cheap corner was therefore never measured**, and "cut both" was being quoted as though the two
+compose. Crossing them on the 24 datasets that have cubes, routed accuracy at a 20% budget:
+
+| kernels | G=5 | G=10 | G=20 | G=40 |
+|---|---|---|---|---|
+| 500 | 0.7336 (−0.0007) | 0.7341 (−0.0003) | 0.7362 (+0.0019) | 0.7363 (+0.0020) |
+| 2,000 | 0.7328 (−0.0015) | 0.7329 (−0.0014) | 0.7359 (+0.0015) | 0.7340 (−0.0003) |
+| 5,000 | 0.7307 (−0.0037) | 0.7298 (−0.0045) | 0.7322 (−0.0022) | 0.7314 (−0.0029) |
+| 10,000 | 0.7325 (−0.0018) | 0.7310 (−0.0033) | 0.7345 (+0.0002) | **0.7343** |
+
+**They compose without penalty — but the stronger reading is that none of this grid is measurable.**
+Every cell is within ±0.005 of the baseline, no comparison reaches significance (p = 0.11 to 1.00),
+and the sign test would need about 18 of 24 datasets in one direction where every cell lands at
+11-15. A 20x cut in kernels and an 8x cut in groups together cost −0.0003.
+
+Two things say plainly that these numbers are noise rather than small effects:
+
+* **The grid is not monotone.** 5,000 kernels is the *worst* row at every group count, worse than
+  both 2,000 and 10,000. No mechanism makes a middle bank size worse than the ones either side.
+* **The sign flips with the dataset subset.** The same 500-vs-10,000 comparison at G=40 gives
+  −0.0038 over the kernel sweep's 28 datasets, −0.0001 over the 24 of those that have cubes, and
+  +0.0020 in this run over the same 24 against a freshly measured teacher. Three estimates of one
+  quantity, straddling zero.
+
+So the honest statement is **not** "500 kernels is as good as 10,000". It is that this
+28-dataset harness cannot resolve differences of about half a point at a 20% escalation budget, and
+every configuration tried sits inside that. Anyone wanting to *establish* equivalence needs more
+datasets or more seeds, not a better reading of these.
+
+What that supports in practice: the accuracy data gives no reason to keep 10,000 kernels, and the
+cost data says cutting them matters once the teacher path is cheap — the student is 1.7% of a
+routed request today but 43% of one at G=10 with an upstream context cache. Cut them, and state the
+tolerance (~0.005) rather than claiming the cut is free.
+
+`reference/perf_joint.json`.
+
 #### What this leaves, and what it costs to find out
 
 An ensemble of labellers is the standard escape, and after `scripts/convert_model_weights.sh` there

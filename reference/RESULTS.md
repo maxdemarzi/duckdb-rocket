@@ -601,6 +601,90 @@ memory limit was blamed and then exonerated when the failure recurred at ~87 GB;
 now reports the shell's exit code and archives a `crash.log`, which is what should have been
 reported instead of a guess.
 
+#### The teacher runs 40 passes and needs about ten (2026-08-15)
+
+`G` was inherited from the paper's configuration and never chosen for cost. The section above
+establishes that the teacher's cost is exactly linear in it — each group is its own
+`tabfm_classify` call carrying its own context pass, and after group 0's ONNX warm-up the
+remaining groups run flat to +/-1%. So the question is only whether accuracy survives.
+
+**One 40-group run answers it for every G at once.** Group *g* covers kernel indices
+[250g, 250(g+1)) and the prediction is the argmax of the *mean* of the groups' probabilities, so
+averaging the first G groups is exactly what a G-group run computes — provided `--num-kernels` is
+scaled with `--n-groups` to hold kernels-per-group at 250. `--per-group-soft` archives the
+unaveraged cube; `perf_levers.py --groups` averages prefixes of it. Each cube is checked against
+its own run's reported accuracy to 1e-9 before it is used.
+
+24 datasets, full test splits, `tabicl-v2` on CPU:
+
+| G | teacher alone | vs G=40 | p | **routed @20%** | vs G=40 | p | not worse |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.7214 | −0.0172 | **0.012** | 0.7325 | −0.0019 | 0.38 | 11/24 |
+| 2 | 0.7273 | −0.0113 | 0.115 | 0.7294 | −0.0049 | 0.33 | 13/24 |
+| 5 | 0.7299 | −0.0087 | 0.167 | 0.7325 | −0.0018 | 0.81 | 14/24 |
+| 10 | 0.7348 | −0.0038 | 0.648 | 0.7310 | −0.0033 | 1.00 | 17/24 |
+| 20 | 0.7385 | −0.0001 | 1.000 | 0.7345 | +0.0002 | 0.11 | 22/24 |
+| 40 | 0.7386 | — | — | 0.7343 | — | — | 24/24 |
+
+(student alone 0.7205, so routing at 20% is worth +0.0138 here.)
+
+**G=20 is free: half the cost, +0.0002.** G=10 is a 4x cut for a loss no test detects. Only G=1 is
+measurably worse, and only as the teacher — its *routed* deficit is −0.0019, because a fifth of the
+rows reach the teacher and a 0.0172 deficit arrives diluted fivefold.
+
+That dilution is why the recommendation is **G=10 rather than G=1**, even though the routed column
+barely separates them. At G=1 the teacher itself is significantly worse, so the routed number is
+being carried by the escalation rate rather than by the model; raise the budget later and it
+degrades. G=10 is safe on both columns at once.
+
+Against the measured cost model, a routed 128-row ScreenType batch at G=10 falls from **227.5 s to
+~60 s, 3.8x, for −0.0033**. That is the largest speedup available here without an upstream change.
+
+Reproduction is worth recording separately: all 24 datasets returned **bit-identical accuracies to
+the archived runs** on different hardware with a rebuilt extension.
+
+Not measured: five datasets — `EthanolLevel`, both `*OutlineCorrect`, both `SemgHand*` — have
+450-600 row training contexts, and a classify call's memory scales with the context. A CPU pod is
+capped at **29.8 GiB** (the cgroup limit; `free` reports the host's 124 GB and is not the budget),
+which they exceed even running alone. `reference/perf_groups.json`.
+
+#### The student's kernel bank, and why it is the wrong thing to cut (2026-08-15)
+
+The other inherited default: 10,000 kernels, 20,000 features for every row on the path every row
+takes. Routing does not need the student's best accuracy, it needs its *ordering* — and those are
+different requirements, so this is worth asking separately. 28 datasets, teacher fixed at its
+archived 40-group labels:
+
+| kernels | student | vs full | p | routed @20% | vs full | p |
+|---|---|---|---|---|---|---|
+| 250 | 0.7102 | −0.0113 | 0.169 | 0.7301 | −0.0115 | 0.189 |
+| 500 | 0.7104 | −0.0111 | 0.029 | 0.7377 | −0.0038 | 0.424 |
+| 1,000 | 0.7141 | −0.0074 | 0.169 | 0.7348 | −0.0068 | 0.286 |
+| 2,000 | 0.7161 | −0.0054 | 0.108 | 0.7397 | −0.0019 | 0.541 |
+| 5,000 | 0.7179 | −0.0036 | 0.308 | 0.7381 | −0.0034 | 0.027 |
+| 10,000 | 0.7215 | — | — | 0.7416 | — | — |
+
+The transform is exactly linear in kernel count — 0.93 ms/row at 250 against 37.37 at 10,000,
+measured single-job on an idle box — so 2,000 kernels is a 5x cheaper student for −0.0019 routed.
+
+**And it is worth almost nothing, because the student is not the bill.** On the ScreenType batch
+measured above the student was 30.3 ms/row of a 1,777 ms/row routed request: **1.7%**. Cutting it
+fivefold saves under 2% of a routed request. The same cut is the *entire* saving for a
+student-only system, where 37.4 ms/row becomes 7.3 for −0.0054 of student accuracy — a real trade,
+in the one deployment that has no teacher in it.
+
+So the two levers are not comparable in value: the group count divides the dominant term and the
+kernel count divides a term that rounds to nothing. Note the p-column is a sign test and is
+sensitive to direction rather than size — 5,000 kernels reads as significant at 0.027 while 2,000
+reads as 0.541, on effect sizes of −0.0034 and −0.0019. Neither is a real difference between those
+two rows.
+
+An earlier version of this table was **retracted**: its first run put one worker per (dataset,
+kernel size), so six workers pulled the same cold dataset archive concurrently, 44 of 168 fits died
+on half-written files, and each row averaged over a different subset of datasets while reporting a
+single count. The table above is 28 datasets at every size with no failures.
+`reference/perf_kernels.json`.
+
 #### What this leaves, and what it costs to find out
 
 An ensemble of labellers is the standard escape, and after `scripts/convert_model_weights.sh` there

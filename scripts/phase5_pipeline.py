@@ -64,7 +64,43 @@ MODEL = "tabicl-v2"
 LABELLERS = ("tabicl-v2", "mitra", "tabpfn-v2", "orion-bix")
 
 
-def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict, np.ndarray]:
+def subsample_context(x, y, max_rows: int, seed: int):
+    """Keep at most `max_rows` labelled rows, stratified, deterministically.
+
+    **The training rows are the teacher's context, and the context is what the call costs.**
+    `tabfm_classify` has no trained weights for the task, so every call re-encodes these rows --
+    measured at ~14 ms per training row per group, which is 71-80% of a full-batch teacher call
+    (RESULTS.md, "What routing actually costs"). Halving the context therefore halves the dominant
+    term, and the only question is what it does to accuracy.
+
+    Stratified rather than uniform because the small end of this sweep is small: 25% of Beef's 30
+    rows is 7, and a uniform draw can drop a class entirely, which would look like the context size
+    mattering when what happened is that a label went missing.
+    """
+    y = np.asarray(y)
+    if max_rows >= len(y):
+        return x, y, np.arange(len(y))
+    rng = np.random.default_rng(seed)
+    classes, counts = np.unique(y, return_counts=True)
+    # One row per class first, then the remainder shared out in proportion. Guarantees every class
+    # survives however small the budget, which is the property a uniform draw lacks.
+    take = np.ones(len(classes), dtype=int)
+    spare = max_rows - len(classes)
+    if spare > 0:
+        share = np.floor(spare * counts / counts.sum()).astype(int)
+        take = np.minimum(take + share, counts)
+        while take.sum() < max_rows and (take < counts).any():
+            take[np.argmax(np.where(take < counts, counts - take, -1))] += 1
+    keep = []
+    for c, k in zip(classes, take):
+        idx = np.nonzero(y == c)[0]
+        keep.append(rng.choice(idx, size=min(k, len(idx)), replace=False))
+    keep = np.sort(np.concatenate(keep))
+    return x[keep], y[keep], keep
+
+
+def write_raw_parquet(dataset: str, outdir: Path, normalize: bool,
+                      max_train_rows: int = 0, seed: int = 0) -> tuple[dict, np.ndarray]:
     """Write the dataset as one table of (id, split, label, values DOUBLE[]).
 
     Series normalisation stays a caller-side step (SPEC.md 7) and is therefore done here rather
@@ -76,6 +112,8 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool) -> tuple[dict
 
     x_train, y_train = load(dataset, "train")
     x_test, y_test = load(dataset, "test")
+    if max_train_rows:
+        x_train, y_train, _ = subsample_context(x_train, y_train, max_train_rows, seed)
     if normalize:
         x_train, x_test = normalize_series(x_train), normalize_series(x_test)
 
@@ -698,6 +736,15 @@ def main() -> int:
              "uses that graph. On CPU the patched graph is bit-identical to the shipped one.",
     )
     parser.add_argument(
+        "--max-train-rows",
+        type=int,
+        default=0,
+        help="subsample the labelled context to at most this many rows, stratified (0 = all). "
+             "The context is re-encoded on every classify call and is 71-80%% of a full-batch "
+             "teacher call, so this is the one knob that cuts the dominant term without an "
+             "upstream change.",
+    )
+    parser.add_argument(
         "--per-group-soft",
         action="store_true",
         help="also archive each group's own probabilities, not just their average. One run then "
@@ -728,7 +775,8 @@ def main() -> int:
           f"= {config.features_per_group} features/group")
 
     print(f"\n[1/3] writing raw series -> {workdir}", flush=True)
-    meta, y_test = write_raw_parquet(args.dataset, workdir, config.normalize)
+    meta, y_test = write_raw_parquet(args.dataset, workdir, config.normalize,
+                                     args.max_train_rows, args.seed)
     print(f"      {meta['n_train']} train / {meta['n_test']} test, "
           f"{meta['n_timepoints']} timepoints")
 

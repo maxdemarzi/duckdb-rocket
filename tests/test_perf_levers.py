@@ -223,3 +223,50 @@ def test_report_kernels_is_quiet_when_coverage_is_even(capsys):
     rows = [row(d, k, 0.5) for d in ("A", "B") for k in (250, 10_000)]
     report_kernels(rows, [250, 10_000])
     assert "WARNING" not in capsys.readouterr().out
+
+
+# ------------------------------------------------------------------ shrinking the teacher's context
+
+def test_subsample_context_keeps_every_class_at_any_budget():
+    """A missing class would look like context size mattering when a label simply went absent.
+
+    This is the whole reason the draw is stratified with a floor of one row per class: 25% of
+    Beef's 30 training rows is 7 against 5 classes, and a uniform draw loses one often.
+    """
+    y = np.array(["a"] * 30 + ["b"] * 10 + ["c"] * 2)
+    x = np.arange(len(y) * 4, dtype=float).reshape(len(y), 4)
+    for budget in (3, 4, 7, 21, 41):
+        xs, ys, keep = p5.subsample_context(x, y, budget, seed=0)
+        assert set(np.unique(ys)) == {"a", "b", "c"}, f"a class vanished at budget {budget}"
+        assert len(ys) <= budget
+        assert np.array_equal(xs, x[keep]), "rows and labels came apart"
+        assert np.array_equal(ys, y[keep])
+
+
+def test_subsample_context_is_a_no_op_when_the_budget_covers_everything():
+    y = np.array(["a"] * 5 + ["b"] * 5)
+    x = np.arange(20, dtype=float).reshape(10, 2)
+    for budget in (10, 50):
+        xs, ys, keep = p5.subsample_context(x, y, budget, seed=0)
+        assert np.array_equal(xs, x) and np.array_equal(ys, y)
+        assert np.array_equal(keep, np.arange(10))
+
+
+def test_subsample_context_is_deterministic_and_seed_sensitive():
+    y = np.array(["a"] * 20 + ["b"] * 20)
+    x = np.arange(len(y) * 3, dtype=float).reshape(len(y), 3)
+    a = p5.subsample_context(x, y, 10, seed=0)[2]
+    b = p5.subsample_context(x, y, 10, seed=0)[2]
+    c = p5.subsample_context(x, y, 10, seed=1)[2]
+    assert np.array_equal(a, b), "same seed must give the same context"
+    assert not np.array_equal(a, c), "different seeds should draw differently"
+
+
+def test_subsample_context_respects_a_class_smaller_than_its_share():
+    """A rare class cannot contribute more rows than it has, and the budget goes elsewhere."""
+    y = np.array(["a"] * 97 + ["b"] * 2 + ["c"])
+    x = np.arange(len(y) * 2, dtype=float).reshape(len(y), 2)
+    _, ys, _ = p5.subsample_context(x, y, 50, seed=0)
+    counts = dict(zip(*np.unique(ys, return_counts=True)))
+    assert counts["c"] == 1 and counts["b"] <= 2
+    assert len(ys) == 50, "the budget should still be spent, on the classes that have rows"

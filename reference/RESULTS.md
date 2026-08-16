@@ -1046,6 +1046,57 @@ offering it hosted or embedded to third parties is not — so the ts family is a
 here and never a dependency. `Earthquakes` is unmoved by any of it: all four arms score 0.7482, the
 oracle is 0.7482, and no pair ever disagrees. `reference/error_overlap.json`.
 
+##### The selective rule does not collect it either (2026-08-16)
+
+The obvious next move, and the one the section above points at: an average is the wrong rule for arms
+of unequal competence, and this project already has the right one. Escalate on a decision margin and
+spend the second call only where the first was unsure — except that here the escalation target is a
+different **representation** rather than a bigger model, with routing to `tabpfn-v2` as the control
+spending the identical budget on a different *model*. `scripts/feature_route.py`, no pod, primary
+`tabicl-v2` at 0.7579.
+
+| escalate to | | 10% | 20% | 30% | 50% | 100% |
+|---|---|---|---|---|---|---|
+| `tabicl-v2/ts` | features | +0.0026 | +0.0001 | −0.0056 | −0.0179 | −0.0344 |
+| `tabpfn-v2` | model | +0.0042 | +0.0025 | +0.0006 | +0.0007 | −0.0011 |
+| `orion-bix` | model | −0.0022 | −0.0105 | −0.0125 | −0.0177 | −0.0209 |
+
+**Nothing here is significant** — the best cell is +0.0042 at p=0.27, and every other positive is
+above p=0.5. Against a per-row oracle at 0.8483, i.e. **+0.0904 over the primary**, a margin-routed
+rule collects essentially none of it.
+
+Nor does asking the other question. The curves above only ever consult the primary's own
+confidence — "was I unsure?" — never "is someone else surer?". Picking the arm with the largest
+margin on each row, which is the standard way to ask the second question and needs no budget at all:
+
+    the primary alone                 0.7579
+    surest of the two representations 0.7500  (-0.0079)
+    surest of all four arms           0.7548  (-0.0032, 6 better / 7 worse, p=1.00)
+    best single arm per dataset       0.7686
+    a per-row oracle over the arms    0.8483
+
+**So the headroom is real and confidence cannot reach it.** The mechanism is the overlap number
+itself: a margin identifies rows where the primary is unsure, and at 2.99x correlated failure those
+are disproportionately rows where *every* arm is unsure and wrong. Cutting the excess from 3.74x to
+2.99x shifts those odds without shifting them enough for a confidence signal to exploit — the arms
+disagree on 15% of rows, and knowing *that* they disagree is not knowing *which* is right.
+
+One asymmetry survives and is worth recording, because it is the overlap result showing through:
+at a 10-20% budget, spending it on a different representation beats spending it on a different model
+(+0.0017 and +0.0041 in a like-for-like comparison), and at 50-100% it loses badly (−0.0094,
+−0.0234) as the ts arm's 3.4-point competence gap swamps its diversity. Feature diversity helps
+exactly where you escalate few rows. None of it clears the noise floor.
+
+**What this closes.** The teacher's ceiling is not reachable by more models, by more feature
+families, or by any confidence-based selection among them. Three routes tried, all negative, and the
+oracle says +0.09 is sitting there. Reaching it needs a signal that knows which arm is right, and no
+arm's own confidence is that signal. `reference/feature_route.json`.
+
+This is an analysis and not a serving rule, the same distinction `route_serve.py` exists to make:
+the budget is spent by sorting a whole test set and taking its least-confident fraction, which
+nothing answering a request can do. That makes these numbers the best a perfectly-placed threshold
+would get — which only strengthens a negative result.
+
 Two things about the run itself, since both cost real time. `orion-bix` is published as a torch zip
 whose pickle stream uses an opcode the checkpoint reader does not implement, so `tabfm_download`
 reports success and inference then dies with `unsupported pickle opcode 0x65`;

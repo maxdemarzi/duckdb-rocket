@@ -237,18 +237,29 @@ def group_seconds(workdir: Path) -> tuple[float, float, float] | None:
     return sum(float(r["transform_seconds"]) for r in t), sum(cl), (cl[-1] / med if med else 1.0)
 
 
-def steadiness(workdir: Path) -> tuple[float, float] | None:
-    """(spread of the repeated groups, group 0's warm-up factor) -- a contention detector.
+def steadiness(workdir: Path) -> tuple[float, float, tuple[int, float] | None] | None:
+    """(spread of the repeated groups, group 0's warm-up, the one excursion set aside).
 
-    The 40 groups are the same computation 40 times over, so on an idle box their times are nearly
-    identical: measured at +/-1% across the last five groups of every run here. Background load does
-    not arrive uniformly, so it shows up as scatter. That makes this the check `serve` used to say
-    it could not do -- it printed "this script cannot tell whether it is running clean" while
-    writing the evidence to timings.json.
+    A contention detector. The groups are the same computation over and over, so on an idle box
+    their times are nearly identical and background load shows up as scatter. That makes this the
+    check `serve` used to say it could not do -- it printed "this script cannot tell whether it is
+    running clean" while writing the evidence to timings.json.
 
-    Group 0 is excluded from the spread and reported separately: it carries the ONNX session
-    warm-up and ran 1.2-1.4x the rest on every clean run, so folding it in would make a clean run
-    look contended.
+    Group 0 is excluded and reported separately: it carries the ONNX session warm-up and ran
+    1.2-1.4x the rest on every clean run, so folding it in would make a clean run look contended.
+
+    **The single slowest remaining group is set aside too, and that is what makes this work at
+    G=10.** A plain standard deviation is dominated by one outlier, and there reliably is one: on
+    an idle 16-vCPU pod, Herring ran group 9 at 1.19-1.28x in BOTH arms and ScreenType ran group 1
+    at 1.16-1.17x in both -- reproducible across arms, so systematic rather than load. Divided over
+    39 samples such an excursion adds ~3% and passes; over 9 it adds ~7% and fails. Measured: the
+    same box, minutes apart, read 2.6-3.9% ("idle") at G=40 and 5.1-6.5% ("SOMETHING ELSE WAS
+    RUNNING") at G=10. Since G=10 is now the default, every clean serve would have cried wolf.
+
+    Trimming one point does not blind it, because contention is not one slow group: the archived
+    contended run has four of nine elevated and still reads 28% here. The excursion is returned
+    rather than dropped, so a single stall stays visible -- and `group_seconds` reports the
+    slowest/median ratio independently.
     """
     p = workdir / "timings.json"
     if not p.exists():
@@ -261,8 +272,18 @@ def steadiness(workdir: Path) -> tuple[float, float] | None:
     mean = sum(rest) / len(rest)
     if mean <= 0:
         return None
-    var = sum((x - mean) ** 2 for x in rest) / len(rest)
-    return (var ** 0.5) / mean, cl[0] / mean
+    # The warm-up factor stays against the full remainder, so it means what it has always meant.
+    warm = cl[0] / mean
+    worst = max(range(len(rest)), key=lambda i: rest[i])
+    excursion = (worst + 1, rest[worst] / mean)  # +1: rest[] is offset by the excluded group 0
+    kept = rest[:worst] + rest[worst + 1:]
+    if len(kept) < 2:
+        return None
+    mean = sum(kept) / len(kept)
+    if mean <= 0:
+        return None
+    var = sum((x - mean) ** 2 for x in kept) / len(kept)
+    return (var ** 0.5) / mean, warm, excursion
 
 
 def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
@@ -405,12 +426,15 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int | None, seed: int, 
     if st is None:
         print("\n  No per-group timings, so nothing here says whether the box was contended.")
     else:
-        cv, warm = st
+        cv, warm, exc = st
         verdict = ("the box looks idle" if cv < 0.05 else
                    "SOMETHING ELSE WAS RUNNING; treat these timings as upper bounds")
-        print(f"\n  Per-group spread {cv:.1%} (group 0 warm-up {warm:.2f}x): {verdict}.")
+        where = f", group {exc[0]} set aside at {exc[1]:.2f}x" if exc else ""
+        print(f"\n  Per-group spread {cv:.1%} (group 0 warm-up {warm:.2f}x{where}): {verdict}.")
         print("  The groups are the same computation repeated, so on a quiet box they land within "
-              "a percent or two of each other and background load shows up as scatter.")
+              "a percent or two of each other and background load shows up as scatter. The single "
+              "slowest group is excluded: there is reliably one, it repeats across arms, and over "
+              "the 9 groups a default serve leaves it would dominate the spread on its own.")
     return 0
 
 

@@ -199,27 +199,54 @@ def test_cost_model_warns_when_one_group_stalled(tmp_path, capsys):
     assert "CAUTION" in capsys.readouterr().out
 
 
-def test_steadiness_reads_an_idle_run_as_idle(tmp_path):
-    """The real ScreenType/128 shape: a warm first group, then flat to a percent."""
+def _steadiness_of(tmp_path, cl):
     from route_serve import steadiness
-    cl = [7.661] + [6.2, 6.25, 6.2, 6.21, 6.23, 6.29, 6.24, 6.26, 6.22]
     (tmp_path / "timings.json").write_text(json.dumps(
         [{"grp": g, "transform_seconds": 0.3, "classify_seconds": c} for g, c in enumerate(cl)]),
         encoding="utf-8")
-    cv, warm = steadiness(tmp_path)
+    return steadiness(tmp_path)
+
+
+def test_steadiness_reads_an_idle_run_as_idle(tmp_path):
+    """The real ScreenType/128 shape: a warm first group, then flat to a percent."""
+    cv, warm, _ = _steadiness_of(tmp_path, [7.661] + [6.2, 6.25, 6.2, 6.21, 6.23, 6.29, 6.24,
+                                                      6.26, 6.22])
     assert cv < 0.05, f"an idle run read as contended ({cv:.3f})"
     assert 1.1 < warm < 1.5, "group 0's warm-up should be visible but modest"
 
 
 def test_steadiness_flags_scatter_and_ignores_the_warm_first_group(tmp_path):
     """Background load arrives unevenly, so it shows up as scatter in the repeated groups."""
-    from route_serve import steadiness
-    cl = [7.6] + [6.2, 11.4, 6.3, 9.8, 6.2, 14.1, 6.3, 6.2, 10.9]
-    (tmp_path / "timings.json").write_text(json.dumps(
-        [{"grp": g, "transform_seconds": 0.3, "classify_seconds": c} for g, c in enumerate(cl)]),
-        encoding="utf-8")
-    cv, _ = steadiness(tmp_path)
+    cv, _, _ = _steadiness_of(tmp_path, [7.6] + [6.2, 11.4, 6.3, 9.8, 6.2, 14.1, 6.3, 6.2, 10.9])
     assert cv > 0.05, f"a visibly contended run read as clean ({cv:.3f})"
+    # Contention is not one slow group -- four of these nine are elevated -- so setting the single
+    # worst aside must not rescue it. If trimming could, the detector would be useless.
+    assert cv > 0.20, f"trimming one point defanged the contention check ({cv:.3f})"
+
+
+@pytest.mark.parametrize("name,cl", [
+    # Both arms of both datasets, from an idle 16-vCPU pod (2026-08-16), G=10 as shipped. Every one
+    # of these read "SOMETHING ELSE WAS RUNNING" before the single slowest group was set aside,
+    # while the SAME box minutes later read idle at G=40 -- which is how it is known that the
+    # excursion is systematic and the 40-sample threshold simply does not transfer to 9 samples.
+    ("Herring escalated", [2.114, 1.594, 1.527, 1.541, 1.556, 1.504, 1.531, 1.553, 1.591, 1.791]),
+    ("ScreenType escalated", [6.49, 6.12, 5.21, 5.17, 5.31, 5.54, 5.32, 5.23, 5.22, 5.25]),
+    ("Semg escalated", [8.0, 7.44, 6.15, 6.16, 6.15, 6.06, 6.15, 6.15, 6.14, 6.1]),
+    ("Semg full batch", [26.89, 25.16, 24.51, 24.36, 24.68, 24.45, 24.27, 24.5, 24.48, 24.54]),
+])
+def test_steadiness_does_not_cry_wolf_at_the_default_group_count(tmp_path, name, cl):
+    """G=10 is what serve now runs, and a clean G=10 run must not report contention."""
+    cv, _, exc = _steadiness_of(tmp_path, cl)
+    assert cv < 0.05, f"{name}: a measured idle run read as contended ({cv:.1%})"
+    assert exc is not None and exc[1] > 1.0, f"{name}: the excursion should be reported, not hidden"
+
+
+def test_steadiness_reports_the_group_it_set_aside(tmp_path):
+    """Herring ran group 9 at 1.19x in one arm and 1.28x in the other; trimming must not hide it."""
+    _, _, exc = _steadiness_of(tmp_path, [2.05, 1.53, 1.48, 1.48, 1.51, 1.5, 1.48, 1.51, 1.52,
+                                          1.81, 1.51, 1.51])
+    assert exc[0] == 9, f"named the wrong group: {exc}"
+    assert 1.15 < exc[1] < 1.25, f"the excursion's size is wrong: {exc}"
 
 
 def test_report_kernels_warns_when_rows_cover_different_datasets(capsys):

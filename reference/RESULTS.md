@@ -1102,6 +1102,12 @@ released build** — the community extension is pinned at 2026.08.14 — so this
 the CI artifact from `main` at `e5021d9`, which needs no build: the pipeline uploads a
 `linux_amd64` extension per run, and it matches our DuckDB v1.5.5.
 
+**#36 is ours, and its own comment already said this.** The setting was written here and the code
+carries the sentence "a watchdog on CURRENT resident memory, not an estimate of what the call about
+to run will cost". So the finding below is not a surprise discovered in someone else's work — it is
+the measurement of what that sentence costs in practice, and the first framing of it in this file
+as a limitation found in upstream code was wrong.
+
 Tested where it should matter most. `SemgHandMovementCh2` at `--test-chunk 128` on a 32 GB
 container, the failure that cost several sessions and one withdrawn diagnosis:
 
@@ -1131,6 +1137,12 @@ a too-large call safe, and a ceiling low enough to fire on this dataset would re
 is empty, and a released build that has never heard of the parameter fails the whole script on the
 `SET`. `scripts/pod/max_memory_cpu.sh` runs the arms in the only order that proves anything — the
 no-ceiling arm must still die, or a clean refusal downstream would mean nothing.
+
+The follow-up is upstream as [#39](https://github.com/DataZooDE/anofox-tabfm/pull/39): sample RSS
+either side of the forward pass, record the growth against `(model, device, T, H)`, and refuse the
+next call of a shape already measured to breach the ceiling. No formula and no per-model constant —
+it works because the failure repeats, once per group and once per chunk. It cannot protect the
+first call of a new shape, which is the limit of measuring rather than modelling.
 
 ##### Most of that +0.09 was never there (2026-08-16)
 
@@ -1641,12 +1653,20 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   split cannot separate a real half-point from a lucky one. This is the same gap the noise-floor
   entry names from the other end, and it is why every recent result here is reported as "inside
   what this harness can resolve" rather than as an effect.
-- **The upstream context cache, in the extension.** [PR #38](https://github.com/DataZooDE/anofox-tabfm/pull/38)
-  is merged and exports the split graphs; the handle that would hold a prepared support set across
-  calls is not built, and the community build is pinned at 2026.08.14, before both that and
-  `anofox_tabfm_max_memory`. Worth 4-11x on the escalation case, and blocked on a release rather
-  than on anything here. **Note that a release alone does not deliver it** — #38 changed the
-  exporter, not the runtime; `split_context` does not appear in the built extension at all.
+- **The upstream context cache, in the extension.** Both halves are now written.
+  [PR #38](https://github.com/DataZooDE/anofox-tabfm/pull/38) (merged) exports the split graphs, and
+  [PR #40](https://github.com/DataZooDE/anofox-tabfm/pull/40) (open) is the runtime handle that holds
+  a prepared support set across calls, behind `anofox_tabfm_context_cache`. So this is now blocked on
+  **review, then a release, then a re-export of the published weights** — the pair is discovered on
+  disk, and no published model ships one. Worth 4-11x on the escalation case.
+
+  Two things from building it that change what we should expect here. The win needs the *same*
+  context scored more than once — chunked scoring against a fixed training table — and a single call
+  against a fresh context is *slower*, because it pays for a context it will not reuse. Our per-group
+  arms each carry their own context, so they gain nothing; `--test-chunk` runs are exactly the case
+  that gains. And the fitted values on context rows move, because the query half has no label path;
+  test-row predictions do not. Neither costs us anything (we read test rows), but a like-for-like
+  comparison after a re-export has to compare test rows only.
 - **`tabpfn-v2-5` and `tabpfn-v3`, the paper's own backbones.** Both download and neither loads,
   by two different faults with one remedy: `tabpfn-v2-5`'s checkpoint is published under tensor
   names the exported graph was not built against (missing 248 of 250), and `tabpfn-v3` is a torch

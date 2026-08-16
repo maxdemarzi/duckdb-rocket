@@ -145,9 +145,35 @@ def test_cost_model_recovers_a_known_fixed_and_marginal_cost(tmp_path, capsys):
     big = _timings(tmp_path / "b", (a + b * 64) * g, 2.7, g)
     cost_model(small, big, 14, 64, g, (a + b * 14) * g + 2.2, (a + b * 64) * g + 3.2)
     out = capsys.readouterr().out
-    assert "1.400 s fixed per group + 9.0 ms per query row" in out
+    assert "1.400 s fixed per group per call + 9.0 ms per query row" in out
     assert f"{a * g:.1f} s that escalating cannot avoid" in out
+    # One call per arm at the default chunk, so the chunk-aware fit must reduce to the two-point
+    # one every archived number here was produced by.
+    assert "call(s) for the escalated arm" not in out
     # The claim the whole experiment turns on: a 22% escalation does NOT cost 22%.
+    assert "not 22%" in out
+
+
+def test_cost_model_charges_the_context_pass_once_per_chunk(tmp_path, capsys):
+    """A chunked big arm pays the fixed pass more than once; charging that to rows inflates b.
+
+    --test-chunk below the batch is how a long-series dataset finishes at all, and each chunk is a
+    separate tabfm_classify call with its own pass over the labelled context. Built at the same
+    1.4 s + 9 ms truth as the un-chunked test, but with the 64-row arm split into two 32-row calls,
+    so the fit is checked against a cost that is known by construction. A fit that ignored the
+    count would read a + 1.4/50 s = 37 ms per row -- four times the real marginal cost, on the one
+    number that decides whether routing is worth anything.
+    """
+    from route_serve import cost_model
+    a, b, g, chunk = 1.4, 0.009, 40, 32
+    small = _timings(tmp_path / "s", (a + b * 14) * g, 1.7, g)          # 14 rows -> 1 call
+    big = _timings(tmp_path / "b", (2 * a + b * 64) * g, 2.7, g)        # 64 rows -> 2 calls
+    cost_model(small, big, 14, 64, g, (a + b * 14) * g + 2.2, (2 * a + b * 64) * g + 3.2, chunk)
+    out = capsys.readouterr().out
+    assert "1.400 s fixed per group per call + 9.0 ms per query row" in out
+    assert "1 call(s) for the escalated arm and 2 for the full batch" in out
+    # The full batch now pays 2 x 1.4 x 40 = 112 s of context against 0.009 x 64 x 40 = 23 s of
+    # rows, so escalating 14 of 64 costs even more of teacher-everywhere than it did un-chunked.
     assert "not 22%" in out
 
 
@@ -294,6 +320,27 @@ def test_serve_rejects_a_group_count_the_deployment_cannot_support(tmp_path):
     with pytest.raises(ValueError, match="kernels per group"):
         serve("GunPoint", tmp_path, batch=8, n_groups=40, seed=0, shell=Path("duckdb"),
               workdir=tmp_path / "w")
+
+
+def test_a_crashed_teacher_does_not_answer_from_the_last_runs_predictions(tmp_path):
+    """The workdir is reused across arms, and the failure check is "no predictions.json".
+
+    A G=10 arm, then a G=40 arm, then a --test-chunk retry ladder all write to the same directory.
+    If the second run dies, the first run's file is still sitting there and every guard downstream
+    -- the id recovery, the bank fingerprint -- passes, because the predictions are real. They are
+    just answers to a different question. `sys.executable` stands in for the shell here: it is
+    handed `-c ".read <path>"`, raises SyntaxError and exits non-zero without writing anything,
+    which is precisely the shape of the crash being guarded against.
+    """
+    from route_serve import teacher_predict
+    stale = [{"id": 50 + k, "yhat": "1"} for k in range(4)]
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "predictions.json").write_text(json.dumps(stale), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="no predictions"):
+        teacher_predict("GunPoint", np.arange(4), tmp_path, n_groups=2, num_kernels=500, seed=0,
+                        shell=Path(sys.executable))
+    assert not (tmp_path / "predictions.json").exists(), "the stale file survived a failed run"
+    assert (tmp_path / "crash.log").exists(), "a crash should leave the shell's output on disk"
 
 
 def test_the_serving_default_is_ten_groups_not_forty():

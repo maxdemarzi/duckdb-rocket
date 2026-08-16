@@ -139,7 +139,8 @@ def student_predict(meta: dict, art: Path, x: np.ndarray):
 
 def teacher_predict(dataset: str, idx: np.ndarray, workdir: Path, n_groups: int,
                     num_kernels: int, seed: int, shell: Path,
-                    memory_limit: str | None = None) -> np.ndarray:
+                    memory_limit: str | None = None,
+                    test_chunk: int = 128) -> np.ndarray:
     """The teacher on the escalated rows only, through the real extension.
 
     Built as a one-off dataset whose test split IS the escalated batch, so `build_sql` produces
@@ -173,14 +174,26 @@ def teacher_predict(dataset: str, idx: np.ndarray, workdir: Path, n_groups: int,
     # Not a hardcoded "8GB", which is what this was and which is an order of magnitude under
     # phase5's own cgroup-aware default (44GB on the dev box, ~87GB on the 124GB pod). Worth
     # matching the rest of the codebase regardless -- but note what it did NOT fix, below.
+    # test_chunk, not a hardcoded 128. `tabfm_classify` allocates outside DuckDB's buffer manager,
+    # so a memory_limit cannot contain it and the only thing that bounds a call's peak is how many
+    # rows it is handed (duckdb_rocket/budget.py says exactly this). It is a flag because the
+    # datasets that need it are the long-series ones, and because lowering it is not free: each
+    # chunk is a separate call and pays the context pass again.
     sql = p5.build_sql(cfg, meta, workdir, 4, memory_limit or p5.default_memory_limit(),
-                       workdir, 128, 4, device="cpu")
+                       workdir, test_chunk, 4, device="cpu")
     (workdir / "serve.sql").write_text(sql, encoding="utf-8")
+    # Delete last run's output before producing this one. The workdir is reused -- by the G=10 and
+    # G=40 arms of a comparison, by a --test-chunk retry ladder after a crash -- and the failure
+    # check below is `predictions.json does not exist`. A stale file turns a crashed run into a
+    # silently successful one answering with a DIFFERENT configuration's predictions, which is the
+    # one kind of wrong this pipeline is built to refuse.
+    pred_path = workdir / "predictions.json"
+    pred_path.unlink(missing_ok=True)
+    (workdir / "crash.log").unlink(missing_ok=True)
     # encoding is explicit: DuckDB's box-drawing output is UTF-8 and Windows would otherwise decode
     # it as cp1252 and raise mid-run, after the work has been done.
     r = subprocess.run([str(shell), "-c", f".read {(workdir / 'serve.sql').as_posix()}"],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
-    pred_path = workdir / "predictions.json"
     if not pred_path.exists():
         # The exit code, the group it reached, and the whole stdout on disk -- none of which this
         # reported before, which is why an 8GB memory limit got diagnosed as the cause of a failure
@@ -253,7 +266,7 @@ def steadiness(workdir: Path) -> tuple[float, float] | None:
 
 
 def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
-               wall_small: float, wall_big: float) -> None:
+               wall_small: float, wall_big: float, test_chunk: int = 128) -> None:
     """Split the teacher's cost into the part routing can avoid and the part it cannot.
 
     Two batch sizes of the same dataset give two points on `seconds_per_group = a + b*n`, and the
@@ -272,15 +285,30 @@ def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
     (tr_s, cl_s, sp_s), (tr_b, cl_b, sp_b) = a_small, a_big
     # Per group, from the totals: sum / n_groups.
     per_s, per_b = cl_s / n_groups, cl_b / n_groups
-    b = (per_b - per_s) / (n_big - n_small)
-    a = per_s - b * n_small
+    # The fixed pass is paid per CALL, and a chunked batch is several calls. With chunk >= batch
+    # both arms are one call and this reduces to (per_b - per_s) / (n_big - n_small), the two-point
+    # fit every archived number here used. It stops being that the moment --test-chunk drops below
+    # the batch to keep a long-series dataset alive: the big arm then pays the context pass more
+    # often than the small one, and a fit that ignored the count would charge the difference to the
+    # per-row term -- inflating exactly the number that decides whether routing is worth anything.
+    c_s = -(-n_small // test_chunk) if test_chunk else 1
+    c_b = -(-n_big // test_chunk) if test_chunk else 1
+    den = c_s * n_big - c_b * n_small
+    if den == 0:
+        print("  (the two arms do not separate a fixed and a marginal cost at this chunk size)")
+        return
+    a = (per_s * n_big - per_b * n_small) / den
+    b = (per_s - c_s * a) / n_small if n_small else 0.0
     if a <= 0 or b <= 0:
         print("  (the two batch sizes do not separate a fixed and a marginal cost here)")
         return
     fixed, marginal = a * n_groups, b * n_groups
     print(f"\n  cost of a classify call, fitted on {n_small} and {n_big} rows:")
-    print(f"    {a:.3f} s fixed per group + {b * 1000:.1f} ms per query row")
-    print(f"    over {n_groups} groups: {fixed:.1f} s that escalating cannot avoid, "
+    print(f"    {a:.3f} s fixed per group per call + {b * 1000:.1f} ms per query row")
+    if c_s > 1 or c_b > 1:
+        print(f"    at --test-chunk {test_chunk} that is {c_s} call(s) for the escalated arm and "
+              f"{c_b} for the full batch, and the fixed pass is paid by each")
+    print(f"    over {n_groups} groups: {c_s * fixed:.1f} s that escalating cannot avoid, "
           f"+ {marginal * 1000:.0f} ms per escalated row")
     print(f"    startup and transform, outside the model: {wall_small - cl_s - tr_s:.1f} s of the "
           f"{wall_small:.1f} s call ({tr_s:.1f} s of it the ROCKET transform)")
@@ -288,14 +316,15 @@ def cost_model(small: Path, big: Path, n_small: int, n_big: int, n_groups: int,
         print(f"    CAUTION: one group ran {max(sp_s, sp_b):.1f}x the median, so the totals these "
               f"are fitted on are not a steady rate")
     # The number that decides whether routing is worth anything on this shape of batch.
-    print(f"    so escalating {n_small}/{n_big} rows costs "
-          f"{(fixed + marginal * n_small) / (fixed + marginal * n_big):.0%} of teacher-everywhere, "
-          f"not {n_small / n_big:.0%}: the fixed pass is {fixed / (fixed + marginal * n_big):.0%} "
-          f"of the full-batch cost and routing does not touch it")
+    small_cost, big_cost = c_s * fixed + marginal * n_small, c_b * fixed + marginal * n_big
+    print(f"    so escalating {n_small}/{n_big} rows costs {small_cost / big_cost:.0%} of "
+          f"teacher-everywhere, not {n_small / n_big:.0%}: the fixed pass is "
+          f"{c_b * fixed / big_cost:.0%} of the full-batch cost and routing does not touch it")
 
 
 def serve(dataset: str, art: Path, batch: int, n_groups: int | None, seed: int, shell: Path,
-          workdir: Path, compare: bool = False, memory_limit: str | None = None) -> int:
+          workdir: Path, compare: bool = False, memory_limit: str | None = None,
+          test_chunk: int = 128) -> int:
     meta = json.loads((art / "meta.json").read_text(encoding="utf-8"))
     # The group count is part of what was deployed, so it is read rather than re-chosen. An
     # override is still allowed -- it is how the group sweep was run -- but it has to keep
@@ -330,7 +359,7 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int | None, seed: int, 
     if len(idx):
         t0 = time.perf_counter()
         tpred = teacher_predict(dataset, idx, workdir, n_groups, meta["n_kernels"], seed, shell,
-                                memory_limit)
+                                memory_limit, test_chunk)
         t_teacher = time.perf_counter() - t0
         final[idx] = tpred
         print(f"  teacher answered {len(idx)} rows in {t_teacher:.1f} s "
@@ -351,7 +380,7 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int | None, seed: int, 
     if compare and len(idx):
         t0 = time.perf_counter()
         tall = teacher_predict(dataset, np.arange(take), workdir / "all", n_groups,
-                               meta["n_kernels"], seed, shell, memory_limit)
+                               meta["n_kernels"], seed, shell, memory_limit, test_chunk)
         t_all = time.perf_counter() - t0
         acc_teacher = float((np.asarray(tall, dtype=object) == truth).mean())
         print(f"  teacher  {acc_teacher:.4f}   {t_all:.1f} s   (every row, same box, same moment)")
@@ -364,7 +393,8 @@ def serve(dataset: str, art: Path, batch: int, n_groups: int | None, seed: int, 
         print(f"  the teacher's per-row cost falls {(t_teacher / len(idx)) / (t_all / take):.1f}x "
               f"going from {len(idx)} rows to {take} -- its context pass is fixed per call, so a "
               f"small escalation batch amortises it over fewer rows")
-        cost_model(workdir, workdir / "all", len(idx), take, n_groups, t_teacher, t_all)
+        cost_model(workdir, workdir / "all", len(idx), take, n_groups, t_teacher, t_all,
+                   test_chunk)
     elif len(idx):
         print(f"  the escalated {esc.mean():.0%} of rows took {t_teacher / total:.0%} of the time")
         print("  (--compare runs the teacher on every row too, which is the only honest way to "
@@ -415,6 +445,12 @@ def main() -> int:
             s.add_argument("--memory-limit",
                            help="DuckDB memory_limit for the teacher call, e.g. '20GB'. Defaults "
                                 "to phase5's own cgroup-aware budget.")
+            s.add_argument("--test-chunk", type=int, default=128,
+                           help="rows per tabfm_classify call (default 128, i.e. one call for a "
+                                "default batch). This, not --memory-limit, is what bounds a "
+                                "call's peak -- the model allocates outside DuckDB's buffer "
+                                "manager. Lowering it is how a long-series dataset finishes at "
+                                "all, and it costs the context pass once per chunk.")
     args = ap.parse_args()
     art = args.artifacts or (ROOT / "data" / "serve" / args.dataset)
 
@@ -424,7 +460,7 @@ def main() -> int:
         return 0
     return serve(args.dataset, art, args.batch, args.n_groups, args.seed, args.shell,
                  ROOT / "data" / "serve" / args.dataset / "work", args.compare,
-                 args.memory_limit)
+                 args.memory_limit, args.test_chunk)
 
 
 if __name__ == "__main__":

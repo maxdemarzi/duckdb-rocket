@@ -151,8 +151,11 @@ log "run both arms"
 # Fail loudly if the extension did not load: without this the arms all "succeed"
 # in 0.000s with the function missing, and the timing table reads 1.00x -- a
 # convincing-looking null result produced by nothing having run.
-"$DUCKDB" -unsigned -c "LOAD '${EXT}'; SELECT count(*) FROM duckdb_settings() WHERE name = 'anofox_tabfm_context_cache';" \
-  2>&1 | grep -qE "^\| *1 *\||^1$" || {
+# -csv -noheader, so the answer is the bare number: the default box output draws
+# with U+2502, and a grep written for ASCII pipes fails on a perfectly good load.
+"$DUCKDB" -unsigned -csv -noheader \
+  -c "LOAD '${EXT}'; SELECT count(*) FROM duckdb_settings() WHERE name = 'anofox_tabfm_context_cache';" \
+  2>&1 | grep -qx "1" || {
     echo "FATAL: the extension did not load, or it has no anofox_tabfm_context_cache setting:"
     "$DUCKDB" -unsigned -c "LOAD '${EXT}';" 2>&1 | head -5
     exit 1

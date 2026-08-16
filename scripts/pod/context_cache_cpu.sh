@@ -148,7 +148,20 @@ PY
 wc -l "$OUT/bench.sql"
 
 log "run both arms"
-"$DUCKDB" < "$OUT/bench.sql" > "$OUT/bench.out" 2>&1
+# Fail loudly if the extension did not load: without this the arms all "succeed"
+# in 0.000s with the function missing, and the timing table reads 1.00x -- a
+# convincing-looking null result produced by nothing having run.
+"$DUCKDB" -unsigned -c "LOAD '${EXT}'; SELECT count(*) FROM duckdb_settings() WHERE name = 'anofox_tabfm_context_cache';" \
+  2>&1 | grep -qE "^\| *1 *\||^1$" || {
+    echo "FATAL: the extension did not load, or it has no anofox_tabfm_context_cache setting:"
+    "$DUCKDB" -unsigned -c "LOAD '${EXT}';" 2>&1 | head -5
+    exit 1
+}
+echo "  extension loads and carries the setting"
+# -unsigned: the #40 build is a CI artifact, not a signed community release, and
+# without this the LOAD fails and every later statement reports the function as
+# missing rather than the extension as unloadable.
+"$DUCKDB" -unsigned < "$OUT/bench.sql" > "$OUT/bench.out" 2>&1
 echo "  rc=$?"
 
 log "what came out"

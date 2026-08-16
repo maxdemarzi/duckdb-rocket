@@ -6,16 +6,18 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 10,
       "accuracy": {
         "orion-bix": 0.93,
         "tabicl-v2": 0.94,
+        "tabicl-v2/ts": 0.89,
         "tabpfn-v2": 0.93
       },
-      "oracle": 0.96,
-      "none_right": 0.040000000000000036,
+      "oracle": 0.98,
+      "none_right": 0.020000000000000018,
       "mean_proba_ensemble": 0.95,
       "best_single": 0.94,
       "pairs": [
@@ -36,6 +38,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.93,
+            0.89
+          ],
+          "both_wrong": 0.02,
+          "both_wrong_if_independent": 0.007700000000000001,
+          "excess": 2.597402597402597,
+          "disagree": 0.15
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -50,6 +66,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.94,
+            0.89
+          ],
+          "both_wrong": 0.03,
+          "both_wrong_if_independent": 0.0066,
+          "excess": 4.545454545454545,
+          "disagree": 0.13
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -60,6 +90,20 @@
           "both_wrong_if_independent": 0.004200000000000001,
           "excess": 9.523809523809522,
           "disagree": 0.05
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.89,
+            0.93
+          ],
+          "both_wrong": 0.02,
+          "both_wrong_if_independent": 0.007700000000000001,
+          "excess": 2.597402597402597,
+          "disagree": 0.16
         }
       ]
     },
@@ -69,17 +113,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 3,
       "accuracy": {
         "orion-bix": 0.8857142857142857,
         "tabicl-v2": 0.8628571428571429,
+        "tabicl-v2/ts": 0.7428571428571429,
         "tabpfn-v2": 0.8571428571428571
       },
-      "oracle": 0.9314285714285714,
-      "none_right": 0.06857142857142862,
-      "mean_proba_ensemble": 0.8914285714285715,
+      "oracle": 0.9428571428571428,
+      "none_right": 0.05714285714285716,
+      "mean_proba_ensemble": 0.8685714285714285,
       "best_single": 0.8857142857142857,
       "pairs": [
         {
@@ -99,6 +145,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8857142857142857,
+            0.7428571428571429
+          ],
+          "both_wrong": 0.07428571428571429,
+          "both_wrong_if_independent": 0.02938775510204081,
+          "excess": 2.527777777777778,
+          "disagree": 0.22857142857142856
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -113,6 +173,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8628571428571429,
+            0.7428571428571429
+          ],
+          "both_wrong": 0.08571428571428572,
+          "both_wrong_if_independent": 0.03526530612244898,
+          "excess": 2.430555555555556,
+          "disagree": 0.22857142857142856
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -123,6 +197,20 @@
           "both_wrong_if_independent": 0.019591836734693877,
           "excess": 4.083333333333334,
           "disagree": 0.13714285714285715
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7428571428571429,
+            0.8571428571428571
+          ],
+          "both_wrong": 0.10857142857142857,
+          "both_wrong_if_independent": 0.03673469387755102,
+          "excess": 2.9555555555555557,
+          "disagree": 0.2
         }
       ]
     },
@@ -132,17 +220,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 2,
       "accuracy": {
         "orion-bix": 0.78,
         "tabicl-v2": 0.784,
+        "tabicl-v2/ts": 0.792,
         "tabpfn-v2": 0.82
       },
-      "oracle": 0.88,
-      "none_right": 0.12,
-      "mean_proba_ensemble": 0.812,
+      "oracle": 0.928,
+      "none_right": 0.07199999999999995,
+      "mean_proba_ensemble": 0.832,
       "best_single": 0.82,
       "pairs": [
         {
@@ -162,6 +252,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.78,
+            0.792
+          ],
+          "both_wrong": 0.096,
+          "both_wrong_if_independent": 0.045759999999999995,
+          "excess": 2.0979020979020984,
+          "disagree": 0.236
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -176,6 +280,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.784,
+            0.792
+          ],
+          "both_wrong": 0.104,
+          "both_wrong_if_independent": 0.044927999999999996,
+          "excess": 2.314814814814815,
+          "disagree": 0.216
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -186,6 +304,20 @@
           "both_wrong_if_independent": 0.03888,
           "excess": 3.6008230452674903,
           "disagree": 0.116
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.792,
+            0.82
+          ],
+          "both_wrong": 0.092,
+          "both_wrong_if_independent": 0.037439999999999994,
+          "excess": 2.4572649572649574,
+          "disagree": 0.204
         }
       ]
     },
@@ -195,17 +327,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 3,
       "accuracy": {
         "orion-bix": 0.7338129496402878,
         "tabicl-v2": 0.7410071942446043,
+        "tabicl-v2/ts": 0.7194244604316546,
         "tabpfn-v2": 0.7482014388489209
       },
-      "oracle": 0.8273381294964028,
-      "none_right": 0.17266187050359716,
-      "mean_proba_ensemble": 0.7482014388489209,
+      "oracle": 0.841726618705036,
+      "none_right": 0.15827338129496404,
+      "mean_proba_ensemble": 0.7338129496402878,
       "best_single": 0.7482014388489209,
       "pairs": [
         {
@@ -225,6 +359,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7338129496402878,
+            0.7194244604316546
+          ],
+          "both_wrong": 0.19424460431654678,
+          "both_wrong_if_independent": 0.07468557528078257,
+          "excess": 2.600831600831601,
+          "disagree": 0.15827338129496402
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -239,6 +387,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7410071942446043,
+            0.7194244604316546
+          ],
+          "both_wrong": 0.23741007194244604,
+          "both_wrong_if_independent": 0.07266704621913979,
+          "excess": 3.2670940170940175,
+          "disagree": 0.06474820143884892
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -249,6 +411,20 @@
           "both_wrong_if_independent": 0.06521401583768956,
           "excess": 2.978571428571429,
           "disagree": 0.1223021582733813
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7194244604316546,
+            0.7482014388489209
+          ],
+          "both_wrong": 0.2014388489208633,
+          "both_wrong_if_independent": 0.07064851715749701,
+          "excess": 2.851282051282052,
+          "disagree": 0.12949640287769784
         }
       ]
     },
@@ -258,17 +434,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 6,
       "accuracy": {
         "orion-bix": 0.7050359712230215,
         "tabicl-v2": 0.7194244604316546,
+        "tabicl-v2/ts": 0.7050359712230215,
         "tabpfn-v2": 0.7266187050359713
       },
-      "oracle": 0.7985611510791367,
-      "none_right": 0.20143884892086328,
-      "mean_proba_ensemble": 0.7122302158273381,
+      "oracle": 0.8273381294964028,
+      "none_right": 0.17266187050359716,
+      "mean_proba_ensemble": 0.7050359712230215,
       "best_single": 0.7266187050359713,
       "pairs": [
         {
@@ -288,6 +466,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7050359712230215,
+            0.7050359712230215
+          ],
+          "both_wrong": 0.2014388489208633,
+          "both_wrong_if_independent": 0.08700377827234615,
+          "excess": 2.315288518738846,
+          "disagree": 0.2158273381294964
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -302,6 +494,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7194244604316546,
+            0.7050359712230215
+          ],
+          "both_wrong": 0.2302158273381295,
+          "both_wrong_if_independent": 0.08275969152735364,
+          "excess": 2.781738586616636,
+          "disagree": 0.1510791366906475
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -312,6 +518,20 @@
           "both_wrong_if_independent": 0.07670410434242533,
           "excess": 2.907557354925776,
           "disagree": 0.11510791366906475
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7050359712230215,
+            0.7266187050359713
+          ],
+          "both_wrong": 0.2014388489208633,
+          "both_wrong_if_independent": 0.08063764815485741,
+          "excess": 2.4980744544287545,
+          "disagree": 0.18705035971223022
         }
       ]
     },
@@ -321,12 +541,14 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 2,
       "accuracy": {
         "orion-bix": 0.7482014388489209,
         "tabicl-v2": 0.7482014388489209,
+        "tabicl-v2/ts": 0.7482014388489209,
         "tabpfn-v2": 0.7482014388489209
       },
       "oracle": 0.7482014388489209,
@@ -351,6 +573,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7482014388489209,
+            0.7482014388489209
+          ],
+          "both_wrong": 0.2517985611510791,
+          "both_wrong_if_independent": 0.06340251539775374,
+          "excess": 3.971428571428571,
+          "disagree": 0.0
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -365,6 +601,34 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7482014388489209,
+            0.7482014388489209
+          ],
+          "both_wrong": 0.2517985611510791,
+          "both_wrong_if_independent": 0.06340251539775374,
+          "excess": 3.971428571428571,
+          "disagree": 0.0
+        },
+        {
+          "models": [
+            "tabicl-v2",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.7482014388489209,
+            0.7482014388489209
+          ],
+          "both_wrong": 0.2517985611510791,
+          "both_wrong_if_independent": 0.06340251539775374,
+          "excess": 3.971428571428571,
+          "disagree": 0.0
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -384,17 +648,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 2,
       "accuracy": {
         "orion-bix": 0.6952380952380952,
         "tabicl-v2": 0.780952380952381,
+        "tabicl-v2/ts": 0.6666666666666666,
         "tabpfn-v2": 0.7333333333333333
       },
-      "oracle": 0.8476190476190476,
-      "none_right": 0.1523809523809524,
-      "mean_proba_ensemble": 0.7333333333333333,
+      "oracle": 0.8761904761904762,
+      "none_right": 0.12380952380952381,
+      "mean_proba_ensemble": 0.7238095238095238,
       "best_single": 0.780952380952381,
       "pairs": [
         {
@@ -414,6 +680,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.6952380952380952,
+            0.6666666666666666
+          ],
+          "both_wrong": 0.20952380952380953,
+          "both_wrong_if_independent": 0.10158730158730159,
+          "excess": 2.0625,
+          "disagree": 0.21904761904761905
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -428,6 +708,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.780952380952381,
+            0.6666666666666666
+          ],
+          "both_wrong": 0.14285714285714285,
+          "both_wrong_if_independent": 0.073015873015873,
+          "excess": 1.956521739130435,
+          "disagree": 0.26666666666666666
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -438,6 +732,20 @@
           "both_wrong_if_independent": 0.05841269841269841,
           "excess": 2.9347826086956523,
           "disagree": 0.14285714285714285
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.6666666666666666,
+            0.7333333333333333
+          ],
+          "both_wrong": 0.19047619047619047,
+          "both_wrong_if_independent": 0.08888888888888888,
+          "excess": 2.142857142857143,
+          "disagree": 0.21904761904761905
         }
       ]
     },
@@ -447,17 +755,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 5,
       "accuracy": {
         "orion-bix": 0.5551948051948052,
         "tabicl-v2": 0.5551948051948052,
+        "tabicl-v2/ts": 0.4772727272727273,
         "tabpfn-v2": 0.551948051948052
       },
-      "oracle": 0.6558441558441559,
-      "none_right": 0.3441558441558441,
-      "mean_proba_ensemble": 0.5681818181818182,
+      "oracle": 0.6915584415584416,
+      "none_right": 0.3084415584415584,
+      "mean_proba_ensemble": 0.5811688311688312,
       "best_single": 0.5551948051948052,
       "pairs": [
         {
@@ -477,6 +787,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.5551948051948052,
+            0.4772727272727273
+          ],
+          "both_wrong": 0.36363636363636365,
+          "both_wrong_if_independent": 0.23251180637544275,
+          "excess": 1.5639479530307838,
+          "disagree": 0.36038961038961037
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -491,6 +815,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.5551948051948052,
+            0.4772727272727273
+          ],
+          "both_wrong": 0.37987012987012986,
+          "both_wrong_if_independent": 0.23251180637544275,
+          "excess": 1.633767058076801,
+          "disagree": 0.3344155844155844
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -501,6 +839,20 @@
           "both_wrong_if_independent": 0.19929583403609377,
           "excess": 1.8734793187347931,
           "disagree": 0.22402597402597402
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.4772727272727273,
+            0.551948051948052
+          ],
+          "both_wrong": 0.37012987012987014,
+          "both_wrong_if_independent": 0.23420897284533645,
+          "excess": 1.5803402646502838,
+          "disagree": 0.36038961038961037
         }
       ]
     },
@@ -510,16 +862,18 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 2,
       "accuracy": {
         "orion-bix": 0.625,
         "tabicl-v2": 0.640625,
+        "tabicl-v2/ts": 0.609375,
         "tabpfn-v2": 0.65625
       },
-      "oracle": 0.75,
-      "none_right": 0.25,
+      "oracle": 0.78125,
+      "none_right": 0.21875,
       "mean_proba_ensemble": 0.625,
       "best_single": 0.65625,
       "pairs": [
@@ -540,6 +894,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.625,
+            0.609375
+          ],
+          "both_wrong": 0.296875,
+          "both_wrong_if_independent": 0.146484375,
+          "excess": 2.026666666666667,
+          "disagree": 0.171875
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -554,6 +922,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.640625,
+            0.609375
+          ],
+          "both_wrong": 0.296875,
+          "both_wrong_if_independent": 0.140380859375,
+          "excess": 2.114782608695652,
+          "disagree": 0.15625
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -564,6 +946,20 @@
           "both_wrong_if_independent": 0.12353515625,
           "excess": 2.5296442687747036,
           "disagree": 0.078125
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.609375,
+            0.65625
+          ],
+          "both_wrong": 0.265625,
+          "both_wrong_if_independent": 0.13427734375,
+          "excess": 1.9781818181818183,
+          "disagree": 0.203125
         }
       ]
     },
@@ -573,18 +969,20 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 2,
       "accuracy": {
         "orion-bix": 0.8032786885245902,
         "tabicl-v2": 0.8524590163934426,
+        "tabicl-v2/ts": 0.8688524590163934,
         "tabpfn-v2": 0.8360655737704918
       },
-      "oracle": 0.9016393442622951,
-      "none_right": 0.09836065573770492,
-      "mean_proba_ensemble": 0.8360655737704918,
-      "best_single": 0.8524590163934426,
+      "oracle": 0.9344262295081968,
+      "none_right": 0.06557377049180324,
+      "mean_proba_ensemble": 0.8688524590163934,
+      "best_single": 0.8688524590163934,
       "pairs": [
         {
           "models": [
@@ -603,6 +1001,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8032786885245902,
+            0.8688524590163934
+          ],
+          "both_wrong": 0.08196721311475409,
+          "both_wrong_if_independent": 0.025799516259070142,
+          "excess": 3.177083333333333,
+          "disagree": 0.16393442622950818
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -617,6 +1029,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8524590163934426,
+            0.8688524590163934
+          ],
+          "both_wrong": 0.06557377049180328,
+          "both_wrong_if_independent": 0.019349637194302608,
+          "excess": 3.388888888888889,
+          "disagree": 0.14754098360655737
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -627,6 +1053,20 @@
           "both_wrong_if_independent": 0.024187046492878256,
           "excess": 4.066666666666667,
           "disagree": 0.11475409836065574
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8688524590163934,
+            0.8360655737704918
+          ],
+          "both_wrong": 0.08196721311475409,
+          "both_wrong_if_independent": 0.021499596882558453,
+          "excess": 3.8124999999999996,
+          "disagree": 0.13114754098360656
         }
       ]
     },
@@ -636,17 +1076,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 7,
       "accuracy": {
         "orion-bix": 0.7397260273972602,
         "tabicl-v2": 0.7671232876712328,
+        "tabicl-v2/ts": 0.726027397260274,
         "tabpfn-v2": 0.7945205479452054
       },
-      "oracle": 0.8493150684931506,
-      "none_right": 0.15068493150684936,
-      "mean_proba_ensemble": 0.7534246575342466,
+      "oracle": 0.8904109589041096,
+      "none_right": 0.1095890410958904,
+      "mean_proba_ensemble": 0.7945205479452054,
       "best_single": 0.7945205479452054,
       "pairs": [
         {
@@ -666,6 +1108,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7397260273972602,
+            0.726027397260274
+          ],
+          "both_wrong": 0.1643835616438356,
+          "both_wrong_if_independent": 0.07130793769938074,
+          "excess": 2.305263157894737,
+          "disagree": 0.2328767123287671
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -680,6 +1136,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7671232876712328,
+            0.726027397260274
+          ],
+          "both_wrong": 0.1506849315068493,
+          "both_wrong_if_independent": 0.06380183899418276,
+          "excess": 2.361764705882353,
+          "disagree": 0.2328767123287671
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -690,6 +1160,20 @@
           "both_wrong_if_independent": 0.04785137924563707,
           "excess": 3.1490196078431376,
           "disagree": 0.136986301369863
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.726027397260274,
+            0.7945205479452054
+          ],
+          "both_wrong": 0.136986301369863,
+          "both_wrong_if_independent": 0.05629574028898479,
+          "excess": 2.4333333333333336,
+          "disagree": 0.2191780821917808
         }
       ]
     },
@@ -699,17 +1183,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 3,
       "accuracy": {
         "orion-bix": 0.538961038961039,
         "tabicl-v2": 0.6168831168831169,
+        "tabicl-v2/ts": 0.6038961038961039,
         "tabpfn-v2": 0.6103896103896104
       },
-      "oracle": 0.7012987012987013,
-      "none_right": 0.2987012987012987,
-      "mean_proba_ensemble": 0.5714285714285714,
+      "oracle": 0.7142857142857143,
+      "none_right": 0.2857142857142857,
+      "mean_proba_ensemble": 0.5909090909090909,
       "best_single": 0.6168831168831169,
       "pairs": [
         {
@@ -729,6 +1215,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.538961038961039,
+            0.6038961038961039
+          ],
+          "both_wrong": 0.3116883116883117,
+          "both_wrong_if_independent": 0.18261932872322484,
+          "excess": 1.7067651812514428,
+          "disagree": 0.2727272727272727
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -743,6 +1243,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.6168831168831169,
+            0.6038961038961039
+          ],
+          "both_wrong": 0.35714285714285715,
+          "both_wrong_if_independent": 0.1517540900657784,
+          "excess": 2.353431508752431,
+          "disagree": 0.07142857142857142
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -753,6 +1267,20 @@
           "both_wrong_if_independent": 0.14926631809748694,
           "excess": 2.131638418079096,
           "disagree": 0.14935064935064934
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.6038961038961039,
+            0.6103896103896104
+          ],
+          "both_wrong": 0.3181818181818182,
+          "both_wrong_if_independent": 0.15432619328723227,
+          "excess": 2.0617486338797812,
+          "disagree": 0.16883116883116883
         }
       ]
     },
@@ -762,17 +1290,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 6,
       "accuracy": {
         "orion-bix": 0.6038961038961039,
         "tabicl-v2": 0.6103896103896104,
+        "tabicl-v2/ts": 0.6038961038961039,
         "tabpfn-v2": 0.5909090909090909
       },
       "oracle": 0.7272727272727273,
       "none_right": 0.2727272727272727,
-      "mean_proba_ensemble": 0.6103896103896104,
+      "mean_proba_ensemble": 0.6233766233766234,
       "best_single": 0.6103896103896104,
       "pairs": [
         {
@@ -792,6 +1322,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.6038961038961039,
+            0.6038961038961039
+          ],
+          "both_wrong": 0.3246753246753247,
+          "both_wrong_if_independent": 0.15689829650868614,
+          "excess": 2.0693361999462505,
+          "disagree": 0.2012987012987013
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -806,6 +1350,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.6103896103896104,
+            0.6038961038961039
+          ],
+          "both_wrong": 0.34415584415584416,
+          "both_wrong_if_independent": 0.15432619328723227,
+          "excess": 2.230054644808743,
+          "disagree": 0.13636363636363635
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -816,6 +1374,20 @@
           "both_wrong_if_independent": 0.1593860684769776,
           "excess": 2.0370370370370368,
           "disagree": 0.16883116883116883
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.6038961038961039,
+            0.5909090909090909
+          ],
+          "both_wrong": 0.34415584415584416,
+          "both_wrong_if_independent": 0.1620425029515939,
+          "excess": 2.123861566484517,
+          "disagree": 0.16883116883116883
         }
       ]
     },
@@ -825,16 +1397,18 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 3,
       "accuracy": {
         "orion-bix": 0.8097560975609757,
         "tabicl-v2": 0.8292682926829268,
+        "tabicl-v2/ts": 0.8341463414634146,
         "tabpfn-v2": 0.8585365853658536
       },
-      "oracle": 0.8585365853658536,
-      "none_right": 0.14146341463414636,
+      "oracle": 0.8634146341463415,
+      "none_right": 0.13658536585365855,
       "mean_proba_ensemble": 0.8341463414634146,
       "best_single": 0.8585365853658536,
       "pairs": [
@@ -855,6 +1429,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8097560975609757,
+            0.8341463414634146
+          ],
+          "both_wrong": 0.15609756097560976,
+          "both_wrong_if_independent": 0.031552647233789415,
+          "excess": 4.947209653092005,
+          "disagree": 0.04390243902439024
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -869,6 +1457,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8292682926829268,
+            0.8341463414634146
+          ],
+          "both_wrong": 0.16097560975609757,
+          "both_wrong_if_independent": 0.02831647828673409,
+          "excess": 5.684873949579831,
+          "disagree": 0.014634146341463415
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -879,6 +1481,20 @@
           "both_wrong_if_independent": 0.02415229030339084,
           "excess": 5.857142857142856,
           "disagree": 0.02926829268292683
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8341463414634146,
+            0.8585365853658536
+          ],
+          "both_wrong": 0.13658536585365855,
+          "both_wrong_if_independent": 0.0234622248661511,
+          "excess": 5.821501014198784,
+          "disagree": 0.03414634146341464
         }
       ]
     },
@@ -888,18 +1504,20 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 6,
       "accuracy": {
         "orion-bix": 0.8048780487804879,
         "tabicl-v2": 0.8,
+        "tabicl-v2/ts": 0.8195121951219512,
         "tabpfn-v2": 0.7804878048780488
       },
-      "oracle": 0.8536585365853658,
-      "none_right": 0.14634146341463417,
-      "mean_proba_ensemble": 0.7951219512195122,
-      "best_single": 0.8048780487804879,
+      "oracle": 0.8682926829268293,
+      "none_right": 0.13170731707317074,
+      "mean_proba_ensemble": 0.8097560975609757,
+      "best_single": 0.8195121951219512,
       "pairs": [
         {
           "models": [
@@ -918,6 +1536,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8048780487804879,
+            0.8195121951219512
+          ],
+          "both_wrong": 0.15121951219512195,
+          "both_wrong_if_independent": 0.03521713265913147,
+          "excess": 4.293918918918918,
+          "disagree": 0.07804878048780488
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -932,6 +1564,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8,
+            0.8195121951219512
+          ],
+          "both_wrong": 0.15609756097560976,
+          "both_wrong_if_independent": 0.03609756097560975,
+          "excess": 4.324324324324325,
+          "disagree": 0.07317073170731707
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -942,6 +1588,20 @@
           "both_wrong_if_independent": 0.04390243902439025,
           "excess": 3.888888888888889,
           "disagree": 0.08292682926829269
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8195121951219512,
+            0.7804878048780488
+          ],
+          "both_wrong": 0.16097560975609757,
+          "both_wrong_if_independent": 0.0396192742415229,
+          "excess": 4.063063063063063,
+          "disagree": 0.07804878048780488
         }
       ]
     },
@@ -951,16 +1611,18 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 5,
       "accuracy": {
         "orion-bix": 0.7792207792207793,
         "tabicl-v2": 0.8181818181818182,
+        "tabicl-v2/ts": 0.6883116883116883,
         "tabpfn-v2": 0.8181818181818182
       },
-      "oracle": 0.8441558441558441,
-      "none_right": 0.1558441558441559,
+      "oracle": 0.8701298701298701,
+      "none_right": 0.1298701298701299,
       "mean_proba_ensemble": 0.8311688311688312,
       "best_single": 0.8181818181818182,
       "pairs": [
@@ -981,6 +1643,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7792207792207793,
+            0.6883116883116883
+          ],
+          "both_wrong": 0.15584415584415584,
+          "both_wrong_if_independent": 0.06881430258053635,
+          "excess": 2.264705882352941,
+          "disagree": 0.2597402597402597
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -995,6 +1671,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8181818181818182,
+            0.6883116883116883
+          ],
+          "both_wrong": 0.14285714285714285,
+          "both_wrong_if_independent": 0.05667060212514758,
+          "excess": 2.520833333333333,
+          "disagree": 0.23376623376623376
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -1005,6 +1695,20 @@
           "both_wrong_if_independent": 0.03305785123966942,
           "excess": 4.714285714285714,
           "disagree": 0.07792207792207792
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.6883116883116883,
+            0.8181818181818182
+          ],
+          "both_wrong": 0.12987012987012986,
+          "both_wrong_if_independent": 0.05667060212514758,
+          "excess": 2.2916666666666665,
+          "disagree": 0.2727272727272727
         }
       ]
     },
@@ -1014,17 +1718,19 @@
       "models": [
         "orion-bix",
         "tabicl-v2",
+        "tabicl-v2/ts",
         "tabpfn-v2"
       ],
       "n_classes": 2,
       "accuracy": {
         "orion-bix": 0.7922077922077922,
         "tabicl-v2": 0.8181818181818182,
+        "tabicl-v2/ts": 0.8051948051948052,
         "tabpfn-v2": 0.8051948051948052
       },
-      "oracle": 0.8961038961038961,
-      "none_right": 0.10389610389610393,
-      "mean_proba_ensemble": 0.8051948051948052,
+      "oracle": 0.935064935064935,
+      "none_right": 0.06493506493506496,
+      "mean_proba_ensemble": 0.8311688311688312,
       "best_single": 0.8181818181818182,
       "pairs": [
         {
@@ -1044,6 +1750,20 @@
         {
           "models": [
             "orion-bix",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.7922077922077922,
+            0.8051948051948052
+          ],
+          "both_wrong": 0.11688311688311688,
+          "both_wrong_if_independent": 0.04047900151796256,
+          "excess": 2.8874999999999997,
+          "disagree": 0.16883116883116883
+        },
+        {
+          "models": [
+            "orion-bix",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -1058,6 +1778,20 @@
         {
           "models": [
             "tabicl-v2",
+            "tabicl-v2/ts"
+          ],
+          "accuracy": [
+            0.8181818181818182,
+            0.8051948051948052
+          ],
+          "both_wrong": 0.1038961038961039,
+          "both_wrong_if_independent": 0.03541912632821724,
+          "excess": 2.933333333333333,
+          "disagree": 0.16883116883116883
+        },
+        {
+          "models": [
+            "tabicl-v2",
             "tabpfn-v2"
           ],
           "accuracy": [
@@ -1068,6 +1802,20 @@
           "both_wrong_if_independent": 0.03541912632821724,
           "excess": 3.3,
           "disagree": 0.14285714285714285
+        },
+        {
+          "models": [
+            "tabicl-v2/ts",
+            "tabpfn-v2"
+          ],
+          "accuracy": [
+            0.8051948051948052,
+            0.8051948051948052
+          ],
+          "both_wrong": 0.09090909090909091,
+          "both_wrong_if_independent": 0.0379490639230899,
+          "excess": 2.395555555555555,
+          "disagree": 0.2077922077922078
         }
       ]
     }

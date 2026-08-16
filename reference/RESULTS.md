@@ -1003,6 +1003,49 @@ the hypothesis rather than a controlled variable — the decisive follow-up is o
 *two* feature families, not more backbones. `reference/error_overlap.json`, cubes in
 `reference/pergroup_cubes_orion.tar.gz`.
 
+##### The controlled version: change the features, not the model (2026-08-16)
+
+Same `tabicl-v2`, same 17 datasets, same rows, reading `anofox_forecast`'s 116 statistics instead of
+500 ROCKET features. One call per dataset rather than forty, because there is no kernel bank to
+slice: **17/17 in two minutes.** Six pairs now, and they separate cleanly by what varies:
+
+| pair | what differs | both wrong | if independent | **excess** | disagree |
+|---|---|---|---|---|---|
+| `tabicl-v2` vs `tabpfn-v2` | model | 0.1920 | 0.0686 | 3.74x | 0.1111 |
+| `orion-bix` vs `tabicl-v2` | model | 0.2010 | 0.0736 | 3.75x | 0.1174 |
+| `orion-bix` vs `tabpfn-v2` | model | 0.2022 | 0.0741 | 3.78x | 0.1175 |
+| `orion-bix` vs `tabicl-v2/ts` | model **and features** | 0.1865 | 0.0824 | **2.67x** | 0.1860 |
+| `tabicl-v2/ts` vs `tabpfn-v2` | model **and features** | 0.1824 | 0.0768 | **2.83x** | 0.1732 |
+| **`tabicl-v2` vs `tabicl-v2/ts`** | **features only** | 0.1906 | 0.0763 | **2.99x** | 0.1545 |
+
+**One model with two feature families overlaps less (2.99x) than two different models with one
+family (3.74x).** That is the controlled comparison, and it settles the question the three-backbone
+result could only pose: the representation is doing more of the work than the architecture. Every
+cross-feature pair sits at 2.67-2.99x against 3.74-3.78x for every same-feature pair, and
+disagreement rises from ~11% to 15-19%.
+
+It moves the bounds too. Against the three ROCKET arms alone, adding the ts arm takes the oracle
+from 0.8254 to **0.8483** and the rows nobody gets right from 0.1746 to **0.1517**. A third
+*architecture* was worth +0.0174 of oracle; a second *feature family* is worth +0.0229 while being
+the weakest arm on the board.
+
+**And averaging still cannot collect it.** The mean of the four probabilities is 0.7619 against
+0.7686 for the best single arm per dataset, because the ts arm averages 0.7236 — 3.4 points behind
+`tabicl-v2` — and the mean is pulled toward it. Per dataset the ts arm swings hard both ways:
++0.0164 on `Lightning2` and +0.0195 on `ProximalPhalanxTW`, −0.1299 on `Worms` and −0.1200 on
+`ArrowHead`.
+
+So the conclusion is not "use both feature families in an ensemble". It is that **feature diversity
+is a real axis where model diversity is not, and collecting it needs a selective rule rather than an
+average** — which is the mechanism this project already has. Routing escalates on a student's
+decision margin; the same margin could choose between representations. That is the experiment this
+points to, and it is not run here.
+
+Caveats: 17 datasets, one seed, and `anofox_forecast` is BSL 1.1 — production use permitted,
+offering it hosted or embedded to third parties is not — so the ts family is a research instrument
+here and never a dependency. `Earthquakes` is unmoved by any of it: all four arms score 0.7482, the
+oracle is 0.7482, and no pair ever disagrees. `reference/error_overlap.json`.
+
 Two things about the run itself, since both cost real time. `orion-bix` is published as a torch zip
 whose pickle stream uses an opcode the checkpoint reader does not implement, so `tabfm_download`
 reports success and inference then dies with `unsupported pickle opcode 0x65`;

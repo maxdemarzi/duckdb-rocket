@@ -144,6 +144,11 @@ def main() -> int:
                          "slice and 40 identical groups would be 40x the cost for one answer.")
     ap.add_argument("--n-groups", type=int,
                     help="override phase5's 40 groups. Required to be 1 for --features ts.")
+    ap.add_argument("--num-kernels", type=int,
+                    help="override phase5's 10,000 kernels. With --features ts the bank is never "
+                         "read, but features_per_group is still derived from it and still checked "
+                         "against the 2,000-column cap, so 10,000 over 1 group fails a check on a "
+                         "number the run does not use.")
     ap.add_argument("--per-group-soft", action="store_true",
                     help="archive each group's own probabilities, which makes the group-count "
                          "sweep exact from a single run (scripts/perf_levers.py --groups)")
@@ -206,6 +211,8 @@ def main() -> int:
             cmd += ["--features", args.features]
         if args.n_groups:
             cmd += ["--n-groups", str(args.n_groups)]
+        if args.num_kernels:
+            cmd += ["--num-kernels", str(args.num_kernels)]
         if args.threads:
             cmd += ["--threads", str(args.threads)]
         if args.onnx_threads:

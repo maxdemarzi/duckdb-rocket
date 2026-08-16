@@ -126,7 +126,12 @@ echo "  done"
 # and it avoids the concurrency-versus-memory trade that killed two datasets in the orion-bix run.
 # ---------------------------------------------------------------------------------------------
 log "${MODEL} with --features ${FEATURES}"
-NG=1; [ "$FEATURES" = "both" ] && NG=40
+# ts reads no kernel bank, but features_per_group is still derived from num_kernels/n_groups and
+# still checked against the 2,000-column cap -- so the default 10,000 over 1 group fails a check on
+# 20,000 features the run never materialises. 250 over 1 group is the same 500-feature shape every
+# other run here uses, and with use_rocket false those columns are simply not projected.
+NG=1; NK=250
+[ "$FEATURES" = "both" ] && { NG=40; NK=10000; }
 # ONE invocation for all of them, not one per dataset. teacher_sweep already runs its list serially
 # in a single process, and its candidates() loads every dataset in the UCR archive to count classes
 # -- the class cap is not in aeon's metadata tables -- so a per-dataset loop repeats that scan once
@@ -134,7 +139,7 @@ NG=1; [ "$FEATURES" = "both" ] && NG=40
 # fetch the whole archive from Zenodo, which this project has already been rate-limited by once.
 uv run python scripts/teacher_sweep.py --model "$MODEL" --datasets "${TARGETS[@]}" \
     --out-dir "$OUT" --device cpu --per-group-soft \
-    --features "$FEATURES" --n-groups "$NG" \
+    --features "$FEATURES" --n-groups "$NG" --num-kernels "$NK" \
     --threads 4 --onnx-threads $(( NPROC / 4 )) --test-chunk 128 \
     --budget-min "$BUDGET_MIN" --timeout-min "$TIMEOUT_MIN" \
     > "$OUT/sweep.log" 2>&1

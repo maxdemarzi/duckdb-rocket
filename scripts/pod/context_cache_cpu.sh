@@ -138,6 +138,11 @@ p("SET anofox_tabfm_context_cache = false;")
 p("CREATE TABLE warm AS SELECT i, yhat FROM tabfm_classify('call0', 'label', model := 'tabicl-split');")
 for arm, flag in (("off", "false"), ("on", "true")):
     p(f"SET anofox_tabfm_context_cache = {flag};")
+    # A marker row per arm. Counting backwards from the end of the timings
+    # instead got the arms off by one -- it silently absorbed a SET's 0.001s as a
+    # call and dropped a real one -- and the resulting table looked entirely
+    # plausible. The marker makes the split explicit rather than positional.
+    p(f"SELECT 'ARM-{arm}' AS marker;")
     for k in range(CALLS):
         p(f"CREATE TABLE {arm}{k} AS SELECT i, yhat, yhat_score, is_training "
           f"FROM tabfm_classify('call{k}', 'label', model := 'tabicl-split');")
@@ -184,18 +189,36 @@ python3 - "$OUT/bench.out" "$CALLS" <<'PY'
 import re, sys
 lines = open(sys.argv[1], errors="replace").read().splitlines()
 calls = int(sys.argv[2])
-times = [float(m.group(1)) for l in lines if (m := re.search(r"Run Time \(s\): real ([0-9.]+)", l))]
-# The timed statements after the warm-up are: CALLS off arms, then CALLS on arms.
-if len(times) < 2 * calls:
-    print(f"  only {len(times)} timings found; see bench.out"); raise SystemExit
-off, on = times[-2 * calls:-calls], times[-calls:]
+
+# Attribute each timing to the arm whose marker last went past. Counting
+# backwards from the end instead got the arms off by one -- it absorbed a SET's
+# 0.001s as a call and dropped a real one -- and the table it produced looked
+# entirely plausible.
+arms, cur, skip = {"off": [], "on": []}, None, False
+for line in lines:
+    if "ARM-off" in line:
+        cur, skip = "off", True
+    elif "ARM-on" in line:
+        cur, skip = "on", True
+    elif cur and (m := re.search(r"Run Time \(s\): real ([0-9.]+)", line)):
+        if skip:
+            skip = False                 # the marker SELECT's own timing
+        elif len(arms[cur]) < calls:
+            arms[cur].append(float(m.group(1)))
+
+off, on = arms["off"], arms["on"]
+if len(off) != calls or len(on) != calls:
+    print(f"  FATAL: {len(off)} off and {len(on)} on timings, expected {calls} each")
+    raise SystemExit(1)
+
 p = print
-p(f"  {'call':>6}  {'off (s)':>9}  {'on (s)':>9}  {'speedup':>8}")
+p(f"  {'call':>6}  {'off (s)':>9}  {'on (s)':>9}  {'speedup':>9}")
 for k, (a, b) in enumerate(zip(off, on)):
-    p(f"  {k:>6}  {a:>9.3f}  {b:>9.3f}  {a / b if b else 0:>7.2f}x")
-p(f"  {'TOTAL':>6}  {sum(off):>9.3f}  {sum(on):>9.3f}  {sum(off) / sum(on) if sum(on) else 0:>7.2f}x")
-p(f"\n  steady state (calls 1..{calls - 1}, i.e. excluding each arm's first):")
+    p(f"  {k:>6}  {a:>9.3f}  {b:>9.3f}  {a / b:>8.2f}x" +
+      ("   <- cold context: prepare, plus scoring the context rows" if k == 0 else ""))
+p(f"  {'TOTAL':>6}  {sum(off):>9.3f}  {sum(on):>9.3f}  {sum(off) / sum(on):>8.2f}x")
 so, sn = sum(off[1:]), sum(on[1:])
-p(f"          off {so:.3f}s   on {sn:.3f}s   {so / sn if sn else 0:.2f}x")
+p(f"\n  steady state (calls 1..{calls - 1}, cache HITTING): off {so:.3f}s  on {sn:.3f}s  -> {so / sn:.2f}x")
+p(f"  cold call (call 0, cache MISSING):          off {off[0]:.3f}s  on {on[0]:.3f}s  -> {off[0] / on[0]:.2f}x")
 PY
 log "done"

@@ -1094,6 +1094,51 @@ families, or by any confidence-based selection among them. Three routes tried, a
 oracle says +0.09 is sitting there. Reaching it needs a signal that knows which arm is right, and no
 arm's own confidence is that signal. `reference/feature_route.json`.
 
+#### The context cache is 7x on repeated calls, and 2.5x slower on the first (2026-08-16)
+
+The 4-11x this file has been quoting for the context cache came from a PyTorch prototype in the
+exporter README. This is the same thing measured **through DuckDB**, on real `tabicl-classifier-v2`
+weights, with the unreleased `anofox_tabfm_context_cache` build from
+[#40](https://github.com/DataZooDE/anofox-tabfm/pull/40).
+
+#37's escalation shape: 375 labelled context rows, 500 features, 22 query rows per call, and twelve
+calls arriving one after another against the **same** context — which is what `--test-chunk` does.
+Both arms in one DuckDB session so they see identical data. 16 vCPU pod, `scripts/pod/context_cache_cpu.sh`.
+
+| | cache off | cache on | |
+|---|---|---|---|
+| call 0 (context is new) | 7.39 s | 18.62 s | **0.40x** — 2.5x slower |
+| calls 1-11 (context reused) | 73.00 s | 10.17 s | **7.18x** |
+| all twelve | 80.39 s | 28.79 s | 2.79x |
+
+Per call that is ~6.6 s against ~0.92 s. The first call pays for a context it has not reused yet —
+the prepare pass plus one pass to score the 375 context rows — and costs an extra 11.2 s; each
+later call saves ~5.7 s, so **the break-even is between the third and fourth call**. One-shot
+scoring is worse off, which is why the setting is off by default.
+
+Three runs of the steady state gave 7.89x, 5.47x and 7.18x; the 7.18x is the twelve-call one and
+the best sampled. The cache-hit calls are short enough that contention moves them around by ~50%,
+while the cache-off calls sit steadily at 6-7 s.
+
+**The answers are identical where it matters.** Over 264 scored rows: zero label disagreements and a
+maximum `yhat_score` difference of **0.0** — not "close", the same. The 375 context rows also agree
+on every label but differ by up to 0.338 in score, which is the documented consequence of the query
+half having no label path: a context row is no longer scored knowing its own label. Both numbers
+reproduced exactly across all three runs.
+
+What this changes here: nothing yet, and not what we assumed. Our per-group arms each carry their
+own context, so they would land on the cold side of that table and get *slower*. The pattern that
+gains is one context scored repeatedly — `--test-chunk` runs, and any serving path that fits once
+and scores many times. That is worth having, but it is a narrower win than "4-11x on the escalation
+case" implied.
+
+Three separate runs of this measurement produced confident-looking results with nothing running at
+all: a signature-blocked extension (`-unsigned` missing) reported 1.00x, a CDN-cached copy of the
+script silently re-ran the old version, and a binder error gave six 0.01 s "calls". Two arms of zero
+divide to a perfectly plausible 1.00x. The script now asserts the extension loads and carries the
+setting before either arm runs, and marks each arm in the output rather than counting backwards from
+the end — an off-by-one there had already produced one wrong table that looked entirely reasonable.
+
 #### `anofox_tabfm_max_memory` guards residency, not allocation (2026-08-16)
 
 Upstream [#36](https://github.com/DataZooDE/anofox-tabfm/pull/36) adds a setting that reads `VmRSS`

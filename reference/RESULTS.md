@@ -600,7 +600,9 @@ group 1 of 40 on 128 test rows while its 24-row escalated arm succeeded every ti
 memory limit was blamed and then exonerated when the failure recurred at ~87 GB; `route_serve.py`
 now reports the shell's exit code and archives a `crash.log`, which is what should have been
 reported instead of a guess. **Resolved on 2026-08-16** — exit `-9`, an OOM kill against a 32 GB
-cgroup cap, fixed by `--test-chunk 32` rather than by any memory setting. See "The shipped default,
+cgroup cap, fixed by `--test-chunk 32` rather than by any memory setting, and *still* not fixed by
+the one that was built for it (see "`anofox_tabfm_max_memory` guards residency, not allocation").
+See "The shipped default,
 actually served".
 
 #### The teacher runs 40 passes and needs about ten (2026-08-15)
@@ -1091,6 +1093,44 @@ exactly where you escalate few rows. None of it clears the noise floor.
 families, or by any confidence-based selection among them. Three routes tried, all negative, and the
 oracle says +0.09 is sitting there. Reaching it needs a signal that knows which arm is right, and no
 arm's own confidence is that signal. `reference/feature_route.json`.
+
+#### `anofox_tabfm_max_memory` guards residency, not allocation (2026-08-16)
+
+Upstream [#36](https://github.com/DataZooDE/anofox-tabfm/pull/36) adds a setting that reads `VmRSS`
+from `/proc/self/status` and refuses a predict call above a ceiling. It is merged and in **no
+released build** — the community extension is pinned at 2026.08.14 — so this was measured against
+the CI artifact from `main` at `e5021d9`, which needs no build: the pipeline uploads a
+`linux_amd64` extension per run, and it matches our DuckDB v1.5.5.
+
+Tested where it should matter most. `SemgHandMovementCh2` at `--test-chunk 128` on a 32 GB
+container, the failure that cost several sessions and one withdrawn diagnosis:
+
+| ceiling | outcome |
+|---|---|
+| none | `FAILED after 43.4s (exit -9)` — the kernel, no message |
+| 28 GB | `FAILED after 38.9s (exit -9)` |
+| 24 GB | `FAILED after 23.3s (exit -9)` |
+| 18 GB | `FAILED after 20.7s (exit -9)` |
+| 16 GB | `exit 1` with a message naming the number, the ceiling and three remedies |
+
+Only the last one is clean, and the reason is the mechanism rather than the tuning: **the check runs
+before a call and compares the process's current RSS against the ceiling.** Resident memory here is
+~17.9 GB before the classify call — the ROCKET features and the loaded model — so a 16 GB ceiling is
+already exceeded and the call is refused, while any ceiling above 17.9 GB passes the check and the
+call then allocates its way past the 32 GB cgroup cap and is killed exactly as before.
+
+So it is a **residency** guard, not an **allocation** guard, and its own error text says as much
+when it suggests `tabfm_unload(...)`: it is built to catch memory accumulated across calls and
+models, which is a real failure mode and not ours. Ours is one call that is too large, and
+`--test-chunk` remains the only lever for that. The setting is still worth having — an `exit 1`
+carrying `resident memory (17910112256 bytes) is already at or above anofox_tabfm_max_memory
+(16000000000 bytes)` is a different world from `exit -9` and an empty stderr — but it does not make
+a too-large call safe, and a ceiling low enough to fire on this dataset would refuse legitimate work.
+
+`phase5_pipeline.py --tabfm-max-memory` emits it, opt-in and only when asked: the default upstream
+is empty, and a released build that has never heard of the parameter fails the whole script on the
+`SET`. `scripts/pod/max_memory_cpu.sh` runs the arms in the only order that proves anything — the
+no-ceiling arm must still die, or a clean refusal downstream would mean nothing.
 
 ##### Most of that +0.09 was never there (2026-08-16)
 
@@ -1605,7 +1645,8 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   is merged and exports the split graphs; the handle that would hold a prepared support set across
   calls is not built, and the community build is pinned at 2026.08.14, before both that and
   `anofox_tabfm_max_memory`. Worth 4-11x on the escalation case, and blocked on a release rather
-  than on anything here.
+  than on anything here. **Note that a release alone does not deliver it** — #38 changed the
+  exporter, not the runtime; `split_context` does not appear in the built extension at all.
 - **`tabpfn-v2-5` and `tabpfn-v3`, the paper's own backbones.** Both download and neither loads,
   by two different faults with one remedy: `tabpfn-v2-5`'s checkpoint is published under tensor
   names the exported graph was not built against (missing 248 of 250), and `tabpfn-v3` is a torch

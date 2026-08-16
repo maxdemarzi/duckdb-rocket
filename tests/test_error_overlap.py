@@ -80,6 +80,49 @@ def test_discover_keys_on_the_model_not_the_filename_tag(tmp_path):
     assert one_dataset("GunPoint", found["GunPoint"]) is None, "a model was compared with itself"
 
 
+def test_one_backbone_over_two_feature_families_is_two_arms(tmp_path):
+    """Same model, different features, is the comparison -- not a duplicate to be collapsed.
+
+    Keying on the model alone would merge the rocket and ts runs of one backbone and silently keep
+    whichever was read first, reporting "one arm" for the experiment that exists to contrast them.
+    """
+    rows = [{"1": 1.0, "2": 0.0}]
+    _write(tmp_path, "GunPoint", "tabicl-v2", "cpu", rows, ["1", "2"], 50, dict(CFG))
+    _write(tmp_path, "GunPoint", "tabicl-v2", "ts", rows, ["1", "2"], 50,
+           dict(CFG, n_groups=1, num_kernels=0, kernels_per_group=0, features="ts"))
+    # The ts report has to declare its family; the writer above puts config only, so state it.
+    p = tmp_path / "phase5_GunPoint_ts.json"
+    p.write_text(json.dumps({"dataset": "GunPoint", "model": "tabicl-v2", "features": "ts",
+                             "config": dict(CFG, n_groups=1, num_kernels=0,
+                                            kernels_per_group=0)}), encoding="utf-8")
+    assert sorted(discover(tmp_path)["GunPoint"]) == ["tabicl-v2", "tabicl-v2/ts"]
+
+
+def test_feature_families_are_not_refused_for_differing_on_the_kernel_bank(tmp_path):
+    """ts features come from no kernel bank, so n_groups and num_kernels cannot match -- and
+    requiring them would refuse the one comparison this tool exists to make."""
+    from duckdb_rocket.datasets import load
+    _, y = load("GunPoint", "test")
+    rows = [{str(v): 1.0, ("2" if str(v) == "1" else "1"): 0.0} for v in y]
+    _write(tmp_path, "GunPoint", "tabicl-v2", "cpu", rows, ["1", "2"], 50, dict(CFG))
+    (tmp_path / "phase5_GunPoint_ts_soft.json").write_text(
+        json.dumps(dict(_soft(50, rows, ["1", "2"], "tabicl-v2"), dataset="GunPoint")),
+        encoding="utf-8")
+    (tmp_path / "phase5_GunPoint_ts.json").write_text(
+        json.dumps({"dataset": "GunPoint", "model": "tabicl-v2", "features": "ts",
+                    "config": {"num_kernels": 0, "n_groups": 1, "kernels_per_group": 0,
+                               "n_estimators": 1, "seed": 0}}), encoding="utf-8")
+    r = one_dataset("GunPoint", discover(tmp_path)["GunPoint"])
+    assert r is not None, "the feature-family comparison was refused on the kernel bank"
+    assert sorted(r["models"]) == ["tabicl-v2", "tabicl-v2/ts"]
+    # A differing seed is still fatal, because the two arms would not be over the same split.
+    (tmp_path / "phase5_GunPoint_ts.json").write_text(
+        json.dumps({"dataset": "GunPoint", "model": "tabicl-v2", "features": "ts",
+                    "config": {"num_kernels": 0, "n_groups": 1, "kernels_per_group": 0,
+                               "n_estimators": 1, "seed": 7}}), encoding="utf-8")
+    assert one_dataset("GunPoint", discover(tmp_path)["GunPoint"]) is None
+
+
 def test_a_config_mismatch_is_refused_rather_than_averaged(tmp_path, capsys):
     """A 40-group run against a 10-group one measures the group count, not the backbone."""
     rows = [{"1": 1.0, "2": 0.0}]

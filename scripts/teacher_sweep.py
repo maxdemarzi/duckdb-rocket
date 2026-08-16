@@ -73,19 +73,26 @@ def candidates(cache_only: bool) -> list[dict]:
     return out
 
 
-def report_name(name: str, model: str) -> str:
+def report_name(name: str, model: str, features: str = "rocket") -> str:
     """Where a run's report lands, kept distinct per model.
 
     Every archived report so far is tabicl-v2 and is named without a model, so that spelling is
     preserved: renaming them would orphan reference/distill_gate.json and every result built on it.
     A second labeller gets its own suffix instead, and the two never collide.
     """
+    if features != "rocket":
+        # The feature family is part of the run's identity, not a variation on it: a ts arm and a
+        # rocket arm of the SAME model are the comparison, so naming them alike would have the
+        # second overwrite the first. The existing phase5_<name>_both.json files fix the spelling.
+        return (f"phase5_{name}_{features}.json" if model == MODEL
+                else f"phase5_{name}_{model}_{features}.json")
     return f"phase5_{name}_gpu.json" if model == MODEL else f"phase5_{name}_{model}.json"
 
 
-def already_done(outdir: Path, name: str, model: str = MODEL) -> bool:
+def already_done(outdir: Path, name: str, model: str = MODEL,
+                 features: str = "rocket") -> bool:
     """A report that recorded failures does not count as done: its accuracy is not the teacher's."""
-    cands = ((outdir / report_name(name, model),) if model != MODEL
+    cands = ((outdir / report_name(name, model, features),) if model != MODEL or features != "rocket"
              else (outdir / f"phase5_{name}_gpu.json", outdir / f"phase5_{name}.json"))
     for p in cands:
         if p.exists():
@@ -131,12 +138,23 @@ def main() -> int:
     # part that can be bounded and the shard count has to do the rest.
     ap.add_argument("--memory-limit", help="DuckDB memory_limit per phase5 run, e.g. '24GB'. "
                                            "Set this whenever more than one sweep runs at once.")
+    ap.add_argument("--features", default="rocket", choices=("rocket", "ts", "both"),
+                    help="which feature families the classifier sees. 'ts' is anofox_forecast's "
+                         "116 statistics and needs --n-groups 1, since there is no kernel bank to "
+                         "slice and 40 identical groups would be 40x the cost for one answer.")
+    ap.add_argument("--n-groups", type=int,
+                    help="override phase5's 40 groups. Required to be 1 for --features ts.")
     ap.add_argument("--per-group-soft", action="store_true",
                     help="archive each group's own probabilities, which makes the group-count "
                          "sweep exact from a single run (scripts/perf_levers.py --groups)")
     ap.add_argument("--timeout-min", type=float, default=90.0,
                     help="per-dataset timeout; a single pathological dataset must not eat the budget")
     args = ap.parse_args()
+    # phase5 refuses n_groups != 1 for ts features, and it is right to: the groups exist to slice a
+    # kernel bank, and there is no bank here. Caught before the sweep rather than once per dataset.
+    if args.features == "ts" and (args.n_groups or 40) != 1:
+        ap.error("--features ts needs --n-groups 1: the 116 statistics do not come from a kernel "
+                 "bank, so 40 groups would compute the same features 40 times for one answer")
 
     cands = candidates(cache_only=False)
     if args.from_gate:
@@ -149,7 +167,8 @@ def main() -> int:
         cands = [c for c in cands if c["dataset"] in want]
     if args.max_test_rows:
         cands = [c for c in cands if c["n_test"] <= args.max_test_rows]
-    todo = [c for c in cands if not already_done(args.out_dir, c["dataset"], args.model)]
+    todo = [c for c in cands
+            if not already_done(args.out_dir, c["dataset"], args.model, args.features)]
     have = len(cands) - len(todo)
 
     est = sum(c["n_test"] for c in todo) * SECONDS_PER_TEST_ROW / 60
@@ -182,7 +201,11 @@ def main() -> int:
                "--dataset", name, "--device", args.device,
                "--model", args.model,
                "--test-chunk", str(args.test_chunk),
-               "--out", str(args.out_dir / report_name(name, args.model))]
+               "--out", str(args.out_dir / report_name(name, args.model, args.features))]
+        if args.features != "rocket":
+            cmd += ["--features", args.features]
+        if args.n_groups:
+            cmd += ["--n-groups", str(args.n_groups)]
         if args.threads:
             cmd += ["--threads", str(args.threads)]
         if args.onnx_threads:

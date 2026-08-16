@@ -67,9 +67,20 @@ def discover(reference: Path) -> dict[str, dict[str, tuple[Path, Path]]]:
         model = d.get("model")
         if not model:
             continue
-        # A dataset can hold the same model twice (cpu and gpu). Keep one; they are the same
+        # The feature family is part of the arm, not a detail of it. One backbone over two feature
+        # families is the controlled version of the three-backbone comparison -- same model, same
+        # rows, only the representation differs -- and keying on the model alone would silently
+        # collapse those two arms into one and drop whichever was read second.
+        try:
+            features = json.loads(report.read_text(encoding="utf-8")).get("features")
+        except Exception:  # noqa: BLE001
+            features = None
+        # Runs predating the field are all rocket except the `_both` ones, which the tag names.
+        features = features or (m.group("tag") if m.group("tag") in ("ts", "both") else "rocket")
+        arm = model if features == "rocket" else f"{model}/{features}"
+        # A dataset can hold the same arm twice (cpu and gpu). Keep one; they are the same
         # computation and RESULTS.md records them agreeing.
-        out.setdefault(m.group("dataset"), {}).setdefault(model, (soft, report))
+        out.setdefault(m.group("dataset"), {}).setdefault(arm, (soft, report))
     return out
 
 
@@ -105,10 +116,17 @@ def one_dataset(name: str, entries: dict[str, tuple[Path, Path]]) -> dict | None
     softs = {m: json.loads(entries[m][0].read_text(encoding="utf-8")) for m in models}
     reports = {m: json.loads(entries[m][1].read_text(encoding="utf-8")) for m in models}
 
+    # Which config fields have to agree depends on what is being varied. Across backbones on one
+    # feature family, everything in COMPARED_CONFIG must match or the comparison measures the
+    # pipeline instead of the model. Across FEATURE FAMILIES it cannot: ts features come from no
+    # kernel bank, so `num_kernels` and `n_groups` are not merely different, they are meaningless
+    # on that arm. Requiring them would refuse exactly the comparison this is for.
+    same_family = len({m.split("/")[-1] if "/" in m else "rocket" for m in models}) == 1
+    compared = COMPARED_CONFIG if same_family else ("seed", "n_estimators")
     base = reports[models[0]].get("config", {})
     for m in models[1:]:
         cfg = reports[m].get("config", {})
-        diff = [k for k in COMPARED_CONFIG if base.get(k) != cfg.get(k)]
+        diff = [k for k in compared if base.get(k) != cfg.get(k)]
         if diff:
             print(f"  {name}: {models[0]} and {m} differ on {', '.join(diff)}; skipped")
             return None

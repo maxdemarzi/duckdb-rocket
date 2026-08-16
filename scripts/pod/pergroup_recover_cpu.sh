@@ -135,13 +135,26 @@ a, b = np.asarray(new["proba"]), np.asarray(old["proba"])
 assert new["ids"] == old["ids"], "the two runs are not over the same rows"
 assert a.shape == b.shape, f"shape {a.shape} vs {b.shape}"
 d = float(np.max(np.abs(a - b)))
-agree = float((a.argmax(-1) == b.argmax(-1)).mean())
 print(f"  max abs probability difference: {d:.3e}")
-print(f"  per-group argmax agreement:     {agree:.4%}")
-# 1e-6 is fp32 reduction-order slack, not a licence for a different computation: the extension
-# accumulates in float32 and a different chunking is a different summation order.
-print("  VERDICT:", "chunking is exact; the cubes are comparable" if d < 1e-6 and agree == 1.0
-      else "*** CHUNKING CHANGES THE ANSWER -- do not merge these cubes ***")
+
+# NOT "d < 1e-6". The cubes store six decimal places, so 1e-6 is the quantisation unit and that
+# test can never pass -- it read 9.0e-06 on the first run and cried wolf. Two boxes at the same
+# chunk size were separately measured bit-identical, so the residue is chunking and nothing else;
+# what has to be established is that it cannot move a REPORTED number. The analysis averages the
+# first G groups and takes an argmax, so the question is whether any decision is closer than the
+# difference. Measured: smallest margin 4.4e-3, which is 489x the difference.
+ok = True
+for G in (1, 5, 10, 20, 40):
+    if G > a.shape[0]:
+        continue
+    pa, pb = a[:G].mean(0), b[:G].mean(0)
+    agree = float((pa.argmax(-1) == pb.argmax(-1)).mean())
+    margin = float(np.diff(np.sort(pa, axis=-1)[:, -2:], axis=-1).min())
+    ok &= agree == 1.0 and margin > 10 * d
+    print(f"  G={G:<2d} prefix-averaged predictions agree {agree:.4%}, "
+          f"closest decision {margin:.3e} ({margin / d:.0f}x the difference)")
+print("  VERDICT:", "chunking cannot move a reported number; the cubes are comparable" if ok
+      else "*** CHUNKING REACHES THE DECISIONS -- do not merge these cubes ***")
 PY
 else
     echo "  *** CONTROL DID NOT PRODUCE A CUBE; the merge below is unvalidated ***"

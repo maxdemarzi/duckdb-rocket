@@ -63,3 +63,24 @@ def test_routing_does_not_mutate_its_input():
     assert np.array_equal(primary, before)
     # And a second call at budget 0 must still see the untouched primary.
     assert route(primary, alternate, 0.0).tolist() == [0, 0]
+
+
+def test_majority_vote_is_a_plurality_with_a_stated_tie_break():
+    from feature_route import majority_vote
+    # preds is (arms, rows), so read the COLUMNS: row 0 unanimous for class 0, row 1 a 3-1 split
+    # for class 1, row 2 a 2-2 tie between classes 0 and 1.
+    preds = np.array([[0, 1, 0],
+                      [0, 1, 0],
+                      [0, 1, 1],
+                      [0, 0, 1]])
+    assert majority_vote(preds, 2).tolist() == [0, 1, 0], "the tie did not go to the lowest index"
+
+
+def test_majority_vote_counts_arms_not_probabilities():
+    """Three arms weakly agreeing must beat one arm that is certain -- that is the point of a vote.
+
+    An averaging rule gets the opposite answer here, which is why both are reported.
+    """
+    from feature_route import majority_vote
+    preds = np.array([[1], [1], [1], [0]])
+    assert majority_vote(preds, 2).tolist() == [1]

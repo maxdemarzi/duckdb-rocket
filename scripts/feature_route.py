@@ -55,6 +55,17 @@ def margins(p: np.ndarray) -> np.ndarray:
     return s[:, -1] - s[:, -2]
 
 
+def majority_vote(preds: np.ndarray, n_classes: int) -> np.ndarray:
+    """Per-row plurality over `preds` (arms, rows) of class indices.
+
+    Ties go to the lowest class index, which is `bincount().argmax()`'s behaviour and is stated
+    rather than inherited: with four arms a 2-2 split is common, and a tie-break that silently
+    preferred one class would bias every binary dataset here.
+    """
+    return np.array([np.bincount(preds[:, i], minlength=n_classes).argmax()
+                     for i in range(preds.shape[1])])
+
+
 def route(primary: np.ndarray, alternate: np.ndarray, budget: float) -> np.ndarray:
     """Predictions from `primary`, with the least-confident `budget` fraction taken from `alternate`.
 
@@ -109,10 +120,32 @@ def one_dataset(name: str, arms: dict[str, tuple[Path, Path]], primary: str) -> 
         pred = np.stack([proba[a].argmax(1) for a in names])      # (arms, rows)
         return float((cls[pred[pick, np.arange(len(truth))]] == truth).mean())
     family = [a for a in order if a.split("/")[0] == primary.split("/")[0]]
+    right = {a: cls[proba[a].argmax(1)] == truth for a in order}
     any_right = np.zeros(len(truth), dtype=bool)
     for a in order:
-        any_right |= cls[proba[a].argmax(1)] == truth
+        any_right |= right[a]
+
+    # Decomposing the oracle, because it is the number every negative result above is measured
+    # against and it does not mean what it appears to. An oracle over N arms rises mechanically
+    # with N: on a row where every arm is near-guessing, "someone was right" approaches certain,
+    # and that row is counted as recoverable headroom although nothing could systematically
+    # recover it. The extreme case is structural -- **on a 2-class problem a primary that is wrong
+    # makes any arm that merely DISAGREES automatically right** -- so there the oracle is a
+    # disagreement rate wearing a competence costume.
+    alts = [a for a in order if a != primary]
+    wrong = ~right[primary]
+    n_alt_right = np.sum([right[a][wrong] for a in alts], axis=0) if wrong.any() \
+        else np.zeros(0, dtype=int)
+    hist = [int((n_alt_right == k).sum()) for k in range(len(alts) + 1)]
+
+    # A majority vote is the cheapest rule that can exploit "two or more alternates agree the
+    # primary is wrong", so it separates recoverable-by-consensus from recoverable-by-luck.
+    maj = majority_vote(np.stack([proba[a].argmax(1) for a in order]), len(cls))
     return {"dataset": name, "n_test": len(truth), "primary": primary,
+            "n_classes": len(cls),
+            "n_primary_wrong": int(wrong.sum()),
+            "alt_right_hist": hist,
+            "majority_vote": float((cls[maj] == truth).mean()),
             "primary_accuracy": float((cls[proba[primary].argmax(1)] == truth).mean()),
             "curves": curves,
             "max_margin_all": select(order),
@@ -186,6 +219,32 @@ def report(rows: list[dict], primary: str) -> None:
     d = [r["max_margin_all"] - r["primary_accuracy"] for r in rows]
     bt, ws, p = sign_test(d)
     print(f"    surest-of-all vs the primary: {np.mean(d):+.4f}, {bt} better / {ws} worse, p={p:.2f}")
+    print(f"    a majority vote of all arms       {mean('majority_vote'):.4f} "
+          f"({mean('majority_vote') - base:+.4f})")
+
+    # What the oracle is actually made of.
+    n_alts = max(len(r["alt_right_hist"]) for r in rows) - 1
+    tot = np.zeros(n_alts + 1)
+    for r in rows:
+        tot[:len(r["alt_right_hist"])] += r["alt_right_hist"]
+    wrong_total = tot.sum()
+    print(f"\n  what the oracle is made of -- of the {wrong_total:.0f} rows the primary gets wrong,"
+          f"\n  how many of the {n_alts} other arms are right:")
+    for k in range(n_alts + 1):
+        note = "  <- unrecoverable" if k == 0 else (
+            "  <- needs picking one dissenter out of three" if k == 1 else
+            "  <- a majority vote would find these")
+        print(f"    {k} of {n_alts}: {tot[k]:6.0f} rows  {tot[k] / wrong_total:6.1%}{note}")
+
+    # And the structural caveat, which is not a subtlety on this subset.
+    binary = [r for r in rows if r["n_classes"] == 2]
+    if binary:
+        bw = sum(r["n_primary_wrong"] for r in binary)
+        brec = sum(sum(r["alt_right_hist"][1:]) for r in binary)
+        print(f"\n  {len(binary)} of {len(rows)} datasets are 2-class. There, a primary that is "
+              f"wrong makes any\n  arm that merely DISAGREES automatically right: "
+              f"{brec}/{bw} = {brec / bw:.1%} of their primary-wrong\n  rows are 'recoverable', "
+              f"and that number is a disagreement rate, not a competence.")
 
 
 def main() -> int:

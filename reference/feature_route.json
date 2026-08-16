@@ -13,6 +13,15 @@
       "dataset": "ACSF1",
       "n_test": 100,
       "primary": "tabicl-v2",
+      "n_classes": 10,
+      "n_primary_wrong": 6,
+      "alt_right_hist": [
+        2,
+        2,
+        1,
+        1
+      ],
+      "majority_vote": 0.96,
       "primary_accuracy": 0.94,
       "curves": {
         "orion-bix": {
@@ -49,6 +58,15 @@
       "dataset": "ArrowHead",
       "n_test": 175,
       "primary": "tabicl-v2",
+      "n_classes": 3,
+      "n_primary_wrong": 24,
+      "alt_right_hist": [
+        10,
+        5,
+        5,
+        4
+      ],
+      "majority_vote": 0.8914285714285715,
       "primary_accuracy": 0.8628571428571429,
       "curves": {
         "orion-bix": {
@@ -85,6 +103,15 @@
       "dataset": "Computers",
       "n_test": 250,
       "primary": "tabicl-v2",
+      "n_classes": 2,
+      "n_primary_wrong": 54,
+      "alt_right_hist": [
+        18,
+        18,
+        15,
+        3
+      ],
+      "majority_vote": 0.808,
       "primary_accuracy": 0.784,
       "curves": {
         "orion-bix": {
@@ -121,6 +148,15 @@
       "dataset": "DistalPhalanxOutlineAgeGroup",
       "n_test": 139,
       "primary": "tabicl-v2",
+      "n_classes": 3,
+      "n_primary_wrong": 36,
+      "alt_right_hist": [
+        22,
+        8,
+        6,
+        0
+      ],
+      "majority_vote": 0.7266187050359713,
       "primary_accuracy": 0.7410071942446043,
       "curves": {
         "orion-bix": {
@@ -157,6 +193,15 @@
       "dataset": "DistalPhalanxTW",
       "n_test": 139,
       "primary": "tabicl-v2",
+      "n_classes": 6,
+      "n_primary_wrong": 39,
+      "alt_right_hist": [
+        24,
+        9,
+        6,
+        0
+      ],
+      "majority_vote": 0.7338129496402878,
       "primary_accuracy": 0.7194244604316546,
       "curves": {
         "orion-bix": {
@@ -193,6 +238,15 @@
       "dataset": "Earthquakes",
       "n_test": 139,
       "primary": "tabicl-v2",
+      "n_classes": 2,
+      "n_primary_wrong": 35,
+      "alt_right_hist": [
+        35,
+        0,
+        0,
+        0
+      ],
+      "majority_vote": 0.7482014388489209,
       "primary_accuracy": 0.7482014388489209,
       "curves": {
         "orion-bix": {
@@ -229,6 +283,15 @@
       "dataset": "Ham",
       "n_test": 105,
       "primary": "tabicl-v2",
+      "n_classes": 2,
+      "n_primary_wrong": 23,
+      "alt_right_hist": [
+        13,
+        4,
+        4,
+        2
+      ],
+      "majority_vote": 0.7333333333333333,
       "primary_accuracy": 0.780952380952381,
       "curves": {
         "orion-bix": {
@@ -265,6 +328,15 @@
       "dataset": "Haptics",
       "n_test": 308,
       "primary": "tabicl-v2",
+      "n_classes": 5,
+      "n_primary_wrong": 137,
+      "alt_right_hist": [
+        95,
+        30,
+        10,
+        2
+      ],
+      "majority_vote": 0.5584415584415584,
       "primary_accuracy": 0.5551948051948052,
       "curves": {
         "orion-bix": {
@@ -301,6 +373,15 @@
       "dataset": "Herring",
       "n_test": 64,
       "primary": "tabicl-v2",
+      "n_classes": 2,
+      "n_primary_wrong": 23,
+      "alt_right_hist": [
+        14,
+        6,
+        2,
+        1
+      ],
+      "majority_vote": 0.625,
       "primary_accuracy": 0.640625,
       "curves": {
         "orion-bix": {
@@ -337,6 +418,15 @@
       "dataset": "Lightning2",
       "n_test": 61,
       "primary": "tabicl-v2",
+      "n_classes": 2,
+      "n_primary_wrong": 9,
+      "alt_right_hist": [
+        4,
+        2,
+        1,
+        2
+      ],
+      "majority_vote": 0.8524590163934426,
       "primary_accuracy": 0.8524590163934426,
       "curves": {
         "orion-bix": {
@@ -373,6 +463,15 @@
       "dataset": "Lightning7",
       "n_test": 73,
       "primary": "tabicl-v2",
+      "n_classes": 7,
+      "n_primary_wrong": 17,
+      "alt_right_hist": [
+        8,
+        5,
+        2,
+        2
+      ],
+      "majority_vote": 0.7671232876712328,
       "primary_accuracy": 0.7671232876712328,
       "curves": {
         "orion-bix": {
@@ -409,6 +508,15 @@
       "dataset": "MiddlePhalanxOutlineAgeGroup",
       "n_test": 154,
       "primary": "tabicl-v2",
+      "n_classes": 3,
+      "n_primary_wrong": 59,
+      "alt_right_hist": [
+        44,
+        7,
+        6,
+        2
+      ],
+      "majority_vote": 0.6038961038961039,
       "primary_accuracy": 0.6168831168831169,
       "curves": {
         "orion-bix": {
@@ -445,6 +553,15 @@
       "dataset": "MiddlePhalanxTW",
       "n_test": 154,
       "primary": "tabicl-v2",
+      "n_classes": 6,
+      "n_primary_wrong": 60,
+      "alt_right_hist": [
+        42,
+        9,
+        8,
+        1
+      ],
+      "majority_vote": 0.6103896103896104,
       "primary_accuracy": 0.6103896103896104,
       "curves": {
         "orion-bix": {
@@ -481,6 +598,15 @@
       "dataset": "ProximalPhalanxOutlineAgeGroup",
       "n_test": 205,
       "primary": "tabicl-v2",
+      "n_classes": 3,
+      "n_primary_wrong": 35,
+      "alt_right_hist": [
+        28,
+        4,
+        3,
+        0
+      ],
+      "majority_vote": 0.8341463414634146,
       "primary_accuracy": 0.8292682926829268,
       "curves": {
         "orion-bix": {
@@ -517,6 +643,15 @@
       "dataset": "ProximalPhalanxTW",
       "n_test": 205,
       "primary": "tabicl-v2",
+      "n_classes": 6,
+      "n_primary_wrong": 41,
+      "alt_right_hist": [
+        27,
+        8,
+        3,
+        3
+      ],
+      "majority_vote": 0.8097560975609757,
       "primary_accuracy": 0.8,
       "curves": {
         "orion-bix": {
@@ -553,6 +688,15 @@
       "dataset": "Worms",
       "n_test": 77,
       "primary": "tabicl-v2",
+      "n_classes": 5,
+      "n_primary_wrong": 14,
+      "alt_right_hist": [
+        10,
+        3,
+        0,
+        1
+      ],
+      "majority_vote": 0.8311688311688312,
       "primary_accuracy": 0.8181818181818182,
       "curves": {
         "orion-bix": {
@@ -589,6 +733,15 @@
       "dataset": "WormsTwoClass",
       "n_test": 77,
       "primary": "tabicl-v2",
+      "n_classes": 2,
+      "n_primary_wrong": 14,
+      "alt_right_hist": [
+        5,
+        5,
+        4,
+        0
+      ],
+      "majority_vote": 0.8311688311688312,
       "primary_accuracy": 0.8181818181818182,
       "curves": {
         "orion-bix": {

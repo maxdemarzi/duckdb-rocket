@@ -1092,6 +1092,38 @@ families, or by any confidence-based selection among them. Three routes tried, a
 oracle says +0.09 is sitting there. Reaching it needs a signal that knows which arm is right, and no
 arm's own confidence is that signal. `reference/feature_route.json`.
 
+##### Most of that +0.09 was never there (2026-08-16)
+
+Three negative results measured against one number deserve a look at the number. **An oracle over N
+arms rises mechanically with N**: on a row where every arm is near-guessing, "someone was right"
+approaches certain, and the row is counted as recoverable headroom that nothing could
+systematically recover. Decomposing it — of the 626 rows the primary gets wrong, how many of the
+other three arms are right:
+
+| alternates right | rows | | |
+|---|---|---|---|
+| 0 of 3 | 401 | **64.1%** | no arm gets it; the floor |
+| 1 of 3 | 125 | **20.0%** | needs picking one dissenter out of three, with no signal to do it |
+| 2 of 3 | 76 | 12.1% | a majority vote finds these |
+| 3 of 3 | 24 | 3.8% | a majority vote finds these |
+
+So two thirds of the primary's errors are unrecoverable by any rule over these arms, and a further
+fifth are recoverable only by identifying a single correct dissenter — which is precisely the thing
+the confidence experiments above establish there is no signal for. **Only 15.9% of the primary's
+errors are reachable by consensus**, and the cheapest rule that exploits consensus, a majority vote
+of all four arms, gets **+0.0024** — because it also overturns rows the primary had right.
+
+And on binary datasets the oracle is not a competence measure at all. **If the primary is wrong on a
+2-class problem, any arm that merely disagrees is automatically right.** Six of these 17 datasets
+are 2-class, and there 43.7% of primary-wrong rows count as "recoverable" — a disagreement rate
+wearing a competence costume, and the arms disagree on 11-19% of rows by construction.
+
+**This reframes the three negative results as correct rather than as failures of technique.** The
+accessible headroom is not +0.09; it is about +0.002 to +0.004, which is exactly what every rule
+tried returned and exactly what this harness cannot resolve. The ensemble line closes here, and it
+closes cleanly: not "we could not find the rule" but "the target was mostly an artefact of counting
+four chances to be right".
+
 This is an analysis and not a serving rule, the same distinction `route_serve.py` exists to make:
 the budget is spent by sorting a whole test set and taking its least-confident fraction, which
 nothing answering a request can do. That makes these numbers the best a perfectly-placed threshold
@@ -1551,29 +1583,39 @@ engine — so a 40-group run is ~1.1 MB of SQL.
 
 ## Not done
 
-- **A noise floor worth the name.** One was measured (0.0509) but it rests on a single dataset:
-  four of the five saturate and reproduce exactly, so the subset has almost no resolving power.
-  Three seeds on one informative dataset is a weak floor. Widening the subset toward datasets
-  that are hard but not ceiling-bound would buy more than more seeds on these.
+- **A noise floor worth the name, and it is now the binding constraint.** One was measured (0.0509)
+  on a five-dataset subset where four saturate, so it had almost no resolving power. The subset
+  problem is fixed — 28-29 hard datasets, chosen for being unsaturated — but the floor is not: at a
+  20% escalation budget this harness cannot resolve about half a point, and **every result of the
+  last two days lands inside it.** G=10 costs −0.0033; a 20x kernel cut costs −0.0003; the best
+  ensemble rule found gains +0.0024. Each is reported as undetectable rather than as equivalent,
+  which is honest and unsatisfying in the same measure. Converting any of them into a claim needs
+  more seeds or more datasets, and that is a campaign rather than a run.
 - **e=8 versus e=1.** `--compare-estimators 8,1` exists and was never run: at 500-feature
   groups e=1 already covers every feature, so the interesting comparison is the paper's
   2,000-feature groups at e=8 against this configuration — which is a different experiment than
   the flag performs, and an expensive one.
-- **Anything measured on a pod.** One was run and it produced **no usable results**; see
-  "The pod run that failed" below. Every number above is local.
-- **Variable-length series.** Still unspecified (SPEC.md §8). The transform rejects a length
-  mismatch rather than silently producing incomparable features, which is the right failure but
-  not a solution. *(Multivariate is done — specified in §7, implemented in both the oracle and
-  the extension, and running end to end on `BasicMotions`.)*
-- **The 92-dataset / 30-resample protocol.** Phase 5 covers five datasets on a single split.
-  That is enough to rule out a one-dataset fluke and nowhere near enough to compare against the
-  paper. The multivariate case is excluded by construction, and the larger datasets
-  (`ECG5000`, `ItalyPowerDemand`, `OSULeaf`, `SyntheticControl`) were skipped for runtime.
-- **Re-measuring on the correct backbone.** Every accuracy number here uses `tabicl-v2`, because
-  `tabpfn-v2-5` would not load. That is fixed in `anofox_tabfm v2026.08.11`, which the community
-  repository does not serve yet. Once it lands, the whole subset is worth re-running on the
-  paper's actual model — and `tabpfn-v3` becomes available too. **Anything measured before then
-  is measured on a substitute.**
+- **The 30-resample protocol.** Every result here is a single train/test split. Phase 5 now covers
+  59 datasets rather than the five this entry used to describe, which fixes the *breadth* problem
+  and not the *resampling* one: the paper's protocol averages 30 resamples per dataset, and one
+  split cannot separate a real half-point from a lucky one. This is the same gap the noise-floor
+  entry names from the other end, and it is why every recent result here is reported as "inside
+  what this harness can resolve" rather than as an effect.
+- **The upstream context cache, in the extension.** [PR #38](https://github.com/DataZooDE/anofox-tabfm/pull/38)
+  is merged and exports the split graphs; the handle that would hold a prepared support set across
+  calls is not built, and the community build is pinned at 2026.08.14, before both that and
+  `anofox_tabfm_max_memory`. Worth 4-11x on the escalation case, and blocked on a release rather
+  than on anything here.
+- **`tabpfn-v2-5` and `tabpfn-v3`, the paper's own backbones.** Both download and neither loads,
+  by two different faults with one remedy: `tabpfn-v2-5`'s checkpoint is published under tensor
+  names the exported graph was not built against (missing 248 of 250), and `tabpfn-v3` is a torch
+  zip whose pickle stream uses opcode 0x65, which the checkpoint reader does not implement. Either
+  way the engine prefers a sibling `model.safetensors`, and the one-time conversion
+  `scripts/convert_model_weights.sh` performs writes one — for the two models licensed
+  commercially, deliberately not for these. So this is a **licence decision, not a blocker**, and
+  it is much less alarming than it was: `tabicl-v2`, `tabpfn-v2` and `orion-bix` score 0.7579,
+  0.7568 and 0.7371 on the same 17 datasets and fail on the same rows, so the backbone is not
+  where the results come from.
 *(Resolved during the session: `test/sql/rocket.test` now runs through DuckDB's own
 sqllogictest runner — **12 assertions, all passing** — via `scripts/build_extension.bat tests`.
 Two traps were worth fixing on the way: the runner registers tests under a canonical

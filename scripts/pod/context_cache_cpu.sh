@@ -101,7 +101,11 @@ log "generate the workload (S=$S context, Q=$Q per call, $CALLS calls, H=$H feat
 python3 - "$MODEL_DIR" "$S" "$Q" "$CALLS" "$H" "$EXT" > "$OUT/bench.sql" <<'PY'
 import sys
 model_dir, S, Q, CALLS, H, ext = sys.argv[1], *map(int, sys.argv[2:6]), sys.argv[6]
-cols = ", ".join(f"f{i}" for i in range(H))
+# `i` is carried through so the two arms can be joined row by row, but it must NOT
+# be a feature: it would be a 501st column past anofox_tabfm_max_features, and it
+# encodes the label directly (label = 'c' || i % 3), so the model would be handed
+# the answer. Naming the features explicitly keeps H at exactly 500 -- #37's shape.
+FEATURE_LIST = "[" + ", ".join(f"'f{i}'" for i in range(H)) + "]"
 # Deterministic features from the row index, so both arms and any rerun see the same table.
 feats = ", ".join(f"sin({i + 1} * (i + 1) * 0.017)::DOUBLE AS f{i}" for i in range(H))
 p = print
@@ -126,12 +130,12 @@ for k in range(CALLS):
 p("-- the model loads on the first scoring call; warm it OUTSIDE the timed arms so")
 p("-- session creation is not charged to whichever arm happens to run first.")
 p("SET anofox_tabfm_context_cache = false;")
-p("CREATE TABLE warm AS SELECT i, yhat FROM tabfm_classify('call0', 'label', model := 'tabicl-split');")
+p(f"CREATE TABLE warm AS SELECT i, yhat FROM tabfm_classify('call0', 'label', features := {FEATURE_LIST}, model := 'tabicl-split');")
 for arm, flag in (("off", "false"), ("on", "true")):
     p(f"SET anofox_tabfm_context_cache = {flag};")
     for k in range(CALLS):
         p(f"CREATE TABLE {arm}{k} AS SELECT i, yhat, yhat_score, is_training "
-          f"FROM tabfm_classify('call{k}', 'label', model := 'tabicl-split');")
+          f"FROM tabfm_classify('call{k}', 'label', features := {FEATURE_LIST}, model := 'tabicl-split');")
 p(".timer off")
 p("-- Do the two arms give the same answer on the rows that are actually predictions?")
 u_off = " UNION ALL ".join(f"SELECT * FROM off{k} WHERE NOT is_training" for k in range(CALLS))

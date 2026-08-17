@@ -90,6 +90,18 @@ def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]
     out = (ROOT / "reference" / "resample" / args.arms /
            f"{dataset}_r{resample}_{arm}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Already done: return it rather than recompute. This is what makes the campaign growable --
+    # run --resamples 1, look at the answer, then --resamples 3 and pay only for the two new ones.
+    # On a small box that is the difference between committing to eight hours up front and
+    # deciding after two whether the rest is worth it.
+    if out.exists():
+        try:
+            prior = json.loads(out.read_text(encoding="utf-8"))
+            return {"dataset": dataset, "resample": resample, "arm": arm, "cached": True,
+                    "accuracy": prior["accuracy"], "seconds": prior["seconds"],
+                    "n_test": prior["shape"]["n_test"], "failures": prior["failures"]}
+        except (ValueError, KeyError):
+            pass          # truncated by a kill mid-write; fall through and redo it
     cmd = [
         sys.executable, str(ROOT / "scripts" / "phase5_pipeline.py"),
         "--dataset", dataset,
@@ -357,9 +369,25 @@ def main() -> int:
         for d in (x for x in UCR_SUBSET if not x.runnable):
             print(f"SKIP  {describe(d)}", file=sys.stderr)
 
+    # Cheapest dataset first, and both arms of a pair adjacent. A run on a small box may have to
+    # be stopped before it finishes, and the analysis drops half-finished pairs -- so the order
+    # decides whether an early stop leaves usable pairs or fragments. Cost comes from the archived
+    # wall clocks; datasets with no archived run sort last, since an unknown cost is the one most
+    # likely to be large.
+    def archived_cost(name: str) -> float:
+        for pat in (f"phase5_{name}.json", f"phase5_{name}_cpu.json", f"phase5_{name}_gpu.json"):
+            p = ROOT / "reference" / pat
+            if p.exists():
+                try:
+                    return float(json.loads(p.read_text(encoding="utf-8"))["seconds"])
+                except (ValueError, KeyError):
+                    continue
+        return float("inf")
+
+    ordered = sorted(names, key=archived_cost)
     jobs = [(n, k, arm, cfg)
             for n, k, (arm, cfg) in itertools.product(
-                names, range(1, args.resamples + 1),
+                ordered, range(1, args.resamples + 1),
                 (("A", arm_a), ("B", arm_b)))]
 
     print(f"{len(names)} datasets x {args.resamples} resamples x 2 arms = {len(jobs)} runs")

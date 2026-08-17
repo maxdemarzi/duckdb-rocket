@@ -99,8 +99,63 @@ def subsample_context(x, y, max_rows: int, seed: int):
     return x[keep], y[keep], keep
 
 
+def resample_split(x_train, y_train, x_test, y_test, resample: int):
+    """Re-split the pooled data the way the paper's protocol does, holding every size fixed.
+
+    **This is the missing axis, and it is the one that decides whether any recent result here is
+    real.** Every number in RESULTS.md comes from a single train/test split -- the one the archive
+    ships -- and the effects being chased are smaller than what one split can resolve. Beef has 30
+    test rows, so a single row is 0.0333 of accuracy; G=10 costs -0.0033 and the best ensemble rule
+    found gains +0.0024. Both are an order of magnitude under the quantisation, never mind the
+    variance. The paper averages 30 resamples for exactly this reason.
+
+    `--seed` does NOT do this and cannot be substituted for it: it varies the kernel bank and the
+    context subsample while the split stays put, so it measures a different noise term -- the one
+    that is already small. Split luck is the term that dominates, and only this touches it.
+
+    resample=0 returns the archive's own split untouched, byte for byte, so every archived result
+    reproduces. resample>=1 pools train and test, then draws a new split preserving the ORIGINAL
+    PER-CLASS train count -- not merely the total. Preserving only the total would let the class
+    balance of the context drift between resamples, and the context composition is itself a
+    treatment: an in-context model reads those rows as its entire training signal. Two resamples
+    that disagree because one of them happened to draw a thinner minority class would be measuring
+    the sampler, not the pipeline.
+    """
+    if resample == 0:
+        return x_train, y_train, x_test, y_test
+
+    y_train, y_test = np.asarray(y_train), np.asarray(y_test)
+    x_all = np.concatenate([x_train, x_test], axis=0)
+    y_all = np.concatenate([y_train, y_test], axis=0)
+
+    # Seeded by the resample index alone, so resample k is the same split whatever --seed says.
+    # That independence is the point: it lets one run vary the split with the kernel bank held
+    # fixed, which is the only way to attribute a difference to one of them.
+    rng = np.random.default_rng(resample)
+    train_idx, test_idx = [], []
+    for c in np.unique(y_all):
+        idx = np.nonzero(y_all == c)[0]
+        rng.shuffle(idx)
+        n_c = int(np.sum(y_train == c))          # this class's original train count
+        train_idx.append(idx[:n_c])
+        test_idx.append(idx[n_c:])
+    train_idx = np.sort(np.concatenate(train_idx))
+    test_idx = np.sort(np.concatenate(test_idx))
+
+    # A class present only in test would give n_c = 0 and contribute nothing to the context, which
+    # is a real property of the archive split rather than a bug -- but it must not silently change
+    # the shapes, because the row-alignment assertions downstream are stated in those terms.
+    if len(train_idx) != len(y_train) or len(test_idx) != len(y_test):
+        raise ValueError(
+            f"resample {resample} produced {len(train_idx)}/{len(test_idx)} train/test rows, "
+            f"expected {len(y_train)}/{len(y_test)}; the pooled class counts do not admit the "
+            f"archive's per-class train sizes")
+    return x_all[train_idx], y_all[train_idx], x_all[test_idx], y_all[test_idx]
+
+
 def write_raw_parquet(dataset: str, outdir: Path, normalize: bool,
-                      max_train_rows: int = 0, seed: int = 0) -> tuple[dict, np.ndarray]:
+                      max_train_rows: int = 0, seed: int = 0,
+                      resample: int = 0) -> tuple[dict, np.ndarray]:
     """Write the dataset as one table of (id, split, label, values DOUBLE[]).
 
     Series normalisation stays a caller-side step (SPEC.md 7) and is therefore done here rather
@@ -112,6 +167,10 @@ def write_raw_parquet(dataset: str, outdir: Path, normalize: bool,
 
     x_train, y_train = load(dataset, "train")
     x_test, y_test = load(dataset, "test")
+    # Before the context subsample, not after: --max-train-rows thins the context the model sees,
+    # and thinning a split is a different operation from thinning a pool. Reversing these would
+    # make --resample silently undo --max-train-rows by drawing from the full pool again.
+    x_train, y_train, x_test, y_test = resample_split(x_train, y_train, x_test, y_test, resample)
     if max_train_rows:
         x_train, y_train, _ = subsample_context(x_train, y_train, max_train_rows, seed)
     if normalize:
@@ -773,6 +832,14 @@ def main() -> int:
              "only setting that turns an OOM kill into an error you can read -- memory_limit "
              "governs DuckDB alone and the model allocates outside it.")
     parser.add_argument(
+        "--resample", type=int, default=0,
+        help="which train/test split to use. 0 (default) is the archive's own, so archived "
+             "results reproduce unchanged; 1..N are stratified re-splits of the pooled data at "
+             "the same per-class sizes, seeded by this number alone. This is the axis every "
+             "result in RESULTS.md is missing -- one split cannot separate a real half-point from "
+             "a lucky one, and the paper averages 30. Not interchangeable with --seed, which "
+             "varies the kernel bank while the split stays put.")
+    parser.add_argument(
         "--context-cache",
         action="store_true",
         help="set anofox_tabfm_context_cache, which encodes the labelled context once per support "
@@ -834,7 +901,7 @@ def main() -> int:
 
     print(f"\n[1/3] writing raw series -> {workdir}", flush=True)
     meta, y_test = write_raw_parquet(args.dataset, workdir, config.normalize,
-                                     args.max_train_rows, args.seed)
+                                     args.max_train_rows, args.seed, args.resample)
     print(f"      {meta['n_train']} train / {meta['n_test']} test, "
           f"{meta['n_timepoints']} timepoints")
 
@@ -1116,6 +1183,10 @@ def main() -> int:
             "features_per_group": config.features_per_group,
             "n_estimators": config.n_estimators,
             "seed": config.seed,
+            # Which split this is. Recorded next to the seed because the two are separate axes and
+            # a report that names only one of them cannot be placed: resample 0 seed 0 and
+            # resample 7 seed 0 are different experiments that would otherwise look identical.
+            "resample": args.resample,
             "threads": args.threads,
             # Part of the environment tuple, not a tuning knob: a timing is not comparable
             # against another run that was given a different budget, or none.

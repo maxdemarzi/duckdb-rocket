@@ -221,7 +221,7 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               model: str = MODEL, anofox_extension: Path | None = None,
               register_dir: Path | None = None, features: str = "rocket",
               ts_names: list[str] | None = None, per_group: bool = False,
-              tabfm_max_memory: str | None = None) -> str:
+              tabfm_max_memory: str | None = None, context_cache: bool = False) -> str:
     # Which feature families the classifier sees. `rocket` is the 500 random-convolution features
     # per group that every result so far uses. `ts` is anofox_forecast's 116 statistics, which beat
     # 10,000 ROCKET features on three of six hard datasets under a ridge. `both` is the open
@@ -334,6 +334,18 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
         # exit -9 and an empty stderr. That failure mode cost this project several sessions and one
         # withdrawn explanation on SemgHandMovementCh2.
         *( [f"SET anofox_tabfm_max_memory = '{tabfm_max_memory}';"] if tabfm_max_memory else [] ),
+        # Opt-in for the same reason, and with a second condition on top of the build: the model
+        # must ship the support/query graph pair from #38, which no published one does. So this
+        # needs BOTH a #40 build (--anofox-extension) and a model directory carrying the pair
+        # (--register-model-dir), and it is silently inert without the second -- the engine falls
+        # back to the combined graph when it cannot find all four artifacts.
+        #
+        # What it changes is the shape of the work, not the answer: the labelled context is encoded
+        # once per support set instead of once per call. Measured through the extension at 7.2x on
+        # a repeated call and 0.36x on the first, so the case that gains is --test-chunk, where a
+        # group's chunks all share one context. A run without --test-chunk makes one call per group
+        # against a context that changes every time, and pays the cold penalty 40 times for nothing.
+        *( ["SET anofox_tabfm_context_cache = true;"] if context_cache else [] ),
         # Thread count is set explicitly rather than inherited from the visible core count.
         # On a 112-core pod, four concurrent runs each sized their own pool from that number,
         # on top of ONNX's per-session threads, and every run died near completion with no
@@ -761,6 +773,15 @@ def main() -> int:
              "only setting that turns an OOM kill into an error you can read -- memory_limit "
              "governs DuckDB alone and the model allocates outside it.")
     parser.add_argument(
+        "--context-cache",
+        action="store_true",
+        help="set anofox_tabfm_context_cache, which encodes the labelled context once per support "
+             "set instead of once per classify call. Unreleased upstream as of 2026-08-16 "
+             "(DataZooDE/anofox-tabfm#40), and it additionally needs a --register-model-dir whose "
+             "graphs include the split pair from #38 -- without that the engine quietly uses the "
+             "combined graph and this flag does nothing. Pair it with --test-chunk: the cache pays "
+             "off across chunks of one group, and costs about 2.5x on each group's first call.")
+    parser.add_argument(
         "--per-group-soft",
         action="store_true",
         help="also archive each group's own probabilities, not just their average. One run then "
@@ -779,6 +800,27 @@ def main() -> int:
         print(f"no such shell: {args.shell}\nBuild with scripts/build_extension.bat",
               file=sys.stderr)
         return 1
+
+    # The cache engages only if the engine finds ALL FOUR split artifacts beside the combined
+    # graph, and falls back to the combined graph in silence if it does not. Silence is the whole
+    # problem: the run then completes, reports a normal accuracy, and its timing gets written down
+    # as "with the cache" when nothing was cached. Checked here, against the same filenames the
+    # engine derives, because a precondition that is cheap to verify should never be inferred from
+    # a wall clock afterwards.
+    if args.context_cache:
+        if not args.register_model_dir:
+            parser.error("--context-cache needs --register-model-dir: no published model ships "
+                         "the split pair, so there is nothing for the engine to find.")
+        missing = [n for n in ("graph_prepare_tabicl_classification.onnx",
+                               "graph_query_tabicl_classification.onnx",
+                               "tensor_map_prepare_tabicl_classification.json",
+                               "tensor_map_query_tabicl_classification.json")
+                   if not (args.register_model_dir / n).exists()]
+        if missing:
+            parser.error(f"--context-cache: {args.register_model_dir} is missing "
+                         f"{', '.join(missing)}. Export them with "
+                         f"tools/export_tabicl --split-context; without all four the engine uses "
+                         f"the combined graph and the run would be mistimed rather than fail.")
 
     config = RocketPFNConfig(
         num_kernels=args.num_kernels, n_groups=args.n_groups, seed=args.seed, n_estimators=1
@@ -835,7 +877,8 @@ def main() -> int:
                     register_dir=args.register_model_dir,
                     features=args.features, ts_names=ts_names,
                     per_group=args.per_group_soft,
-                    tabfm_max_memory=args.tabfm_max_memory)
+                    tabfm_max_memory=args.tabfm_max_memory,
+                    context_cache=args.context_cache)
     script = workdir / "pipeline.sql"
     script.write_text(sql, encoding="utf-8")
     print(f"[2/3] generated {len(sql):,} characters of SQL")
@@ -1079,6 +1122,9 @@ def main() -> int:
             "memory_limit": memory_limit,
             "memory_budget_source": budget_source,
             "test_chunk": args.test_chunk,
+            # Environment tuple, not a tuning knob, and the one flag here that changes which graph
+            # runs. A timing is not comparable against a run that encoded the context differently.
+            "context_cache": args.context_cache,
             "onnx_threads": onnx_threads,
             "cpu_count_source": core_source,
         },

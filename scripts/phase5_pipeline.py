@@ -832,6 +832,12 @@ def main() -> int:
              "only setting that turns an OOM kill into an error you can read -- memory_limit "
              "governs DuckDB alone and the model allocates outside it.")
     parser.add_argument(
+        "--workdir", type=Path, default=None,
+        help="where raw.parquet, predictions.json and the DuckDB temp directory go. Defaults to "
+             "data/phase5/<dataset>, which is shared by every run of that dataset -- fine one at "
+             "a time, and a data race the moment two run concurrently. Any driver running jobs in "
+             "parallel must give each one its own.")
+    parser.add_argument(
         "--resample", type=int, default=0,
         help="which train/test split to use. 0 (default) is the archive's own, so archived "
              "results reproduce unchanged; 1..N are stratified re-splits of the pooled data at "
@@ -894,7 +900,13 @@ def main() -> int:
     )
     config.validate()
     out = args.out or ROOT / "reference" / f"phase5_{args.dataset}.json"
-    workdir = ROOT / "data" / "phase5" / args.dataset
+    # Every run of a dataset shared one directory until concurrent resamples collided in it.
+    # `raw.parquet`, `predictions.json` and the DuckDB temp directory all live here, so two runs
+    # of the same dataset raced on writing and reading the same files. The crash it produced --
+    # "No magic bytes found at end of file" from a parquet read mid-write -- was the LUCKY
+    # outcome: the same race can just as easily have one resample read the split another wrote,
+    # and then every number is quietly attributed to the wrong split.
+    workdir = args.workdir or (ROOT / "data" / "phase5" / args.dataset)
 
     print(f"config: {config.n_groups} groups x {config.kernels_per_group} kernels "
           f"= {config.features_per_group} features/group")

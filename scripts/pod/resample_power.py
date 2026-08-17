@@ -81,6 +81,11 @@ def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]
         # pool from 112, and all four died near completion with no error message at all. With
         # --jobs J the box carries J x threads x onnx_threads at once.
         "--onnx-threads", str(args.onnx_threads),
+        # One directory per (dataset, resample, arm). Without this, --jobs > 1 has concurrent runs
+        # of the same dataset writing and reading one raw.parquet: observed as "No magic bytes
+        # found at end of file" on the first launch, which is the loud version. The quiet version
+        # is one resample reading the split another just wrote.
+        "--workdir", str(ROOT / "data" / "resample" / f"{dataset}_r{resample}_{arm}"),
         "--out", str(out),
         *config,
     ]

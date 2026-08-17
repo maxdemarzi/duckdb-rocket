@@ -1,5 +1,14 @@
 # RunPod
 
+> **This file documents the `black_swan` lane**, whose `scripts/cloud/runpod_launch.py` this
+> repo's launchers were ported from. It refers to `rai-swan`, BIRD, Spider and the
+> `maxdemarzi/black-swan` dataset, none of which live here.
+>
+> **For running *this* project on a pod — `scripts/pod/runpod_cpu.py`, `sweep.py`,
+> `resample_power.py`, and what a container gets wrong about its own size — see
+> [POD.md](POD.md).** Kept because the GPU sections, the credential handling and the
+> region deny list still apply to both.
+
 The L40S lane, end to end. Prices and stock in this file were read from the API on
 2026-08-04 and **will drift** — re-read them with `runpod_launch.py gpus` rather than
 trusting the table.

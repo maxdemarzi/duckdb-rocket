@@ -271,6 +271,14 @@ uv run python scripts/phase5_pipeline.py --dataset Beef --workdir data/scratch/b
 The DuckDB CLI under `tools/` and the `duckdb` submodule are both pinned to **v1.5.5**
 (`d8cdaa33`) because extension ABI is version-bound.
 
+### Timings come from pods, not this workstation
+
+Accuracy reproduces locally; wall clock does not. Local Windows timings mislead because WDDM spills
+to host memory instead of failing, so a run that would be OOM-killed in a container merely gets
+slow. Every timing in [reference/RESULTS.md](reference/RESULTS.md) came off a rented pod, and
+[docs/POD.md](docs/POD.md) is how — the launchers, the drivers, and the several ways a container
+lies about how large it is.
+
 ### Model weights require third-party licences
 
 Two separate gates, and clearing one does not clear the other.

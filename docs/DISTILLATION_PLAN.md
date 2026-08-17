@@ -164,6 +164,12 @@ Use the expensive in-context model **once per example** to manufacture a labelle
 distil into something that classifies for nothing. It converts this pipeline's defining weakness —
 every prediction pays full price, inference is 93.7% of wall clock — into a one-off cost.
 
+*The context cache (anofox-tabfm#40) is not an alternative to this and does not overlap with it. It
+reuses one encoded context across calls that share it, measured at 1.85x on the best shape in this
+project's archive and a net loss on the most common one. Distillation removes the in-context model
+from the serving path entirely, which is a different order of saving; the cache makes manufacturing
+the labelled dataset somewhat cheaper, and that is all.*
+
 Two things make this cheaper here than distillation usually is:
 
 1. **Soft labels already exist.** The pipeline materialises

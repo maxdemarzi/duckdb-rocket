@@ -107,8 +107,19 @@ slower than the pod, so its timings understate it in the direction that flatters
 
 Training-free classification is a trade, not a free lunch. What you buy is that **there is no
 model**: no fit step, no artefact to store or version, no Python in the serving path. What you pay
-is that **every prediction pays full price** — there is nothing to amortise, and inference is
-**93.7%** of wall clock in the measured runs.
+is that **inference is 93.7% of wall clock**, and there is no trained artefact to amortise it
+against — a new set of labelled examples pays full price every time.
+
+One narrower thing *can* now be amortised, and it is worth knowing the size of it. Where many calls
+share the same labelled context, the context only has to be encoded once
+([anofox-tabfm#40](https://github.com/DataZooDE/anofox-tabfm/pull/40), unreleased). Measured through
+this pipeline that is **1.85x** on a dataset with nine test chunks per group, 1.13x at two chunks,
+and **0.64-0.73x — a net loss — at one**, because a single chunk pays the cold encode and gets no
+reuse. Single-chunk is the most common shape in this project's own archive, so on a full sweep it is
+worth about 7%. It changes the constant, not the trade: see
+[reference/RESULTS.md](reference/RESULTS.md) for the numbers, and
+[docs/DISTILLATION_PLAN.md](docs/DISTILLATION_PLAN.md) for the approach that would change the trade
+itself.
 
 ### It fits well when
 

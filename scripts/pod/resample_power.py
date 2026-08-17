@@ -75,6 +75,12 @@ def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]
         "--resample", str(resample),
         "--test-chunk", str(args.test_chunk),
         "--threads", str(args.threads),
+        # Passed explicitly, never left to the pipeline's own default, because that default sizes
+        # from the visible core count and every concurrent job would size from the SAME number.
+        # That is the failure PLAN.md records: four concurrent runs on a 112-core pod each built a
+        # pool from 112, and all four died near completion with no error message at all. With
+        # --jobs J the box carries J x threads x onnx_threads at once.
+        "--onnx-threads", str(args.onnx_threads),
         "--out", str(out),
         *config,
     ]
@@ -206,7 +212,14 @@ def main() -> int:
                         help="resample indices 1..N. The pilot's job is to estimate variance, "
                              "not to settle the comparison, so this is small by design.")
     parser.add_argument("--test-chunk", type=int, default=128)
-    parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--threads", type=int, default=2,
+                        help="DuckDB threads per run. Small by default because these runs are "
+                             "largely serial -- 40 classify calls one after another -- so the "
+                             "parallelism worth having is across jobs, not inside one.")
+    parser.add_argument("--onnx-threads", type=int, default=2,
+                        help="ONNX intra-op threads per run. jobs x threads x onnx-threads is "
+                             "what the box actually carries; size it to the CGROUP quota, which "
+                             "on a RunPod GPU host is nothing like what nproc reports.")
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=7200)
     parser.add_argument("--target", type=float, default=0.005,
@@ -227,32 +240,46 @@ def main() -> int:
         return 0
 
     if args.datasets:
-        wanted = {n.strip() for n in args.datasets.split(",")}
-        specs = [d for d in UCR_SUBSET if d.name in wanted]
-        missing = wanted - {d.name for d in specs}
+        # Validated against the full 112 equal-length univariate UCR archive, not against
+        # UCR_SUBSET. That subset is the ten datasets the breadth sweep uses and nine of its ten
+        # sit at 0.94-1.00, which makes it exactly the wrong population for a variance pilot: a
+        # saturated dataset has no room for a resample to move it, so it contributes a `within` of
+        # zero and drags the estimate toward "resampling is free".
+        wanted = [n.strip() for n in args.datasets.split(",") if n.strip()]
+        try:
+            from aeon.datasets.tsc_datasets import univariate_equal_length
+            known = set(univariate_equal_length)
+        except ImportError:                       # aeon absent: fall back to the curated subset
+            known = {d.name for d in UCR_SUBSET}
+        missing = [n for n in wanted if n not in known]
         if missing:
             parser.error(f"unknown dataset(s): {', '.join(sorted(missing))}")
-        specs = [d for d in specs if d.runnable]
+        names = wanted
     else:
-        specs = list(RUNNABLE_SUBSET)
+        names = [d.name for d in RUNNABLE_SUBSET]
         for d in (x for x in UCR_SUBSET if not x.runnable):
             print(f"SKIP  {describe(d)}", file=sys.stderr)
 
-    jobs = [(s.name, k, arm, cfg)
-            for s, k, (arm, cfg) in itertools.product(
-                specs, range(1, args.resamples + 1),
+    jobs = [(n, k, arm, cfg)
+            for n, k, (arm, cfg) in itertools.product(
+                names, range(1, args.resamples + 1),
                 (("A", CONFIG_A), ("B", CONFIG_B)))]
 
-    print(f"{len(specs)} datasets x {args.resamples} resamples x 2 arms = {len(jobs)} runs")
+    print(f"{len(names)} datasets x {args.resamples} resamples x 2 arms = {len(jobs)} runs")
     print(f"  A {' '.join(CONFIG_A)}\n  B {' '.join(CONFIG_B)}")
     if args.dry_run:
         # Costing off the archived wall clocks rather than a guess: those are the same pipeline on
         # the same datasets, which is the only honest estimate available before spending anything.
         known, unknown = [], 0
-        for s in specs:
-            f = ROOT / "reference" / f"phase5_{s.name}.json"
-            if f.exists():
-                known.append(json.loads(f.read_text(encoding="utf-8"))["seconds"])
+        for n in names:
+            # The archive names the same run three ways depending on which sweep produced it --
+            # phase5_X.json, phase5_X_cpu.json, phase5_X_ts.json -- and checking only the first
+            # costed a 16-dataset pilot off ONE dataset while reporting "15 unmeasured" in small
+            # print. An estimate that thin is worse than none, because it still gets quoted.
+            hit = next((p for p in (ROOT / "reference").glob(f"phase5_{n}.json")), None) \
+                or next((p for p in (ROOT / "reference").glob(f"phase5_{n}_cpu.json")), None)
+            if hit:
+                known.append(json.loads(hit.read_text(encoding="utf-8"))["seconds"])
             else:
                 unknown += 1
         if known:

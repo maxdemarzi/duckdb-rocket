@@ -69,9 +69,26 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 CONFIG_A = ("--num-kernels", "10000", "--n-groups", "40")   # 40 groups x 250 kernels
 CONFIG_B = ("--num-kernels", "2500", "--n-groups", "10")    # its first 10 groups, exactly
 
+#: Named comparisons, so the paired machinery below is reused rather than copied. Every one holds
+#: everything except the single thing under test -- that is what makes the difference paired, and it
+#: is the property a new entry has to preserve to belong here.
+ARM_SETS = {
+    #: Phase 7's group lever: 40 groups against its own first 10.
+    "groups": (CONFIG_A, CONFIG_B),
+    #: Phase 7b': feature CONCATENATION, which is where 7a's negative points. 7a established that
+    #: no rule can SELECT between arms -- averaging, margin-routing, surest-arm and a supervised
+    #: stacker all failed -- so the remaining move is to stop treating families as separate arms and
+    #: hand both to one model. 500 ROCKET + 116 statistics = 616 columns, which stays inside
+    #: tabicl-v2's 512-per-estimator budget at G=40. Archived on six hard datasets at +0.0088,
+    #: 4 wins to 2, on one split; this is what tests it properly.
+    "features": (("--num-kernels", "10000", "--n-groups", "40", "--features", "rocket"),
+                 ("--num-kernels", "10000", "--n-groups", "40", "--features", "both")),
+}
+
 
 def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]) -> dict:
-    out = ROOT / "reference" / "resample" / f"{dataset}_r{resample}_{arm}.json"
+    out = (ROOT / "reference" / "resample" / args.arms /
+           f"{dataset}_r{resample}_{arm}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         sys.executable, str(ROOT / "scripts" / "phase5_pipeline.py"),
@@ -98,7 +115,8 @@ def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]
         # of the same dataset writing and reading one raw.parquet: observed as "No magic bytes
         # found at end of file" on the first launch, which is the loud version. The quiet version
         # is one resample reading the split another just wrote.
-        "--workdir", str(ROOT / "data" / "resample" / f"{dataset}_r{resample}_{arm}"),
+        "--workdir", str(ROOT / "data" / "resample" / args.arms /
+                         f"{dataset}_r{resample}_{arm}"),
         "--out", str(out),
         *config,
     ]
@@ -267,6 +285,10 @@ def main() -> int:
                         help="ONNX intra-op threads per run. jobs x threads x onnx-threads is "
                              "what the box actually carries; size it to the CGROUP quota, which "
                              "on a RunPod GPU host is nothing like what nproc reports.")
+    parser.add_argument("--arms", default="groups", choices=sorted(ARM_SETS),
+                        help="which paired comparison to run. 'groups' is 40 groups vs its own "
+                             "first 10. 'features' is ROCKET vs ROCKET+statistics concatenated, "
+                             "which is where Phase 7a's negative points.")
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--memory-limit", default=None,
                         help="DuckDB memory_limit PER RUN, e.g. '8GB'. Defaults to 60%% of the "
@@ -284,6 +306,7 @@ def main() -> int:
     parser.add_argument("--analyse-only", action="store_true",
                         help="re-read --out and re-run the statistics, with no pod time at all")
     args = parser.parse_args()
+    arm_a, arm_b = ARM_SETS[args.arms]
 
     if args.analyse_only:
         # Before the memory arithmetic, which is about running and has no business printing
@@ -337,10 +360,10 @@ def main() -> int:
     jobs = [(n, k, arm, cfg)
             for n, k, (arm, cfg) in itertools.product(
                 names, range(1, args.resamples + 1),
-                (("A", CONFIG_A), ("B", CONFIG_B)))]
+                (("A", arm_a), ("B", arm_b)))]
 
     print(f"{len(names)} datasets x {args.resamples} resamples x 2 arms = {len(jobs)} runs")
-    print(f"  A {' '.join(CONFIG_A)}\n  B {' '.join(CONFIG_B)}")
+    print(f"comparison '{args.arms}':\n  A {' '.join(arm_a)}\n  B {' '.join(arm_b)}")
     if args.dry_run:
         # Costing off the archived wall clocks rather than a guess: those are the same pipeline on
         # the same datasets, which is the only honest estimate available before spending anything.
@@ -361,8 +384,15 @@ def main() -> int:
             hours = len(jobs) * per / 3600 / max(1, args.jobs)
             print(f"\n  archived mean wall clock {per:.0f}s over {len(known)} datasets"
                   f"{f' ({unknown} unmeasured)' if unknown else ''}")
-            print(f"  ~{hours:.1f} h at --jobs {args.jobs}, and arm B is cheaper than its "
-                  f"archived A, so this is an upper bound")
+            # Whether the archived time over- or under-states the total depends on the
+            # comparison, and saying "upper bound" unconditionally would be wrong for half of
+            # them: `groups` arm B runs a quarter of the groups, `features` arm B carries 616
+            # columns against 500 and is DEARER than the archived run it is costed from.
+            direction = ("and arm B runs fewer groups, so this is an upper bound"
+                         if args.arms == "groups" else
+                         "and arm B carries MORE columns than the archived run, so this is a "
+                         "LOWER bound")
+            print(f"  ~{hours:.1f} h at --jobs {args.jobs}, {direction}")
         for ds, k, arm, cfg in jobs[:6]:
             print(f"    {ds} r{k} arm {arm}: {' '.join(cfg)}")
         if len(jobs) > 6:
@@ -400,7 +430,8 @@ def main() -> int:
             else:
                 print(f"  {ds} r{k} {arm}  FAILED: {str(r.get('error'))[:200]}", flush=True)
             args.out.write_text(json.dumps({
-                "arms": {"A": list(CONFIG_A), "B": list(CONFIG_B)},
+                "comparison": args.arms,
+                "arms": {"A": list(arm_a), "B": list(arm_b)},
                 "resamples": args.resamples, "runs": runs,
                 "elapsed_seconds": round(time.perf_counter() - started_all, 1),
                 "analysis": analyse(runs, args.target),

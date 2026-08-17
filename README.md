@@ -174,6 +174,13 @@ it is *not* comparable to the paper's 0.900 over 92 datasets — different datas
 backbone, one split instead of 30 resamples. Treat it as evidence the pipeline works, not as a
 benchmark result.
 
+That last gap is now measured rather than merely admitted. A 160-run pilot put split luck at **8x**
+the between-dataset effect (sd 0.0173 against 0.0061), which means a proper protocol here is
+**40 datasets x 4 resamples — 320 runs**, not the 1,440 that copying 24 x 30 would cost. It also
+found the single split pointing the wrong way on the group-count comparison: +0.0025 measured
+against −0.0033 archived, both indistinguishable from zero. `--resample` exists; the campaign has
+not been run.
+
 ## Try it
 
 ```bash
@@ -233,11 +240,32 @@ Requires [`uv`](https://docs.astral.sh/uv/), CMake, Ninja, and — on Windows �
 (clang alone cannot link the extension without the Windows SDK).
 
 ```bash
-uv run pytest                              # 94 tests, no model weights needed
+uv run pytest                              # 320 tests, no model weights needed
 uv run python scripts/doctor.py            # record the environment tuple
 uv run python scripts/emit_golden.py       # regenerate conformance fixtures
 uv run python scripts/probe_anofox.py      # re-run the Phase 2 probes
 uv run python scripts/accuracy.py --smoke  # oracle accuracy harness
+```
+
+The pipeline harness takes three flags worth knowing about:
+
+```bash
+# A different train/test split. 0 (the default) is the archive's own, so every archived
+# result reproduces; 1..N are stratified re-splits at the same per-class sizes. NOT the
+# same as --seed, which varies the kernel bank while the split stays put.
+uv run python scripts/phase5_pipeline.py --dataset GunPoint --resample 3
+
+# Encode the labelled context once per support set instead of once per classify call.
+# Needs an unreleased anofox_tabfm build and a model directory carrying the split graph
+# pair, and it refuses to start without them rather than running uncached in silence.
+# Pays off only across --test-chunk chunks: 1.85x at nine chunks per group, a LOSS at one.
+uv run python scripts/phase5_pipeline.py --dataset OSULeaf --test-chunk 128 \
+    --anofox-extension PATH --register-model-dir DIR --context-cache
+
+# Where raw.parquet and predictions.json go. Defaults to data/phase5/<dataset>, which is
+# shared by every run of that dataset -- any driver running jobs in parallel must give
+# each one its own, or concurrent runs overwrite each other's predictions.
+uv run python scripts/phase5_pipeline.py --dataset Beef --workdir data/scratch/beef
 ```
 
 The DuckDB CLI under `tools/` and the `duckdb` submodule are both pinned to **v1.5.5**

@@ -48,11 +48,30 @@ MODEL_DIR=/workspace/model_split_phase5
 DATASETS="${DATASETS:-ItalyPowerDemand OSULeaf}"
 CHUNK="${CHUNK:-128}"
 THREADS="${THREADS:-4}"
-# Sized so the pools multiply out to the cores we actually have: DuckDB runs THREADS of them and
-# each ONNX session takes ONNX_THREADS. 16 vCPU gives 4x4, which is what the archived phase-5
-# numbers were taken at; a smaller box scales down instead of oversubscribing. CPU capacity was
-# exhausted at every size when this was first run, so the box is whatever was available.
-ONNX_THREADS="${ONNX_THREADS:-$(( $(nproc) / THREADS > 0 ? $(nproc) / THREADS : 1 ))}"
+
+# The cores this container may actually use, which is NOT what the box reports. On the host this
+# first ran on, `nproc` said 112, `sched_getaffinity` said 112, and the cgroup quota said 11.9 --
+# the pod was sold as 14 vCPU. Sizing the pools off nproc would have put 4 x 28 = 112 threads on
+# 11.9 cores, which is the failure PLAN.md already records twice: a 64-core pod inside a 256-core
+# host defaulted to 128 ONNX threads per session, load average 143, and every run died near
+# completion with no error at all.
+binding_cores() {
+    local q p
+    if [ -r /sys/fs/cgroup/cpu.max ]; then                       # cgroup v2: "QUOTA PERIOD"
+        read -r q p < /sys/fs/cgroup/cpu.max
+        [ "$q" != "max" ] && { echo $(( q / p )); return; }
+    elif [ -r /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then        # cgroup v1
+        q=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
+        p=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
+        [ "$q" -gt 0 ] && { echo $(( q / p )); return; }
+    fi
+    nproc                                                         # unconstrained: nproc is honest
+}
+CORES=$(binding_cores)
+# Pools multiply out: DuckDB runs THREADS of them and each ONNX session takes ONNX_THREADS.
+# 16 vCPU gives 4x4, which is what the archived phase-5 numbers were taken at; a smaller box
+# scales down instead of oversubscribing.
+ONNX_THREADS="${ONNX_THREADS:-$(( CORES / THREADS > 0 ? CORES / THREADS : 1 ))}"
 
 log() { printf '\n=== %s  [%s]\n' "$*" "$(date -u +%H:%M:%S)"; }
 
@@ -66,7 +85,11 @@ for t in git curl unzip; do
 done
 command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh 2>/dev/null | sh >/dev/null 2>&1
 export PATH="$HOME/.local/bin:$PATH"
-echo "  $(nproc) vCPU, $(free -g | awk '/^Mem:/{print $2}') GB RAM"
+echo "  $CORES usable cores (nproc says $(nproc)), $(free -g | awk '/^Mem:/{print $2}') GB RAM visible"
+echo "  pools: $THREADS duckdb x $ONNX_THREADS onnx = $(( THREADS * ONNX_THREADS )) of $CORES"
+for f in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory/memory.limit_in_bytes; do
+    [ -r "$f" ] && echo "  cgroup memory: $(cat "$f")"
+done
 [ -f "$EXT" ] || { echo "FATAL: no extension at $EXT -- scp the #40 CI artifact first"; exit 1; }
 [ -d "$SPLIT" ] || { echo "FATAL: no split graphs at $SPLIT"; exit 1; }
 ls -la "$EXT" "$SPLIT"

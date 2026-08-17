@@ -707,9 +707,45 @@ that has failed four times.
       establishes nothing yet — but it is the only positive direction left, and it is what this file
       predicted when it noted a ridge drowns 116 statistics in 500 random features while an
       in-context model need not.
-- [ ] **Run `--features both` across the 29 hard datasets, resampled.** This is the experiment. The
+- [x] **Run `--features both` across the 29 hard datasets, resampled.** This is the experiment. The
       driver from the routing re-test already does teacher passes in parallel with every concurrency
       fix; it needs a `--features` passthrough and nothing else. ~29 x 3 resamples per arm.
+      **R=1 launched 2026-08-17** on an RTX A6000 secure pod (7.65 cores, 46.6 GB cgroup),
+      `--arms features`. Sidecars land in `reference/resample/features/`, campaign JSON in
+      `reference/features_r1.json`. **In progress: 11 of 29 datasets paired.**
+
+**Interim R=1 result, 11 datasets — read the third column, not the second.**
+
+| | delta | in test rows |
+|---|---|---|
+| Beef | +0.0667 | +2 of 30 |
+| Ham | +0.0286 | +3 of 105 |
+| Lightning7 | +0.0274 | +2 of 73 |
+| MiddlePhalanxTW | +0.0130 | +2 of 154 |
+| WormsTwoClass | +0.0130 | +1 of 77 |
+| Worms | −0.0130 | −1 of 77 |
+| ArrowHead | −0.0057 | −1 of 175 |
+| ACSF1, Haptics, Herring, Lightning2 | 0.0000 | **no prediction changes at all** |
+
+Paired mean **+0.0118**, SE **0.0068**, t = 1.75 at n=11 — under the ~2.2 needed. B wins 5, A wins 2,
+**4 exact ties**. Converted to rows the whole effect is **net +8 correct out of ~1,224 test rows**,
+and the largest single delta is two rows on a 30-row test set. This is the same handful of rows the
+archived single-split `+0.0088` was made of, now with an error bar on it.
+
+Two things to carry into the verdict:
+
+- **The 11 done are the small end.** Cheapest-first ordering means the 18 remaining are the large
+  datasets (`EthanolLevel` 504 train / 1751 long, `SemgHand*` 450, the Phalanx family ~400). The
+  current mean is a small-dataset estimate and may not survive contact with more training signal.
+- **If the effect holds across all 29, it reaches significance** (SE ≈ 0.0042, t ≈ 2.8). So the
+  campaign is worth finishing — the answer is currently a trend, not a result.
+- **Arm B is consistently slower**: +45 s, +42 s and +72 s on the first three datasets
+  (169 vs 124, 173 vs 131, 302 vs 230). 616 columns against 500. A verdict of "+0.0118 for ~35%
+  more wall clock" is a different recommendation from "+0.0118 free", and the honest framing is the
+  first. **Timing is only comparable within a dataset whose two arms ran at the same `--jobs`** —
+  the campaign was restarted mid-flight from `--jobs 2` to `--jobs 1` (see `docs/POD.md`, ONNX
+  allocating outside `memory_limit`), so cross-phase second counts are not comparable. Accuracy is
+  unaffected: it is deterministic given the split and seed.
 - [ ] Add `catch22` as a third family — 22 more columns, already in `aeon`, no BSL 1.1 restriction
       unlike `anofox_forecast`, so unlike the ts family it could actually ship. `rocket+catch22` at
       522 columns and `rocket+ts+catch22` at 638 both stay inside the per-estimator budget at G=40.
@@ -770,9 +806,23 @@ resampling effort belongs on 7b' instead, where the +0.0088 concatenation result
 would be quoted.
 
 **Cost, honestly.** 7a is done: an afternoon and no money. 7b is a transform plus one pod pass over 17
-datasets. 7b' is 29 datasets x 3 resamples per feature family, ~1.5 h each at `--jobs 5`, reusing the
-driver written for the routing re-test. 7c is a licence acceptance and then whatever 7b' costs
-again. **Revised ordering: 7b' → 7c**, with 7a done and 7d dropped.
+datasets. 7c is a licence acceptance and then whatever 7b' costs again. **Revised ordering:
+7b' → 7c**, with 7a done and 7d dropped.
+
+The 7b' figure this file carried — *"~1.5 h each at `--jobs 5`"* — was **wrong, and wrong in the
+expensive direction**. `--jobs 5` does not run at all on the large datasets: ONNX allocates outside
+`--memory-limit`, so a run capped at 12 GB reached 21.2 GB RSS and two concurrent large runs pinned a
+46.6 GB cgroup. Measured instead, on 7.65 cores:
+
+- Small datasets (≤ ~155 train rows) run two-up: **93–420 s** per run.
+- Large datasets need `--jobs 1` and take **300–1,200 s** per run. Haptics alone was 1,028 s and
+  1,223 s for its two arms.
+- R=1 over 29 datasets x 2 arms is therefore **8–10 h serial**, not 1.5 h — call it single-digit
+  dollars on a secure A6000, but a working day of wall clock.
+
+The growable design is what makes this survivable: `one_run` returns a completed run from its
+sidecar, so R=3 pays only for the two new resamples and a mid-campaign restart costs nothing already
+computed. **Do not size a further resample campaign from the old estimate.**
 
 ## Standing risks
 

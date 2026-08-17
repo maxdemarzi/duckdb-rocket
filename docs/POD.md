@@ -54,6 +54,15 @@ in the write-up, because the environment tuple changes.
 **Do not loop over sizes without breaking on success.** Three pods were created at once that way,
 all billing, in this repo's history.
 
+**"Machine does not have the resources" is often about the disk, not the GPU.** A run that could
+find no capacity for any CPU size and no community GPU at all succeeded immediately on an RTX A6000
+once the request dropped from 60 GB container + 100 GB volume to **30 GB** — same card, same region.
+Shrink the disk before concluding a card is unavailable.
+
+**Check the secure cloud, not only the community one.** `gpus` output that reads as "everything is
+out of stock" can mean only that the community pool is empty; `NVIDIA A40: secure High` in the same
+listing is the tell. Secure costs more per hour and has capacity when community has none.
+
 ## Gate before you bootstrap
 
 ```bash
@@ -119,6 +128,53 @@ same way. `sweep.py` and `resample_power.py` both do this now.
 An OOM kill here leaves **exit −9, no DuckDB error and no Python traceback**. It looks exactly like
 a hang. `anofox_tabfm_max_memory` turns it into a message you can read, and is off by default
 because it is unreleased upstream.
+
+### Dividing `memory_limit` is necessary but NOT sufficient
+
+`--memory-limit` bounds DuckDB's buffer manager. **ONNX Runtime allocates outside it**, so the
+process is not bounded by the number you passed. Measured on the 7b′ features campaign: a run
+launched with `--memory-limit 12GB` sat at **21.2 GB RSS**. Two such runs against a 46.6 GB cgroup
+is 42+ GB, and the kernel took the second one.
+
+The signature is distinctive and worth recognising, because it does *not* look like a size limit —
+it looks like a cascade. Failures accelerate as the datasets grow: **609 s, then 72 s, 61 s, 38 s**.
+A run dying in 38 s is not failing on its own merits, it is starting into a box another run has
+already filled.
+
+The scheduling rule that follows: **concurrency has to be sized for the largest job, not the
+average one.** In that campaign the datasets under ~155 training rows ran two-up without trouble
+and everything over ~320 died in pairs; dropping to `--jobs 1` let the same datasets through
+untouched (`MiddlePhalanxTW` was killed twice at `--jobs 2`, then completed clean). Cheapest-first
+ordering makes this worse rather than better — it front-loads the runs that *do* fit, so the
+campaign looks healthy for an hour and then fails on every remaining dataset.
+
+### Read `memory.max_usage_in_bytes`, not `memory.failcnt`
+
+`failcnt` read **0** on a cgroup that had been pinned to its ceiling and was killing runs, and that
+zero was taken as proof the limit had never been hit. It was wrong.
+
+| counter | what it actually told us |
+|---|---|
+| `memory.failcnt` | 0 — no help, do not conclude anything from it |
+| `memory.max_usage_in_bytes` | 46.6 GB against a 46.6 GB limit — the ceiling, exactly |
+| `memory.stat` `rss` vs `cache` | 29.8 GB rss / 0.4 GB cache — real anonymous memory, not reclaimable page cache |
+
+`memory.usage_in_bytes` includes page cache under cgroup v1, so a high reading is genuinely
+ambiguous on its own and invites the "it is only cache, it will be reclaimed" reading. Split it with
+`memory.stat` before believing that. `dmesg` is not readable inside the container, so the kernel's
+own account of the kill is unavailable and these counters are all there is.
+
+### `pkill -f` matches the shell you are typing into
+
+`pkill -f resample_power.py`, sent over `ssh` in a script that *also* contained the relaunch command
+for `resample_power.py`, matched the wrapping shell's own command line and killed it at the first
+statement. The child kills never ran, the relaunch never happened, and the orphaned workers kept
+30 GB resident. It produces no output at all, which is the confusing part.
+
+The bracket trick (`[r]esample_power`) does not save you here — the pattern still matches the target
+string sitting elsewhere in your own command line. **Kill by explicit PID.** For the same reason, a
+monitor that tests liveness with `pgrep -f <driver>` reports the driver alive forever, because it
+matches itself; use `kill -0 <pid>`.
 
 ## Two more things concurrency breaks
 

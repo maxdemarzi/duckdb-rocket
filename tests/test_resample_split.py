@@ -128,6 +128,44 @@ def test_it_actually_moves_rows_across_the_boundary():
     assert moved > 0.2 * len(before), f"only {moved} of {len(before)} train rows changed"
 
 
+def test_write_raw_parquet_returns_the_resampled_y_test_not_the_archive_one():
+    """The integration point, and the one that would corrupt every number in the campaign.
+
+    `write_raw_parquet` writes the labels into the parquet AND returns `y_test` separately, and
+    accuracy is scored against the returned copy. If the resample reached the file but not the
+    return -- or the two came out in different orders -- every resample would score against the
+    archive's labels and report something near chance, which reads as the model failing on
+    resampled data rather than as the harness misaligning it.
+
+    Checked as an equality between the two, rather than by re-deriving what either ought to be:
+    re-deriving would reproduce whatever mistake the function makes.
+    """
+    pytest.importorskip("pyarrow")
+    pq = pytest.importorskip("pyarrow.parquet")
+    from phase5_pipeline import write_raw_parquet
+
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            for k in (0, 1, 2, 0):
+                meta, y_test = write_raw_parquet("Coffee", Path(tmp) / f"r{k}", True, 0, 0, k)
+                table = pq.read_table(Path(tmp) / f"r{k}" / "raw.parquet")
+                labels = [str(v) for v in table.column("label").to_pylist()]
+                first = [v[0] for v in table.column("values").to_pylist()]
+                # The returned y_test must BE the test half of what was written, in that order.
+                assert list(y_test) == labels[meta["n_train"]:]
+                seen.append((labels, first, meta["n_train"], meta["n_test"]))
+    except (FileNotFoundError, OSError) as exc:      # the archive is not present in this checkout
+        pytest.skip(f"Coffee not available: {exc}")
+
+    r0a, r1, r2, r0b = seen
+    assert r0a == r0b, "resample 0 is not reproducible"
+    assert all(s[2:] == r0a[2:] for s in seen), "the split sizes moved"
+    assert r1[1] != r0a[1] and r2[1] != r1[1], "resamples 1 and 2 did not change the split"
+    assert sorted(r1[1]) == sorted(r0a[1]), "the pooled series changed"
+
+
 def test_a_class_the_archive_puts_only_in_test_stays_out_of_the_context():
     """A real property of some UCR splits, and it must not become a shape change.
 

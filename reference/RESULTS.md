@@ -1094,6 +1094,69 @@ families, or by any confidence-based selection among them. Three routes tried, a
 oracle says +0.09 is sitting there. Reaching it needs a signal that knows which arm is right, and no
 arm's own confidence is that signal. `reference/feature_route.json`.
 
+##### Phase 7a: labels do not reach the oracle either, so selection is closed (2026-08-17)
+
+The section above closes by saying the +0.09 oracle "needs a signal that knows which arm is right,
+and no arm's own confidence is that signal." This grants the most permissive signal there is — a
+learner fitted on **every arm's full posterior vector with access to the real labels** — and asks
+whether even that reaches it. `scripts/stack_arms.py`, the same 17 datasets, no pod: all four arms
+were already archived, so this is a fit over files on disk.
+
+Cross-validated **within the test rows**, which makes it an upper bound rather than a design: it
+trains on labels a deployed system would not have. That is what a gate wants. A negative here
+cannot be blamed on the rule being too weak, because no rule gets more than this one.
+
+| | accuracy | vs primary | of the oracle | wins | p |
+|---|---|---|---|---|---|
+| primary (`tabicl-v2` on ROCKET) | 0.7579 | — | — | — | — |
+| mean of the four posteriors | 0.7619 | +0.0039 | 4.3% | — | — |
+| best arm, chosen honestly by fold | 0.7481 | **−0.0098** | — | — | — |
+| stacker: learned arm weights | 0.7564 | −0.0015 | −1.6% | 7/8 | 1.00 |
+| **stacker: logistic on all posteriors** | **0.7632** | **+0.0053** | **5.8%** | 11/6 | 0.33 |
+| stacker: gradient boosting | 0.7158 | −0.0421 | −46.6% | 3/13 | **0.02** |
+| per-row **oracle** over the arms | 0.8483 | +0.0903 | 100% | — | — |
+
+**Three learners, spanning the whole flexibility range, and the answer is the same.** The best
+collects **5.8% of the oracle at p=0.33**. The lowest-variance form — one weight per arm, four
+parameters — is flat. The most flexible is *significantly worse* than doing nothing at all
+(−0.0421, p=0.02), which is a 30-row test split overfitting exactly as it should be expected to.
+There is no capacity sweet spot in between: both ends fail.
+
+**So the direction is closed, and closed more firmly than before.** Averaging failed, margin-routing
+failed, picking the surest arm failed — and now a supervised learner with the labels in hand fails
+too. The oracle is not a target that better *selection* can reach; the information about which arm
+is right is not present in the arms' posteriors. Four routes tried, four negatives, one afternoon
+and no pod time for the last one.
+
+Two things worth recording about how this was measured, since both would have manufactured a result.
+The obvious control — "pick the best arm, judged per fold" — came out at 0.7481, **worse than simply
+always using the primary**, because choosing an arm on a handful of folds is noisy enough to lose
+ground. Scoring the stacker against that control would have credited it +0.0151 for avoiding the
+control's own mistakes; the primary is the honest floor because it requires no choice at all. And
+taking the best of the three learners per dataset gives +0.0158 at p=0.049 — the one number here
+that looks like a finding, and it is an oracle over learners, chosen on the rows it is scored on. It
+is printed and labelled as such rather than omitted, because leaving it out invites recomputing it.
+
+**What survives is concatenation, not selection.** If the arms cannot be chosen between, the
+remaining move is to stop treating them as arms: feed both feature families to *one* model.
+`--features both` (500 ROCKET + 116 statistics = 616 columns, inside `tabicl-v2`'s 512-per-estimator
+budget at G=40) is already archived for the six hard datasets:
+
+| dataset | rocket | both | |
+|---|---|---|---|
+| ScreenType | 0.5200 | 0.5547 | **+0.0347** |
+| InlineSkate | 0.4909 | 0.5145 | +0.0236 |
+| RefrigerationDevices | 0.5573 | 0.5787 | +0.0214 |
+| Herring | 0.6406 | 0.6562 | +0.0156 |
+| Haptics | 0.5552 | 0.5390 | −0.0162 |
+| MiddlePhalanxTW | 0.6104 | 0.5844 | −0.0260 |
+
+**+0.0088 mean, 4 wins to 2** — six datasets and one split, so this establishes nothing on its own
+(the sign test is p≈0.69 and the resample pilot puts split luck at sd 0.0173). But it is the only
+positive direction left standing, it needs no selection rule, and it is the case RESULTS.md
+predicted when it noted that "a ridge on 500 standardised random features drowns 116 statistics, and
+an in-context model need not." `reference/stack_arms.json`.
+
 #### The context cache is 7x on repeated calls, and 2.5x slower on the first (2026-08-16)
 
 The 4-11x this file has been quoting for the context cache came from a PyTorch prototype in the

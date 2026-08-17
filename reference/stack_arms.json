@@ -1,0 +1,416 @@
+{
+  "design": {
+    "folds": 5,
+    "seed": 0,
+    "arms": [
+      "tabicl-v2",
+      "tabpfn-v2",
+      "orion-bix",
+      "tabicl-v2/ts"
+    ],
+    "note": "CV within test rows: an UPPER BOUND, not a deployable design. The control picks the best arm using training folds only, so stacker - control is the per-row signal."
+  },
+  "n_datasets": 17,
+  "means": {
+    "primary": 0.757926434289028,
+    "mean_ensemble": 0.7618528803453753,
+    "control": 0.7481138965642511,
+    "stack_weights": 0.7564449647769433,
+    "stack_logistic": 0.7631775532702626,
+    "stack_gbm": 0.7158117570970306,
+    "best_single_on_test": 0.7685994826871207,
+    "oracle": 0.848259999993832
+  },
+  "headroom_to_oracle": 0.090333565704804,
+  "verdicts": {
+    "stack_weights": {
+      "gain_over_primary": -0.00148146951208461,
+      "oracle_fraction": -0.01639998931212149,
+      "wins": 7,
+      "losses": 8,
+      "p": 1.0
+    },
+    "stack_logistic": {
+      "gain_over_primary": 0.005251118981234648,
+      "oracle_fraction": 0.05813031889380395,
+      "wins": 11,
+      "losses": 6,
+      "p": 0.332305908203125
+    },
+    "stack_gbm": {
+      "gain_over_primary": -0.04211467719199735,
+      "oracle_fraction": -0.46621293938093344,
+      "wins": 3,
+      "losses": 13,
+      "p": 0.021270751953125
+    },
+    "stacker": {
+      "gain_over_primary": 0.01583709824045898,
+      "oracle_fraction": 0.17531797972209076,
+      "wins": 13,
+      "losses": 4,
+      "p": 0.049041748046875
+    }
+  },
+  "best_learner": "stack_logistic",
+  "rows": [
+    {
+      "dataset": "ACSF1",
+      "n_test": 100,
+      "n_classes": 10,
+      "per_arm": {
+        "tabicl-v2": 0.94,
+        "tabpfn-v2": 0.93,
+        "orion-bix": 0.93,
+        "tabicl-v2/ts": 0.89
+      },
+      "primary": 0.94,
+      "best_single_on_test": 0.94,
+      "mean_ensemble": 0.95,
+      "control_pick_best_arm": 0.94,
+      "stack_logistic": 0.96,
+      "stack_gbm": 0.76,
+      "stack_weights": 0.97,
+      "stacker": 0.97,
+      "oracle": 0.98,
+      "none_right": 0.02
+    },
+    {
+      "dataset": "ArrowHead",
+      "n_test": 175,
+      "n_classes": 3,
+      "per_arm": {
+        "tabicl-v2": 0.8628571428571429,
+        "tabpfn-v2": 0.8571428571428571,
+        "orion-bix": 0.8857142857142857,
+        "tabicl-v2/ts": 0.7428571428571429
+      },
+      "primary": 0.8628571428571429,
+      "best_single_on_test": 0.8857142857142857,
+      "mean_ensemble": 0.8685714285714285,
+      "control_pick_best_arm": 0.8857142857142857,
+      "stack_logistic": 0.8971428571428571,
+      "stack_gbm": 0.9085714285714286,
+      "stack_weights": 0.8857142857142857,
+      "stacker": 0.9085714285714286,
+      "oracle": 0.9428571428571428,
+      "none_right": 0.05714285714285714
+    },
+    {
+      "dataset": "Computers",
+      "n_test": 250,
+      "n_classes": 2,
+      "per_arm": {
+        "tabicl-v2": 0.784,
+        "tabpfn-v2": 0.82,
+        "orion-bix": 0.78,
+        "tabicl-v2/ts": 0.792
+      },
+      "primary": 0.784,
+      "best_single_on_test": 0.82,
+      "mean_ensemble": 0.832,
+      "control_pick_best_arm": 0.82,
+      "stack_logistic": 0.824,
+      "stack_gbm": 0.788,
+      "stack_weights": 0.844,
+      "stacker": 0.844,
+      "oracle": 0.928,
+      "none_right": 0.072
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "n_test": 139,
+      "n_classes": 3,
+      "per_arm": {
+        "tabicl-v2": 0.7410071942446043,
+        "tabpfn-v2": 0.7482014388489209,
+        "orion-bix": 0.7338129496402878,
+        "tabicl-v2/ts": 0.7194244604316546
+      },
+      "primary": 0.7410071942446043,
+      "best_single_on_test": 0.7482014388489209,
+      "mean_ensemble": 0.7338129496402878,
+      "control_pick_best_arm": 0.7194244604316546,
+      "stack_logistic": 0.7482014388489209,
+      "stack_gbm": 0.6762589928057554,
+      "stack_weights": 0.7482014388489209,
+      "stacker": 0.7482014388489209,
+      "oracle": 0.841726618705036,
+      "none_right": 0.15827338129496402
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "n_test": 139,
+      "n_classes": 6,
+      "per_arm": {
+        "tabicl-v2": 0.7194244604316546,
+        "tabpfn-v2": 0.7266187050359713,
+        "orion-bix": 0.7050359712230215,
+        "tabicl-v2/ts": 0.7050359712230215
+      },
+      "primary": 0.7194244604316546,
+      "best_single_on_test": 0.7266187050359713,
+      "mean_ensemble": 0.7050359712230215,
+      "control_pick_best_arm": 0.6834532374100719,
+      "stack_logistic": 0.697841726618705,
+      "stack_gbm": 0.6834532374100719,
+      "stack_weights": 0.7266187050359713,
+      "stacker": 0.7266187050359713,
+      "oracle": 0.8273381294964028,
+      "none_right": 0.17266187050359713
+    },
+    {
+      "dataset": "Earthquakes",
+      "n_test": 139,
+      "n_classes": 2,
+      "per_arm": {
+        "tabicl-v2": 0.7482014388489209,
+        "tabpfn-v2": 0.7482014388489209,
+        "orion-bix": 0.7482014388489209,
+        "tabicl-v2/ts": 0.7482014388489209
+      },
+      "primary": 0.7482014388489209,
+      "best_single_on_test": 0.7482014388489209,
+      "mean_ensemble": 0.7482014388489209,
+      "control_pick_best_arm": 0.7482014388489209,
+      "stack_logistic": 0.7697841726618705,
+      "stack_gbm": 0.697841726618705,
+      "stack_weights": 0.7482014388489209,
+      "stacker": 0.7697841726618705,
+      "oracle": 0.7482014388489209,
+      "none_right": 0.2517985611510791
+    },
+    {
+      "dataset": "Ham",
+      "n_test": 105,
+      "n_classes": 2,
+      "per_arm": {
+        "tabicl-v2": 0.780952380952381,
+        "tabpfn-v2": 0.7333333333333333,
+        "orion-bix": 0.6952380952380952,
+        "tabicl-v2/ts": 0.6666666666666666
+      },
+      "primary": 0.780952380952381,
+      "best_single_on_test": 0.780952380952381,
+      "mean_ensemble": 0.7238095238095238,
+      "control_pick_best_arm": 0.780952380952381,
+      "stack_logistic": 0.7238095238095238,
+      "stack_gbm": 0.7523809523809524,
+      "stack_weights": 0.7238095238095238,
+      "stacker": 0.7523809523809524,
+      "oracle": 0.8761904761904762,
+      "none_right": 0.12380952380952381
+    },
+    {
+      "dataset": "Haptics",
+      "n_test": 308,
+      "n_classes": 5,
+      "per_arm": {
+        "tabicl-v2": 0.5551948051948052,
+        "tabpfn-v2": 0.551948051948052,
+        "orion-bix": 0.5551948051948052,
+        "tabicl-v2/ts": 0.4772727272727273
+      },
+      "primary": 0.5551948051948052,
+      "best_single_on_test": 0.5551948051948052,
+      "mean_ensemble": 0.5811688311688312,
+      "control_pick_best_arm": 0.538961038961039,
+      "stack_logistic": 0.5616883116883117,
+      "stack_gbm": 0.4935064935064935,
+      "stack_weights": 0.551948051948052,
+      "stacker": 0.5616883116883117,
+      "oracle": 0.6915584415584416,
+      "none_right": 0.30844155844155846
+    },
+    {
+      "dataset": "Herring",
+      "n_test": 64,
+      "n_classes": 2,
+      "per_arm": {
+        "tabicl-v2": 0.640625,
+        "tabpfn-v2": 0.65625,
+        "orion-bix": 0.625,
+        "tabicl-v2/ts": 0.609375
+      },
+      "primary": 0.640625,
+      "best_single_on_test": 0.65625,
+      "mean_ensemble": 0.625,
+      "control_pick_best_arm": 0.59375,
+      "stack_logistic": 0.671875,
+      "stack_gbm": 0.5625,
+      "stack_weights": 0.578125,
+      "stacker": 0.671875,
+      "oracle": 0.78125,
+      "none_right": 0.21875
+    },
+    {
+      "dataset": "Lightning2",
+      "n_test": 61,
+      "n_classes": 2,
+      "per_arm": {
+        "tabicl-v2": 0.8524590163934426,
+        "tabpfn-v2": 0.8360655737704918,
+        "orion-bix": 0.8032786885245902,
+        "tabicl-v2/ts": 0.8688524590163934
+      },
+      "primary": 0.8524590163934426,
+      "best_single_on_test": 0.8688524590163934,
+      "mean_ensemble": 0.8688524590163934,
+      "control_pick_best_arm": 0.8032786885245902,
+      "stack_logistic": 0.8688524590163934,
+      "stack_gbm": 0.8524590163934426,
+      "stack_weights": 0.8360655737704918,
+      "stacker": 0.8688524590163934,
+      "oracle": 0.9344262295081968,
+      "none_right": 0.06557377049180328
+    },
+    {
+      "dataset": "Lightning7",
+      "n_test": 73,
+      "n_classes": 7,
+      "per_arm": {
+        "tabicl-v2": 0.7671232876712328,
+        "tabpfn-v2": 0.7945205479452054,
+        "orion-bix": 0.7397260273972602,
+        "tabicl-v2/ts": 0.726027397260274
+      },
+      "primary": 0.7671232876712328,
+      "best_single_on_test": 0.7945205479452054,
+      "mean_ensemble": 0.7945205479452054,
+      "control_pick_best_arm": 0.7534246575342466,
+      "stack_logistic": 0.8082191780821918,
+      "stack_gbm": 0.7397260273972602,
+      "stack_weights": 0.7945205479452054,
+      "stacker": 0.8082191780821918,
+      "oracle": 0.8904109589041096,
+      "none_right": 0.1095890410958904
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "n_test": 154,
+      "n_classes": 3,
+      "per_arm": {
+        "tabicl-v2": 0.6168831168831169,
+        "tabpfn-v2": 0.6103896103896104,
+        "orion-bix": 0.538961038961039,
+        "tabicl-v2/ts": 0.6038961038961039
+      },
+      "primary": 0.6168831168831169,
+      "best_single_on_test": 0.6168831168831169,
+      "mean_ensemble": 0.5909090909090909,
+      "control_pick_best_arm": 0.6168831168831169,
+      "stack_logistic": 0.6428571428571429,
+      "stack_gbm": 0.5584415584415584,
+      "stack_weights": 0.5844155844155844,
+      "stacker": 0.6428571428571429,
+      "oracle": 0.7142857142857143,
+      "none_right": 0.2857142857142857
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "n_test": 154,
+      "n_classes": 6,
+      "per_arm": {
+        "tabicl-v2": 0.6103896103896104,
+        "tabpfn-v2": 0.5909090909090909,
+        "orion-bix": 0.6038961038961039,
+        "tabicl-v2/ts": 0.6038961038961039
+      },
+      "primary": 0.6103896103896104,
+      "best_single_on_test": 0.6103896103896104,
+      "mean_ensemble": 0.6233766233766234,
+      "control_pick_best_arm": 0.5844155844155844,
+      "stack_logistic": 0.5584415584415584,
+      "stack_gbm": 0.5714285714285714,
+      "stack_weights": 0.6038961038961039,
+      "stacker": 0.6038961038961039,
+      "oracle": 0.7272727272727273,
+      "none_right": 0.2727272727272727
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "n_test": 205,
+      "n_classes": 3,
+      "per_arm": {
+        "tabicl-v2": 0.8292682926829268,
+        "tabpfn-v2": 0.8585365853658536,
+        "orion-bix": 0.8097560975609757,
+        "tabicl-v2/ts": 0.8341463414634146
+      },
+      "primary": 0.8292682926829268,
+      "best_single_on_test": 0.8585365853658536,
+      "mean_ensemble": 0.8341463414634146,
+      "control_pick_best_arm": 0.8585365853658536,
+      "stack_logistic": 0.8536585365853658,
+      "stack_gbm": 0.7804878048780488,
+      "stack_weights": 0.8585365853658536,
+      "stacker": 0.8585365853658536,
+      "oracle": 0.8634146341463415,
+      "none_right": 0.13658536585365855
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "n_test": 205,
+      "n_classes": 6,
+      "per_arm": {
+        "tabicl-v2": 0.8,
+        "tabpfn-v2": 0.7804878048780488,
+        "orion-bix": 0.8048780487804879,
+        "tabicl-v2/ts": 0.8195121951219512
+      },
+      "primary": 0.8,
+      "best_single_on_test": 0.8195121951219512,
+      "mean_ensemble": 0.8097560975609757,
+      "control_pick_best_arm": 0.8195121951219512,
+      "stack_logistic": 0.7902439024390244,
+      "stack_gbm": 0.7463414634146341,
+      "stack_weights": 0.7951219512195122,
+      "stacker": 0.7951219512195122,
+      "oracle": 0.8682926829268293,
+      "none_right": 0.13170731707317074
+    },
+    {
+      "dataset": "Worms",
+      "n_test": 77,
+      "n_classes": 5,
+      "per_arm": {
+        "tabicl-v2": 0.8181818181818182,
+        "tabpfn-v2": 0.8181818181818182,
+        "orion-bix": 0.7792207792207793,
+        "tabicl-v2/ts": 0.6883116883116883
+      },
+      "primary": 0.8181818181818182,
+      "best_single_on_test": 0.8181818181818182,
+      "mean_ensemble": 0.8311688311688312,
+      "control_pick_best_arm": 0.8051948051948052,
+      "stack_logistic": 0.8051948051948052,
+      "stack_gbm": 0.8311688311688312,
+      "stack_weights": 0.8181818181818182,
+      "stacker": 0.8311688311688312,
+      "oracle": 0.8701298701298701,
+      "none_right": 0.12987012987012986
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "n_test": 77,
+      "n_classes": 2,
+      "per_arm": {
+        "tabicl-v2": 0.8181818181818182,
+        "tabpfn-v2": 0.8051948051948052,
+        "orion-bix": 0.7922077922077922,
+        "tabicl-v2/ts": 0.8051948051948052
+      },
+      "primary": 0.8181818181818182,
+      "best_single_on_test": 0.8181818181818182,
+      "mean_ensemble": 0.8311688311688312,
+      "control_pick_best_arm": 0.7662337662337663,
+      "stack_logistic": 0.7922077922077922,
+      "stack_gbm": 0.7662337662337663,
+      "stack_weights": 0.7922077922077922,
+      "stacker": 0.7922077922077922,
+      "oracle": 0.935064935064935,
+      "none_right": 0.06493506493506493
+    }
+  ],
+  "skipped": []
+}

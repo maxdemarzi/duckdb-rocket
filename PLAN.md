@@ -666,7 +666,15 @@ where two models with one family overlap at 3.74x.** The representation does mor
 architecture. So the ordering below is by evidence, and the cheapest item is also the most
 decisive — which is the only reason to do it first.
 
-### 7a — Can *any* function of the posteriors reach the oracle? (no pod, hours)
+> **7a is done and the answer is no.** A learner with real labels and every arm's full posterior
+> collects **5.8% of the oracle at p=0.33**; the lowest-variance form is flat and the most flexible
+> is significantly *worse* than doing nothing (−0.0421, p=0.02). Four routes have now failed —
+> averaging, margin-routing, surest-arm, and supervised stacking — so **selection between arms is
+> closed**. That kills 7b as originally written and 7d along with it, and redirects both: see 7b′.
+> `scripts/stack_arms.py`, `reference/stack_arms.json`, and "Phase 7a: labels do not reach the
+> oracle either" in RESULTS.md.
+
+### 7a — Can *any* function of the posteriors reach the oracle? (no pod, hours) — **DONE, negative**
 
 - [ ] The gate. All four arms' per-row posteriors are already archived for **17 of 17** overlap
       datasets (`phase5_<ds>_{gpu,orion-bix,tabpfn-v2,ts}_soft.json`), so this needs no pod, no
@@ -687,7 +695,32 @@ decisive — which is the only reason to do it first.
       3.4 points, so a rule that merely learns "usually pick `tabicl-v2`" will look positive while
       collecting none of the diversity.
 
-### 7b — A third feature family, since features are the axis that moved (small pod)
+### 7b′ — Concatenation, not selection (the replacement, and now the main line)
+
+7a closed selection, which changes what a second feature family is *for*. Not another arm to choose
+between — **more columns for one model**. That needs no selection rule, which is precisely the thing
+that has failed four times.
+
+- [ ] The evidence that makes this the main line rather than a consolation: `--features both` (500
+      ROCKET + 116 statistics = 616 columns) is already archived for the six hard datasets and runs
+      **+0.0088, 4 wins to 2**, with +0.0347 on ScreenType. Six datasets and one split, so it
+      establishes nothing yet — but it is the only positive direction left, and it is what this file
+      predicted when it noted a ridge drowns 116 statistics in 500 random features while an
+      in-context model need not.
+- [ ] **Run `--features both` across the 29 hard datasets, resampled.** This is the experiment. The
+      driver from the routing re-test already does teacher passes in parallel with every concurrency
+      fix; it needs a `--features` passthrough and nothing else. ~29 x 3 resamples per arm.
+- [ ] Add `catch22` as a third family — 22 more columns, already in `aeon`, no BSL 1.1 restriction
+      unlike `anofox_forecast`, so unlike the ts family it could actually ship. `rocket+catch22` at
+      522 columns and `rocket+ts+catch22` at 638 both stay inside the per-estimator budget at G=40.
+- [ ] **Gate.** Concatenation either beats ROCKET-only on the hard datasets across resamples or it
+      does not. If it does not, Phase 7 ends with the ceiling established as unreachable by every
+      route this project can construct, which is a real result and should be written as one.
+- [ ] What NOT to do, now measured rather than assumed: another backbone (three fail on the same
+      rows), an averaging rule (below best-single-arm), a margin router (+0.0042, p=0.27), or a
+      supervised stacker (+0.0053, p=0.33).
+
+### 7b — A third feature family as a fourth arm (SUPERSEDED by 7b′)
 
 - [ ] `catch22` rather than more `anofox_forecast`. Two reasons beyond novelty: it is **already in
       `aeon`**, which this project depends on, so it adds no dependency; and it carries **no BSL
@@ -718,7 +751,7 @@ decisive — which is the only reason to do it first.
 - [ ] If run, run it **inside 7b** rather than separately: a new backbone on a new feature family is
       the only combination that has not been eliminated.
 
-### 7d — Re-test the overlap numbers before building on them
+### 7d — Re-test the overlap numbers (original text, kept for the reasoning) — SUPERSEDED
 
 - [ ] Everything above rests on 17 datasets and **one seed**, and the resample pilot measured split
       luck at sd 0.0173 per dataset. The 2.99x-versus-3.74x separation is the load-bearing claim of
@@ -729,10 +762,17 @@ decisive — which is the only reason to do it first.
 - [ ] Do this **after 7a** — if 7a closes the direction, 7d is not worth running; if 7a opens it,
       7d is what makes the result quotable.
 
-**Cost, honestly.** 7a is an afternoon and no money. 7b is a transform plus one pod pass over 17
-datasets. 7d is 29 datasets x 3 resamples, ~1.5 h at `--jobs 5`, and reuses the driver written for
-the routing re-test. 7c is a licence acceptance and then whatever 7b costs again. The ordering is
-7a → (7b, 7d) → 7c, and 7a can kill the rest.
+### 7d — Re-test the overlap numbers (SUPERSEDED: nothing now depends on them)
+
+7a closed selection, so the 2.99x-vs-3.74x separation no longer carries anything — it was
+load-bearing only for a rule that could exploit the diversity, and no such rule exists. The
+resampling effort belongs on 7b' instead, where the +0.0088 concatenation result is single-split and
+would be quoted.
+
+**Cost, honestly.** 7a is done: an afternoon and no money. 7b is a transform plus one pod pass over 17
+datasets. 7b' is 29 datasets x 3 resamples per feature family, ~1.5 h each at `--jobs 5`, reusing the
+driver written for the routing re-test. 7c is a licence acceptance and then whatever 7b' costs
+again. **Revised ordering: 7b' → 7c**, with 7a done and 7d dropped.
 
 ## Standing risks
 

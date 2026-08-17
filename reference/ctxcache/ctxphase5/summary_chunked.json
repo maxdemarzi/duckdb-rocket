@@ -1,0 +1,28 @@
+[
+  {
+    "dataset": "ItalyPowerDemand",
+    "n_test": 1029,
+    "chunks_per_group": 9,
+    "off_classify": 1608.49,
+    "on_classify": 870.16,
+    "off_total": 1615.6,
+    "on_total": 877.3,
+    "off_accuracy": 0.9718172983479106,
+    "on_accuracy": 0.9718172983479106,
+    "rows_compared": 1029,
+    "label_disagreements": 0
+  },
+  {
+    "dataset": "OSULeaf",
+    "n_test": 242,
+    "chunks_per_group": 2,
+    "off_classify": 528.9,
+    "on_classify": 469.78,
+    "off_total": 543.8,
+    "on_total": 484.8,
+    "off_accuracy": 0.9710743801652892,
+    "on_accuracy": 0.9710743801652892,
+    "rows_compared": 242,
+    "label_disagreements": 0
+  }
+]

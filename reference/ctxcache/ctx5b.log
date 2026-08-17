@@ -1,0 +1,75 @@
+
+=== prerequisites  [02:04:03]
+  11 usable cores (nproc says 112), 629 GB RAM visible
+  pools: 4 duckdb x 2 onnx = 8 of 11
+  cgroup memory: 77999996928
+-rw-r--r-- 1 root root 69535790 Aug 17 01:03 /workspace/ctxext/anofox_tabfm.duckdb_extension
+
+/workspace/realsplit:
+total 1384
+drwxr-xr-x 2 root root   4096 Aug 17 01:03 .
+drwxr-xr-x 8 root root   4096 Aug 17 02:04 ..
+-rw-r--r-- 1 root root   1897 Aug 17 01:03 export_report_tabicl_classification.json
+-rw-r--r-- 1 root root 269133 Aug 17 01:03 graph_prepare_tabicl_classification.onnx
+-rw-r--r-- 1 root root 469373 Aug 17 01:03 graph_query_tabicl_classification.onnx
+-rw-r--r-- 1 root root 552409 Aug 17 01:03 graph_tabicl_classification.onnx
+-rw-r--r-- 1 root root  18522 Aug 17 01:03 tensor_map_prepare_tabicl_classification.json
+-rw-r--r-- 1 root root  38315 Aug 17 01:03 tensor_map_query_tabicl_classification.json
+-rw-r--r-- 1 root root  47670 Aug 17 01:03 tensor_map_tabicl_classification.json
+
+=== repository  [02:04:03]
+  duckdb already at d8cdaa33fda8
+406035e Check the integration point, not just the function
+
+=== prebuilt rocket shell  [02:04:04]
+  SHELL CACHE HIT (efddb90bf58d)
+
+=== the extension loads, and carries the setting  [02:04:05]
+  ok
+
+=== tabicl-v2 weights (through the community build, which shares the cache)  [02:04:06]
+  tabicl-v2 ok
+  checkpoint: /root/.cache/anofox-tabfm/jingang__TabICL@main/classification/model.ckpt (106M)
+
+=== assemble the model directory  [02:04:06]
+total 109164
+drwxr-xr-x 2 root root      4096 Aug 17 02:04 .
+drwxr-xr-x 8 root root      4096 Aug 17 02:04 ..
+-rw-r--r-- 1 root root    269133 Aug 17 02:04 graph_prepare_tabicl_classification.onnx
+-rw-r--r-- 1 root root    469373 Aug 17 02:04 graph_query_tabicl_classification.onnx
+-rw-r--r-- 1 root root    552409 Aug 17 02:04 graph_tabicl_classification.onnx
+-rw-r--r-- 1 root root 110368038 Aug 17 02:04 model.ckpt
+-rw-r--r-- 1 root root     18522 Aug 17 02:04 tensor_map_prepare_tabicl_classification.json
+-rw-r--r-- 1 root root     38315 Aug 17 02:04 tensor_map_query_tabicl_classification.json
+-rw-r--r-- 1 root root     47670 Aug 17 02:04 tensor_map_tabicl_classification.json
+
+=== Beef: cache OFF, then ON, at --test-chunk 128  [02:04:06]
+  --- Beef off
+    rc=0  (99s by the clock outside)
+        accuracy (tabicl-v2, e=1, G=40): 0.7667
+  --- Beef on
+    rc=0  (149s by the clock outside)
+        accuracy (tabicl-v2, e=1, G=40): 0.7667
+
+=== Coffee: cache OFF, then ON, at --test-chunk 128  [02:08:14]
+  --- Coffee off
+    rc=0  (93s by the clock outside)
+        accuracy (tabicl-v2, e=1, G=40): 1.0000
+  --- Coffee on
+    rc=0  (123s by the clock outside)
+        accuracy (tabicl-v2, e=1, G=40): 1.0000
+
+=== what came out  [02:11:50]
+
+  dataset             test  chunks   off (s)    on (s)  speedup     saved   rows  disagree
+  Beef                  30       1      92.2     144.0    0.64x    -51.8s     30         0
+  Coffee                28       1      86.7     118.8    0.73x    -32.0s     28         0
+
+  (classify seconds, not total: the cache cannot touch the ROCKET transform, which is
+   about 6s of a 1000s run and would only dilute the number.)
+
+  mechanism: 1 chunks -> 0.64x, 1 chunks -> 0.73x  (as predicted)
+
+  wrote /workspace/ctxphase5/summary.json
+
+=== done  [02:11:50]

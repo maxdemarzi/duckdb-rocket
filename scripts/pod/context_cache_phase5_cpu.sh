@@ -249,9 +249,16 @@ for r in rows:
 # The mechanism check. One dataset getting faster is consistent with almost anything -- a warmer
 # page cache, a quieter box. The cache's whole story is that the win grows with chunks per group,
 # so the two datasets must separate in that order or the story is wrong.
-if len(rows) >= 2:
-    lo, hi = sorted(rows, key=lambda r: r["chunks_per_group"])[0], \
-             sorted(rows, key=lambda r: r["chunks_per_group"])[-1]
+ordered = sorted(rows, key=lambda r: r["chunks_per_group"])
+if len(rows) >= 2 and ordered[0]["chunks_per_group"] == ordered[-1]["chunks_per_group"]:
+    # Every dataset in this run has the same chunk count, so there is no gradient to read and the
+    # check below would compare two datasets that differ only by luck -- and print "as predicted"
+    # whenever the second happened to come out higher. It did exactly that on a Beef/Coffee run,
+    # which is a verdict manufactured from nothing.
+    print(f"\n  mechanism: not testable -- every dataset here has "
+          f"{ordered[0]['chunks_per_group']} chunk(s) per group, so there is no gradient")
+elif len(rows) >= 2:
+    lo, hi = ordered[0], ordered[-1]
     s_lo = lo["off_classify"] / lo["on_classify"] if lo["on_classify"] else float("nan")
     s_hi = hi["off_classify"] / hi["on_classify"] if hi["on_classify"] else float("nan")
     print(f"\n  mechanism: {lo['chunks_per_group']} chunks -> {s_lo:.2f}x, "

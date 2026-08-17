@@ -1132,12 +1132,93 @@ gains is one context scored repeatedly — `--test-chunk` runs, and any serving 
 and scores many times. That is worth having, but it is a narrower win than "4-11x on the escalation
 case" implied.
 
+*(Half right, and measured the next day: the per-group arms **do** gain, because within a group
+every chunk shares one context. See "The context cache is worth 1.85x, 1.13x or −56%" below.)*
+
 Three separate runs of this measurement produced confident-looking results with nothing running at
 all: a signature-blocked extension (`-unsigned` missing) reported 1.00x, a CDN-cached copy of the
 script silently re-ran the old version, and a binder error gave six 0.01 s "calls". Two arms of zero
 divide to a perfectly plausible 1.00x. The script now asserts the extension loads and carries the
 setting before either arm runs, and marks each arm in the output rather than counting backwards from
 the end — an off-by-one there had already produced one wrong table that looked entirely reasonable.
+
+#### The context cache is worth 1.85x, 1.13x or −56%, and chunks per group decide which (2026-08-16)
+
+The measurement above is a call pair. This is the same setting through the **whole phase-5
+pipeline** — raw series, 40 groups, `rocket_transform`, `tabfm_classify`, argmax — which is the
+number that decides whether to use it. `scripts/pod/context_cache_phase5_cpu.sh`, G=40, e=1,
+`--test-chunk 128`, `tabicl-v2` registered from a local model directory carrying the split pair.
+
+A phase-5 run makes 40 group calls and **every group's context is different** — different kernels,
+different feature columns — so per group the cache starts cold. It can only win *inside* a group,
+across the chunks that share one support set. That makes chunks-per-group the whole question, so
+four datasets were run either side of the predicted break-even rather than one:
+
+| Dataset | Context rows | Test rows | Chunks/group | Cache off | Cache on | | Rows | Disagree |
+|---|---|---|---|---|---|---|---|---|
+| ItalyPowerDemand | 67 | 1029 | **9** | 1608.5 s | **870.2 s** | **1.85x** | 1029 | **0** |
+| OSULeaf | 200 | 242 | 2 | 528.9 s | 469.8 s | 1.13x | 242 | **0** |
+| Coffee | 28 | 28 | 1 | 86.7 s | 118.8 s | **0.73x** | 28 | **0** |
+| Beef | 30 | 30 | 1 | 92.2 s | 144.0 s | **0.64x** | 30 | **0** |
+
+Classify seconds, not total: the cache cannot touch the ROCKET transform, which is ~6 s of a
+1600 s run and would only dilute the number.
+
+**It is the same answer, faster.** Zero label disagreements on all 1329 test rows, and all four
+accuracies identical between arms to full precision. The `memcmp` context match survives DuckDB's
+parallel scan of `train_cur`, which was the one thing between this design and a null result — the
+table is filled once per group and never touched while its chunks run, so the support rows really
+do arrive byte-identical every time.
+
+**Chunks decide it, not context size, and one dataset could not have shown that.** OSULeaf carries
+three times ItalyPowerDemand's context (200 rows against 67) and a far better context-to-query
+ratio (1.56 against 0.52), so on "how much is there to amortise" it should win comfortably. It
+reuses twice instead of nine times and gets 1.13x against 1.85x. The two variables point opposite
+ways and the chunk count wins.
+
+**1.85x is well under the call-pair 7.18x, and the gap is the shape.** That bench ran 375 context
+rows against 22 query rows — a ratio of 17. ItalyPowerDemand runs 67 against 128, a ratio of 0.52.
+The cache saves the context encode, so less context per unit of query is less to save. Working
+backwards from the single-chunk rows, the cold call costs ~1.4-1.6x a combined call rather than the
+bench's 2.5x, which puts the warm call near 2.4-3.6x rather than 7.2x. The mechanism transfers; the
+magnitudes do not.
+
+**The single-chunk loss is measured, not predicted.** Beef and Coffee were run precisely because a
+recommendation *not* to switch something on deserves the same evidence as the recommendation to
+switch it on. At one chunk per group every group pays a cold prepare and gets nothing back: 56% and
+37% slower. That is the largest bucket in this archive — of 125 archived chunked runs, **45 are
+single-chunk and 49 are two-chunk**, so 75% of runs sit at 1.13x or worse:
+
+| chunks/group | 1 | 2 | 3 | 4-9 | 36 |
+|---|---|---|---|---|---|
+| runs | **45** | 49 | 21 | 9 | 1 |
+| hours | 1.67 | 4.95 | 2.94 | 1.34 | 0.31 |
+
+So the honest summary is that the cache is a real win on a rare shape. Applying the measured
+speedups to the archive, a full sweep pass moves from 11.2 h to about 10.4 h — 7%, not 85%. It
+should stay opt-in and be switched on per dataset, not globally, and `--context-cache` in
+`phase5_pipeline.py` is off by default for that reason. The break-even is between two and three
+chunks per group, which at `--test-chunk 128` means roughly **384 test rows**.
+
+Two traps worth recording. The flag is **silently inert** unless the model directory carries all
+four split artifacts beside the combined graph — the engine falls back and the run still reports a
+normal accuracy, so the timing would be filed as "with the cache" having cached nothing; the
+pipeline now refuses to start instead. And the mechanism check in the script originally compared
+the lowest-chunk dataset against the highest and printed "as predicted" whenever the second came
+out higher — on the Beef/Coffee run, where both have one chunk, it duly manufactured a verdict from
+two datasets that differ only by luck. It now reports "not testable" when there is no gradient.
+
+*Also settled on the way: `--register-model-dir` had never been exercised on CPU — both archived
+reports show `registered_graph: null`, it existed for the CUDA ScatterND workaround. All four
+cache-off arms reproduce their archived accuracies exactly (ItalyPowerDemand 0.9718172983 to ten
+decimals), so a locally registered split-export model is numerically identical to the shipped
+`tabicl-v2` on this path.*
+
+Environment: RTX 6000 Ada community pod in US, `--device cpu`. CPU pods were unavailable at 16, 32
+and 64 vCPU, so this is a GPU box running the CPU path; the comparison is paired within one host,
+which is what it needs to be. **`nproc` reported 112 and the cgroup quota was 11.9** — pools sized
+4 DuckDB x 2 ONNX from the quota, because sizing from `nproc` would have put 112 threads on 12
+cores, which is the failure this file already records twice. Reports in `reference/ctxcache/`.
 
 #### `anofox_tabfm_max_memory` guards residency, not allocation (2026-08-16)
 
@@ -1688,6 +1769,17 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   ensemble rule found gains +0.0024. Each is reported as undetectable rather than as equivalent,
   which is honest and unsatisfying in the same measure. Converting any of them into a claim needs
   more seeds or more datasets, and that is a campaign rather than a run.
+
+  The tooling for that campaign now exists and has not been run. `phase5_pipeline.py --resample K`
+  re-splits the pooled train and test at the same per-class sizes (K=0 is the archive's own split,
+  so nothing archived changes), and `scripts/pod/resample_power.py` sizes the campaign before
+  buying it. The reason to size it first is that **resamples may be the wrong purchase.** A paired
+  comparison's error is `sqrt(between/D + within/(D*R))`: resamples shrink the split-luck term and
+  do nothing at all to between-dataset heterogeneity. The 500-vs-10,000 sign already flips with the
+  dataset subset — −0.0038 over 28 datasets, −0.0001 over the 24 with cubes — which is the
+  signature of the term resampling cannot touch. So the script reports an **SE floor**: what no
+  number of resamples can cross at a given dataset count. If that floor sits above 0.005, the
+  answer is more datasets, or that the effect is not resolvable at any affordable scale.
 - **e=8 versus e=1.** `--compare-estimators 8,1` exists and was never run: at 500-feature
   groups e=1 already covers every feature, so the interesting comparison is the paper's
   2,000-feature groups at e=8 against this configuration — which is a different experiment than
@@ -1703,13 +1795,15 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   [PR #40](https://github.com/DataZooDE/anofox-tabfm/pull/40) (open) is the runtime handle that holds
   a prepared support set across calls, behind `anofox_tabfm_context_cache`. So this is now blocked on
   **review, then a release, then a re-export of the published weights** — the pair is discovered on
-  disk, and no published model ships one. Worth 4-11x on the escalation case.
+  disk, and no published model ships one.
 
-  Now measured through DuckDB on real weights rather than argued from a prototype: **7.18x** on
-  repeated calls against the same context, **0.40x** (2.5x slower) on the first, break-even between
-  the third and fourth call, and identical test-row predictions. See "The context cache is 7x on
-  repeated calls, and 2.5x slower on the first" above. Our per-group arms each carry their own
-  context and would land on the slow side of that; `--test-chunk` runs are the case that gains.
+  Now measured twice: through DuckDB on real weights as a call pair (**7.18x** repeated, 0.40x
+  cold), and then through the **whole phase-5 pipeline**, which is the number that decides
+  anything. End to end it is **1.85x** at nine chunks per group, 1.13x at two, and **0.64-0.73x at
+  one** — a loss, and one chunk is the largest bucket in this archive. Same answer throughout: zero
+  disagreements on 1329 test rows. See "The context cache is worth 1.85x, 1.13x or −56%" above.
+  Break-even is around 384 test rows, so it belongs on per dataset rather than globally, and a full
+  sweep pass would gain about 7%.
 - **`tabpfn-v2-5` and `tabpfn-v3`, the paper's own backbones.** Both download and neither loads,
   by two different faults with one remedy: `tabpfn-v2-5`'s checkpoint is published under tensor
   names the exported graph was not built against (missing 248 of 250), and `tabpfn-v3` is a torch

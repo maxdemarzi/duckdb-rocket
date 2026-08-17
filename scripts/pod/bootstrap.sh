@@ -57,8 +57,20 @@ git pull --ff-only || true
 # duckdb's entire 7.8 GB history to build one pinned commit -- ten minutes of a pod's life, every
 # pod. `--depth 1` on the update does not fix it: it shallow-fetches the submodule's default branch
 # tip, the pin is not the tip, and it fails. Fetching the commit by SHA takes 11 seconds and 102 MB.
+# Located relative to the CLONE, not to this file. Piping the script in -- `ssh 'bash -s' <
+# scripts/pod/bootstrap.sh`, which is the line runpod_cpu.py itself prints -- leaves BASH_SOURCE
+# unset, and under `set -u` that aborted the whole bootstrap at "/shallow_clone.sh: No such file".
+# By this point the repository is cloned and WORKDIR is where it is, so the clone is the reliable
+# reference; BASH_SOURCE is used only as a fallback for running the file from somewhere else.
 # shellcheck source=scripts/pod/shallow_clone.sh
-source "$(dirname "${BASH_SOURCE[0]}")/shallow_clone.sh"
+_here="${BASH_SOURCE[0]:-}"
+if [ -f "$WORKDIR/scripts/pod/shallow_clone.sh" ]; then
+    source "$WORKDIR/scripts/pod/shallow_clone.sh"
+elif [ -n "$_here" ]; then
+    source "$(dirname "$_here")/shallow_clone.sh"
+else
+    echo "FATAL: cannot find shallow_clone.sh next to $WORKDIR or this script"; exit 1
+fi
 shallow_submodule duckdb || { echo "FATAL: could not obtain the duckdb submodule"; exit 1; }
 
 log "python environment"

@@ -50,17 +50,24 @@ if hasattr(sys.stdout, "reconfigure"):
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-#: The comparison this pilot is sized around: the cheap corner against the archived baseline.
-#: Chosen because it is the one with real money behind it -- a 20x kernel cut and a 4x group cut
-#: measured -0.0003 on a single split, and if that is genuinely zero the student gets 20x cheaper
-#: for nothing. It is also the comparison whose sign already flips with the dataset subset, which
-#: is what makes it the right probe for where the variance lives.
+#: The GROUP-COUNT lever: 40 groups against 10, at 250 kernels per group in both. This is
+#: RESULTS.md's "10,000 kernels, G=10" cell, which measured **-0.0033** on the archived single
+#: split -- a 4x cheaper student, for a cost that may or may not be real. That is the target
+#: number this pilot has to decide is resolvable.
 #:
-#: kernels-per-group is held at 250 across both arms deliberately. A group is 2 features per
-#: kernel, so changing kernels while holding groups would change the feature width the model sees,
-#: and the comparison would confound the bank size with the input width.
-CONFIG_A = ("--num-kernels", "10000", "--n-groups", "40")   # baseline: 250 kernels/group
-CONFIG_B = ("--num-kernels", "2500", "--n-groups", "10")    # cheap corner: same 250/group, 4x fewer
+#: kernels-per-group is held at 250 across both arms deliberately, so this is a clean group-count
+#: comparison rather than a confounded one. A group is 2 features per kernel; changing the bank
+#: size while holding the group count would change the feature width the model sees, and the
+#: comparison would then mix the bank size with the input width.
+#:
+#: A consequence worth stating, because it makes the estimate specific rather than general: arm B
+#: is a strict PREFIX of arm A. Kernel i is a pure function of (seed, i), so groups 0-9 of a
+#: 40-group run are exactly a 10-group run, and RESULTS.md relies on the same property to read its
+#: group sweep off archived cubes. The two arms therefore share their first ten groups, which
+#: makes the pair more tightly coupled than two unrelated configurations -- so `within` measured
+#: here is a floor for nested comparisons, not a universal constant to quote at unrelated ones.
+CONFIG_A = ("--num-kernels", "10000", "--n-groups", "40")   # 40 groups x 250 kernels
+CONFIG_B = ("--num-kernels", "2500", "--n-groups", "10")    # its first 10 groups, exactly
 
 
 def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]) -> dict:

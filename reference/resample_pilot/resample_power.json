@@ -1,0 +1,1702 @@
+{
+  "arms": {
+    "A": [
+      "--num-kernels",
+      "10000",
+      "--n-groups",
+      "40"
+    ],
+    "B": [
+      "--num-kernels",
+      "2500",
+      "--n-groups",
+      "10"
+    ]
+  },
+  "resamples": 5,
+  "runs": [
+    {
+      "dataset": "BeetleFly",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.9,
+      "seconds": 17.8,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.95,
+      "seconds": 17.8,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.85,
+      "seconds": 17.9,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.85,
+      "seconds": 64.9,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.95,
+      "seconds": 65.0,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.9,
+      "seconds": 17.6,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.85,
+      "seconds": 64.7,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.75,
+      "seconds": 18.0,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 64.5,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.95,
+      "seconds": 17.8,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BeetleFly",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.75,
+      "seconds": 63.8,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.95,
+      "seconds": 17.2,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.95,
+      "seconds": 63.1,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.9,
+      "seconds": 17.7,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.95,
+      "seconds": 63.3,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.85,
+      "seconds": 17.3,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.95,
+      "seconds": 63.9,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.9,
+      "seconds": 17.8,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.85,
+      "seconds": 63.1,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.9333333333333333,
+      "seconds": 19.0,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "BirdChicken",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 63.3,
+      "n_test": 20,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.8333333333333334,
+      "seconds": 19.1,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.9666666666666667,
+      "seconds": 20.2,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 72.9,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.8,
+      "seconds": 72.8,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.9,
+      "seconds": 19.2,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.9666666666666667,
+      "seconds": 73.4,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.9333333333333333,
+      "seconds": 19.6,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9333333333333333,
+      "seconds": 72.3,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.9629629629629629,
+      "seconds": 26.7,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "OliveOil",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9666666666666667,
+      "seconds": 70.9,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.8703703703703703,
+      "seconds": 26.5,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.9629629629629629,
+      "seconds": 26.5,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.9629629629629629,
+      "seconds": 98.9,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.8518518518518519,
+      "seconds": 98.0,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.9444444444444444,
+      "seconds": 26.4,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.9814814814814815,
+      "seconds": 100.7,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.8703703703703703,
+      "seconds": 26.5,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.7377049180327869,
+      "seconds": 28.9,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9444444444444444,
+      "seconds": 100.7,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.8360655737704918,
+      "seconds": 28.7,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Wine",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.8518518518518519,
+      "seconds": 99.8,
+      "n_test": 54,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.8852459016393442,
+      "seconds": 29.5,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7540983606557377,
+      "seconds": 107.7,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.8524590163934426,
+      "seconds": 105.5,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.8852459016393442,
+      "seconds": 28.8,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.8032786885245902,
+      "seconds": 28.6,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.9344262295081968,
+      "seconds": 106.7,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.85,
+      "seconds": 26.8,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9016393442622951,
+      "seconds": 106.9,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.95,
+      "seconds": 28.0,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.8032786885245902,
+      "seconds": 105.2,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.85,
+      "seconds": 101.4,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.9166666666666666,
+      "seconds": 26.1,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.9,
+      "seconds": 27.4,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.9333333333333333,
+      "seconds": 100.0,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.8833333333333333,
+      "seconds": 26.5,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.9166666666666666,
+      "seconds": 99.3,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 99.7,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.7671232876712328,
+      "seconds": 31.9,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Car",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 99.7,
+      "n_test": 60,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.7945205479452054,
+      "seconds": 31.2,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.7534246575342466,
+      "seconds": 32.8,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7534246575342466,
+      "seconds": 117.9,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.9041095890410958,
+      "seconds": 31.9,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.7808219178082192,
+      "seconds": 118.0,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.726027397260274,
+      "seconds": 119.3,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.8082191780821918,
+      "seconds": 31.1,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9178082191780822,
+      "seconds": 115.6,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.907563025210084,
+      "seconds": 35.9,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.9831932773109243,
+      "seconds": 35.4,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.821917808219178,
+      "seconds": 115.7,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.9243697478991597,
+      "seconds": 35.1,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.907563025210084,
+      "seconds": 131.6,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.9747899159663865,
+      "seconds": 129.2,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.957983193277311,
+      "seconds": 35.6,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.9243697478991597,
+      "seconds": 129.1,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.9747899159663865,
+      "seconds": 35.0,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.957983193277311,
+      "seconds": 129.6,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.91,
+      "seconds": 38.4,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.88,
+      "seconds": 39.3,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "HouseTwenty",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9495798319327731,
+      "seconds": 132.5,
+      "n_test": 119,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.88,
+      "seconds": 40.9,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 146.2,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.86,
+      "seconds": 149.3,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.89,
+      "seconds": 40.3,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.89,
+      "seconds": 148.2,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.92,
+      "seconds": 39.8,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.780952380952381,
+      "seconds": 43.6,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 149.3,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.819047619047619,
+      "seconds": 43.8,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "ECG200",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9,
+      "seconds": 148.5,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.8666666666666667,
+      "seconds": 43.6,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7714285714285715,
+      "seconds": 159.1,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.8,
+      "seconds": 43.3,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.819047619047619,
+      "seconds": 159.8,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.7619047619047619,
+      "seconds": 42.8,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.8380952380952381,
+      "seconds": 158.1,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.7666666666666667,
+      "seconds": 19.8,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.7904761904761904,
+      "seconds": 157.2,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7333333333333333,
+      "seconds": 75.0,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.6666666666666666,
+      "seconds": 19.6,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.8,
+      "seconds": 20.0,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.6,
+      "seconds": 74.4,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.7619047619047619,
+      "seconds": 154.9,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.6,
+      "seconds": 19.6,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.6666666666666666,
+      "seconds": 19.7,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.8,
+      "seconds": 72.6,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.6,
+      "seconds": 71.9,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.6333333333333333,
+      "seconds": 71.0,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.83,
+      "seconds": 40.8,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.77,
+      "seconds": 42.1,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.8,
+      "seconds": 42.4,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.84,
+      "seconds": 153.5,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.78,
+      "seconds": 154.4,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.78,
+      "seconds": 41.9,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.81,
+      "seconds": 155.4,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.85,
+      "seconds": 43.0,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.78,
+      "seconds": 156.4,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.9384615384615385,
+      "seconds": 49.1,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.84,
+      "seconds": 157.3,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.9076923076923077,
+      "seconds": 49.9,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.9461538461538461,
+      "seconds": 186.4,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.9538461538461539,
+      "seconds": 49.2,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.9307692307692308,
+      "seconds": 49.0,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.9076923076923077,
+      "seconds": 186.2,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.9153846153846154,
+      "seconds": 49.8,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.9538461538461539,
+      "seconds": 184.1,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.9384615384615385,
+      "seconds": 185.1,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.7532467532467533,
+      "seconds": 51.2,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "ToeSegmentation2",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9153846153846154,
+      "seconds": 184.8,
+      "n_test": 130,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.7532467532467533,
+      "seconds": 50.4,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.7142857142857143,
+      "seconds": 51.2,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7662337662337663,
+      "seconds": 191.0,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.8571428571428571,
+      "seconds": 52.5,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.7272727272727273,
+      "seconds": 191.3,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.7272727272727273,
+      "seconds": 51.6,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.7142857142857143,
+      "seconds": 190.0,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.8571428571428571,
+      "seconds": 190.4,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.8971428571428571,
+      "seconds": 55.0,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.8171428571428572,
+      "seconds": 53.8,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.7142857142857143,
+      "seconds": 190.5,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.8857142857142857,
+      "seconds": 54.8,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.8857142857142857,
+      "seconds": 207.7,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.8914285714285715,
+      "seconds": 53.6,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.8228571428571428,
+      "seconds": 207.6,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.9142857142857143,
+      "seconds": 55.3,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.8914285714285715,
+      "seconds": 208.3,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 1,
+      "arm": "B",
+      "seconds": 1.1766243949532509,
+      "returncode": 1,
+      "error": "ValueError: all the input arrays must have same number of dimensions, but the array at index 0 has 1 dimension(s) and the array at index 1 has 2 dimension(s)"
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.8857142857142857,
+      "seconds": 205.8,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 2,
+      "arm": "B",
+      "accuracy": 0.9156626506024096,
+      "seconds": 59.9,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9142857142857143,
+      "seconds": 207.4,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 3,
+      "arm": "B",
+      "accuracy": 0.8835341365461847,
+      "seconds": 58.7,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.8674698795180723,
+      "seconds": 224.5,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 2,
+      "arm": "A",
+      "accuracy": 0.9156626506024096,
+      "seconds": 225.5,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 4,
+      "arm": "B",
+      "accuracy": 0.8955823293172691,
+      "seconds": 59.5,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 5,
+      "arm": "B",
+      "accuracy": 0.9076305220883534,
+      "seconds": 60.1,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 3,
+      "arm": "A",
+      "accuracy": 0.8755020080321285,
+      "seconds": 221.1,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 4,
+      "arm": "A",
+      "accuracy": 0.8955823293172691,
+      "seconds": 208.3,
+      "n_test": 249,
+      "failures": []
+    },
+    {
+      "dataset": "InsectEPGSmallTrain",
+      "resample": 5,
+      "arm": "A",
+      "accuracy": 0.9076305220883534,
+      "seconds": 202.4,
+      "n_test": 249,
+      "failures": []
+    }
+  ],
+  "elapsed_seconds": 3392.3,
+  "analysis": {
+    "per_dataset": {
+      "ACSF1": {
+        "n_resamples": 5,
+        "mean_delta": -0.0040000000000000036,
+        "sd_within": 0.008944271909999166,
+        "deltas": {
+          "1": -0.010000000000000009,
+          "2": -0.010000000000000009,
+          "3": -0.010000000000000009,
+          "4": 0.0,
+          "5": 0.010000000000000009
+        }
+      },
+      "ArrowHead": {
+        "n_resamples": 5,
+        "mean_delta": 0.0011428571428571566,
+        "sd_within": 0.007450517034517338,
+        "deltas": {
+          "1": 0.011428571428571455,
+          "2": -0.005714285714285672,
+          "3": -0.005714285714285783,
+          "4": 0.005714285714285783,
+          "5": 0.0
+        }
+      },
+      "Beef": {
+        "n_resamples": 5,
+        "mean_delta": 0.026666666666666682,
+        "sd_within": 0.02788866755113585,
+        "deltas": {
+          "1": 0.03333333333333344,
+          "2": 0.06666666666666665,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.033333333333333326
+        }
+      },
+      "BeetleFly": {
+        "n_resamples": 5,
+        "mean_delta": 0.010000000000000009,
+        "sd_within": 0.022360679774997918,
+        "deltas": {
+          "1": 0.0,
+          "2": 0.050000000000000044,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0
+        }
+      },
+      "BirdChicken": {
+        "n_resamples": 5,
+        "mean_delta": -0.009999999999999986,
+        "sd_within": 0.022360679774997866,
+        "deltas": {
+          "1": 0.0,
+          "2": 0.0,
+          "3": -0.04999999999999993,
+          "4": 0.0,
+          "5": 0.0
+        }
+      },
+      "Car": {
+        "n_resamples": 5,
+        "mean_delta": -2.2204460492503132e-17,
+        "sd_within": 0.01178511301977579,
+        "deltas": {
+          "1": 0.0,
+          "2": 0.016666666666666607,
+          "3": 0.0,
+          "4": 0.0,
+          "5": -0.01666666666666672
+        }
+      },
+      "ECG200": {
+        "n_resamples": 5,
+        "mean_delta": 0.006000000000000005,
+        "sd_within": 0.015165750888103114,
+        "deltas": {
+          "1": 0.010000000000000009,
+          "2": 0.020000000000000018,
+          "3": -0.010000000000000009,
+          "4": -0.010000000000000009,
+          "5": 0.020000000000000018
+        }
+      },
+      "Ham": {
+        "n_resamples": 5,
+        "mean_delta": 0.009523809523809535,
+        "sd_within": 0.01166423687039609,
+        "deltas": {
+          "1": 0.00952380952380949,
+          "2": 0.0,
+          "3": 0.02857142857142858,
+          "4": 0.009523809523809601,
+          "5": 0.0
+        }
+      },
+      "HouseTwenty": {
+        "n_resamples": 5,
+        "mean_delta": 0.006722689075630251,
+        "sd_within": 0.010956642697819586,
+        "deltas": {
+          "1": 0.0,
+          "2": 0.008403361344537785,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.025210084033613467
+        }
+      },
+      "InsectEPGSmallTrain": {
+        "n_resamples": 4,
+        "mean_delta": 0.0020080321285140534,
+        "sd_within": 0.004016064257028107,
+        "deltas": {
+          "2": 0.0,
+          "3": 0.008032128514056214,
+          "4": 0.0,
+          "5": 0.0
+        }
+      },
+      "Lightning2": {
+        "n_resamples": 5,
+        "mean_delta": -0.01967213114754096,
+        "sd_within": 0.017958116639513674,
+        "deltas": {
+          "1": -0.016393442622950727,
+          "2": -0.016393442622950727,
+          "3": -0.049180327868852514,
+          "4": -0.016393442622950838,
+          "5": 0.0
+        }
+      },
+      "Lightning7": {
+        "n_resamples": 5,
+        "mean_delta": 0.005479452054794498,
+        "sd_within": 0.018378640910957162,
+        "deltas": {
+          "1": 0.013698630136986245,
+          "2": 0.013698630136986245,
+          "3": 0.0273972602739726,
+          "4": -0.013698630136986356,
+          "5": -0.013698630136986245
+        }
+      },
+      "OliveOil": {
+        "n_resamples": 5,
+        "mean_delta": 0.0,
+        "sd_within": 0.033333333333333326,
+        "deltas": {
+          "1": 0.033333333333333326,
+          "2": 0.033333333333333326,
+          "3": 0.0,
+          "4": -0.033333333333333326,
+          "5": -0.033333333333333326
+        }
+      },
+      "ToeSegmentation2": {
+        "n_resamples": 5,
+        "mean_delta": -0.003076923076923066,
+        "sd_within": 0.0042132504423474165,
+        "deltas": {
+          "1": -0.007692307692307665,
+          "2": 0.0,
+          "3": 0.0,
+          "4": -0.007692307692307665,
+          "5": 0.0
+        }
+      },
+      "Wine": {
+        "n_resamples": 5,
+        "mean_delta": 0.0037037037037036757,
+        "sd_within": 0.01549370419507549,
+        "deltas": {
+          "1": 0.0,
+          "2": 0.01851851851851849,
+          "3": -0.0185185185185186,
+          "4": 0.0,
+          "5": 0.01851851851851849
+        }
+      },
+      "Worms": {
+        "n_resamples": 5,
+        "mean_delta": 0.0051948051948051965,
+        "sd_within": 0.014807473053235563,
+        "deltas": {
+          "1": -0.012987012987012991,
+          "2": 0.025974025974025983,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.012987012987012991
+        }
+      }
+    },
+    "datasets": 16,
+    "mean_resamples": 4.9375,
+    "grand_mean_delta": 0.002480810079144814,
+    "se_observed": 0.0026510995334116656,
+    "var_within": 0.00030017844982008777,
+    "var_between": 3.740864732186687e-05,
+    "var_between_raw": 3.740864732186687e-05,
+    "se_floor_at_this_D": 0.001529065223467161,
+    "target_effect": 0.005,
+    "se_needed_for_target": 0.0017857142857142859,
+    "plans": [
+      {
+        "datasets": 16,
+        "resamples_needed": 23,
+        "runs": 736,
+        "se_at_30": 0.0017214564264236244
+      },
+      {
+        "datasets": 24,
+        "resamples_needed": 8,
+        "runs": 384,
+        "se_at_30": 0.0014055632863909507
+      },
+      {
+        "datasets": 28,
+        "resamples_needed": 6,
+        "runs": 336,
+        "se_at_30": 0.0013012987420431056
+      },
+      {
+        "datasets": 40,
+        "resamples_needed": 4,
+        "runs": 320,
+        "se_at_30": 0.0010887446400465438
+      },
+      {
+        "datasets": 60,
+        "resamples_needed": 2,
+        "runs": 240,
+        "se_at_30": 0.0008889562761013908
+      },
+      {
+        "datasets": 100,
+        "resamples_needed": 2,
+        "runs": 400,
+        "se_at_30": 0.0006885825705694497
+      }
+    ]
+  }
+}

@@ -1220,6 +1220,86 @@ which is what it needs to be. **`nproc` reported 112 and the cgroup quota was 11
 4 DuckDB x 2 ONNX from the quota, because sizing from `nproc` would have put 112 threads on 12
 cores, which is the failure this file already records twice. Reports in `reference/ctxcache/`.
 
+#### Split luck is 8x the dataset effect, so buy breadth (2026-08-16)
+
+The noise floor has been this file's binding constraint for two days: every recent result lands
+inside it, and the entry above says fixing that "is a campaign rather than a run". **This is the
+run that sizes the campaign**, and it changes what the campaign should be.
+
+`scripts/pod/resample_power.py`, 16 unsaturated datasets x 5 resamples x 2 arms = 160 runs, 57
+minutes on a 32-vCPU pod. Arm A is G=40 at 250 kernels per group; arm B is **exactly its first ten
+groups** — kernel *i* is a pure function of `(seed, i)`, which is the same property this file uses
+to read its group sweep off archived cubes. That is RESULTS.md's own `10,000 kernels, G=10` cell,
+which measured **−0.0033** on the archived single split. Both arms see the same resample, so every
+difference is paired and the dataset's own difficulty cancels.
+
+| | variance | sd | |
+|---|---|---|---|
+| **within** — same dataset, same configs, different split | 0.000300 | **0.0173** | resamples shrink this |
+| **between** — the effect genuinely differing by dataset | 0.000037 | **0.0061** | only more datasets touch this |
+
+**Split luck is 8x the dataset effect, and this contradicts what the entry above predicted.** The
+argument there was that the sign flipping with the dataset subset pointed at between-dataset
+heterogeneity, which no amount of resampling can touch. For this comparison that is wrong: `within`
+dominates, so resamples *are* the right purchase — but so is breadth, and breadth is cheaper:
+
+| datasets | resamples needed | total runs |
+|---|---|---|
+| 16 (this pilot) | 23 | 736 |
+| 24 | 8 | 384 |
+| 28 | 6 | 336 |
+| **40** | **4** | **320** |
+| 60 | 2 | 240 |
+
+The paper's protocol at this project's usual breadth — 24 datasets x 30 resamples — is 1,440 runs.
+**40 datasets x 4 resamples is 320 and resolves the same 0.005**, because more datasets shrink
+*both* terms while more resamples shrink only one. That is the practical finding: 4.5x less pod
+time than copying the protocol, and it comes from measuring where the noise lives rather than
+assuming.
+
+**The single split had the sign backwards.** Over 16 datasets and 5 splits the mean delta is
+**+0.0025** — ten groups scoring *higher* than forty — against the archived single split's −0.0033.
+It is 0.94 SE from zero, so the honest statement remains "not distinguishable from zero", which is
+exactly the point: the archived −0.0033 was never distinguishable from zero either, and it was the
+opposite sign. Per-dataset sd across five splits alone runs 0.0040 to 0.0333; Beef's +0.0267 mean
+sits on an sd of 0.0279.
+
+*Caveat that keeps this number honest: arm B is a strict PREFIX of arm A, so the two arms share
+their first ten groups and are more tightly coupled than two unrelated configurations. The
+`within` measured here is therefore a floor for nested comparisons and must not be quoted at
+unrelated ones — a kernel-bank change, or a different backbone, would have more.*
+
+**Five concurrency bugs, in one session, all the same bug.** Every one is a process reading a
+machine-wide number and assuming it is alone, and PLAN.md already records two prior instances:
+
+| | how it announced itself |
+|---|---|
+| ONNX pools sized from `nproc` | the GPU host said 112 cores and had 11.9 |
+| shared `data/phase5/<dataset>` | "No magic bytes found at end of file" — a parquet read mid-write |
+| `memory_limit` at 70% of the cgroup, per run | **38 of 160 runs at exit −9**, no error, no traceback |
+| the dataset cache, on first download | one run dead in 1.2 s on a half-written archive |
+| `sweep.py` had the first three too | nothing yet — latent, and it corrupts rather than crashes |
+
+The memory one is the expensive one: at `--jobs 6` on a 64 GB cgroup, six runs each claimed 44.8
+GB. Only the driver knows the job count, so the driver now divides. The `sweep.py` case is the one
+worth remembering — `predictions.json` lives in the shared directory and is read back to compute
+accuracy, so two concurrent seeds can each report the other's number with nothing crashing. No
+archived result came through that path, so it is latent rather than historical.
+
+And the first diagnosis of the OOM was wrong in a way worth recording: ONNX Runtime prints tens of
+thousands of `Trying to register schema` lines, so the captured stderr tail was always that. The
+failure read as `defs.cc line 927`, pointing at a schema registration that was perfectly fine. The
+driver now filters that noise and keeps the exit code, which is what says −9.
+
+*The pilot's own analysis also had to be fixed before it could be trusted: run against one dataset
+it reported "the between-dataset term dominates, and this comparison cannot be resolved by
+resampling at any affordable scale." Nothing supported that. `statistics.variance` of one value is
+NaN, NaN fails every comparison, so every plan came back unreachable and the code printed the
+sentence it prints when the floor is genuinely too high — the most confident line in the output was
+the one with no data behind it. It now refuses to size a campaign below two datasets.*
+
+Reports in `reference/resample_pilot/`. 159 of 160 runs completed.
+
 #### `anofox_tabfm_max_memory` guards residency, not allocation (2026-08-16)
 
 Upstream [#36](https://github.com/DataZooDE/anofox-tabfm/pull/36) adds a setting that reads `VmRSS`
@@ -1770,16 +1850,16 @@ engine — so a 40-group run is ~1.1 MB of SQL.
   which is honest and unsatisfying in the same measure. Converting any of them into a claim needs
   more seeds or more datasets, and that is a campaign rather than a run.
 
-  The tooling for that campaign now exists and has not been run. `phase5_pipeline.py --resample K`
-  re-splits the pooled train and test at the same per-class sizes (K=0 is the archive's own split,
-  so nothing archived changes), and `scripts/pod/resample_power.py` sizes the campaign before
-  buying it. The reason to size it first is that **resamples may be the wrong purchase.** A paired
-  comparison's error is `sqrt(between/D + within/(D*R))`: resamples shrink the split-luck term and
-  do nothing at all to between-dataset heterogeneity. The 500-vs-10,000 sign already flips with the
-  dataset subset — −0.0038 over 28 datasets, −0.0001 over the 24 with cubes — which is the
-  signature of the term resampling cannot touch. So the script reports an **SE floor**: what no
-  number of resamples can cross at a given dataset count. If that floor sits above 0.005, the
-  answer is more datasets, or that the effect is not resolvable at any affordable scale.
+  **Now sized, and the campaign is 4.5x cheaper than the paper's protocol.** `phase5_pipeline.py
+  --resample K` re-splits the pooled train and test at the same per-class sizes (K=0 is the
+  archive's own split, so nothing archived changes), and a 160-run pilot through
+  `scripts/pod/resample_power.py` measured where the noise actually lives: **split luck is 8x the
+  dataset effect** (sd 0.0173 against 0.0061). That contradicts what this entry used to predict
+  from the subset sign-flip. Since more datasets shrink both terms and more resamples only one,
+  **40 datasets x 4 resamples = 320 runs** resolves 0.005 where 24 x 30 would be 1,440. The pilot
+  also put the sign the other way from the archived split: +0.0025 against −0.0033, both
+  indistinguishable from zero, which is the entry's own point made with data. See "Split luck is
+  8x the dataset effect, so buy breadth" above. **What remains is running it.**
 - **e=8 versus e=1.** `--compare-estimators 8,1` exists and was never run: at 500-feature
   groups e=1 already covers every feature, so the interesting comparison is the paper's
   2,000-feature groups at e=8 against this configuration — which is a different experiment than

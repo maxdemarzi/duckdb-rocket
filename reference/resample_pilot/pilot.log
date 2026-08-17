@@ -1,0 +1,199 @@
+memory_limit 8GB per run x 4 jobs
+16 datasets x 5 resamples x 2 arms = 160 runs
+  A --num-kernels 10000 --n-groups 40
+  B --num-kernels 2500 --n-groups 10
+  BeetleFly r2 B  acc=0.9000  18s
+  BeetleFly r1 B  acc=0.9500  18s
+  BeetleFly r3 B  acc=0.8500  18s
+  BeetleFly r2 A  acc=0.8500  65s
+  BeetleFly r1 A  acc=0.9500  65s
+  BeetleFly r4 B  acc=0.9000  18s
+  BeetleFly r3 A  acc=0.8500  65s
+  BeetleFly r5 B  acc=0.7500  18s
+  BeetleFly r4 A  acc=0.9000  64s
+  BirdChicken r1 B  acc=0.9500  18s
+  BeetleFly r5 A  acc=0.7500  64s
+  BirdChicken r2 B  acc=0.9500  17s
+  BirdChicken r1 A  acc=0.9500  63s
+  BirdChicken r3 B  acc=0.9000  18s
+  BirdChicken r2 A  acc=0.9500  63s
+  BirdChicken r4 B  acc=0.8500  17s
+  BirdChicken r3 A  acc=0.9500  64s
+  BirdChicken r5 B  acc=0.9000  18s
+  BirdChicken r4 A  acc=0.8500  63s
+  OliveOil r1 B  acc=0.9333  19s
+  BirdChicken r5 A  acc=0.9000  63s
+  OliveOil r2 B  acc=0.8333  19s
+  OliveOil r3 B  acc=0.9667  20s
+  OliveOil r1 A  acc=0.9000  73s
+  OliveOil r2 A  acc=0.8000  73s
+  OliveOil r4 B  acc=0.9000  19s
+  OliveOil r3 A  acc=0.9667  73s
+  OliveOil r5 B  acc=0.9333  20s
+  OliveOil r4 A  acc=0.9333  72s
+  Wine r1 B  acc=0.9630  27s
+  OliveOil r5 A  acc=0.9667  71s
+  Wine r2 B  acc=0.8704  26s
+  Wine r3 B  acc=0.9630  26s
+  Wine r1 A  acc=0.9630  99s
+  Wine r2 A  acc=0.8519  98s
+  Wine r4 B  acc=0.9444  26s
+  Wine r3 A  acc=0.9815  101s
+  Wine r5 B  acc=0.8704  26s
+  Lightning2 r1 B  acc=0.7377  29s
+  Wine r4 A  acc=0.9444  101s
+  Lightning2 r2 B  acc=0.8361  29s
+  Wine r5 A  acc=0.8519  100s
+  Lightning2 r3 B  acc=0.8852  30s
+  Lightning2 r1 A  acc=0.7541  108s
+  Lightning2 r2 A  acc=0.8525  106s
+  Lightning2 r4 B  acc=0.8852  29s
+  Lightning2 r5 B  acc=0.8033  29s
+  Lightning2 r3 A  acc=0.9344  107s
+  Car r1 B  acc=0.8500  27s
+  Lightning2 r4 A  acc=0.9016  107s
+  Car r2 B  acc=0.9500  28s
+  Lightning2 r5 A  acc=0.8033  105s
+  Car r1 A  acc=0.8500  101s
+  Car r3 B  acc=0.9167  26s
+  Car r4 B  acc=0.9000  27s
+  Car r2 A  acc=0.9333  100s
+  Car r5 B  acc=0.8833  26s
+  Car r3 A  acc=0.9167  99s
+  Car r4 A  acc=0.9000  100s
+  Lightning7 r1 B  acc=0.7671  32s
+  Car r5 A  acc=0.9000  100s
+  Lightning7 r2 B  acc=0.7945  31s
+  Lightning7 r3 B  acc=0.7534  33s
+  Lightning7 r1 A  acc=0.7534  118s
+  Lightning7 r4 B  acc=0.9041  32s
+  Lightning7 r2 A  acc=0.7808  118s
+  Lightning7 r3 A  acc=0.7260  119s
+  Lightning7 r5 B  acc=0.8082  31s
+  Lightning7 r4 A  acc=0.9178  116s
+  HouseTwenty r1 B  acc=0.9076  36s
+  HouseTwenty r2 B  acc=0.9832  35s
+  Lightning7 r5 A  acc=0.8219  116s
+  HouseTwenty r3 B  acc=0.9244  35s
+  HouseTwenty r1 A  acc=0.9076  132s
+  HouseTwenty r2 A  acc=0.9748  129s
+  HouseTwenty r4 B  acc=0.9580  36s
+  HouseTwenty r3 A  acc=0.9244  129s
+  HouseTwenty r5 B  acc=0.9748  35s
+  HouseTwenty r4 A  acc=0.9580  130s
+  ECG200 r1 B  acc=0.9100  38s
+  ECG200 r2 B  acc=0.8800  39s
+  HouseTwenty r5 A  acc=0.9496  132s
+  ECG200 r3 B  acc=0.8800  41s
+  ECG200 r1 A  acc=0.9000  146s
+  ECG200 r2 A  acc=0.8600  149s
+  ECG200 r4 B  acc=0.8900  40s
+  ECG200 r3 A  acc=0.8900  148s
+  ECG200 r5 B  acc=0.9200  40s
+  Ham r1 B  acc=0.7810  44s
+  ECG200 r4 A  acc=0.9000  149s
+  Ham r2 B  acc=0.8190  44s
+  ECG200 r5 A  acc=0.9000  148s
+  Ham r3 B  acc=0.8667  44s
+  Ham r1 A  acc=0.7714  159s
+  Ham r4 B  acc=0.8000  43s
+  Ham r2 A  acc=0.8190  160s
+  Ham r5 B  acc=0.7619  43s
+  Ham r3 A  acc=0.8381  158s
+  Beef r1 B  acc=0.7667  20s
+  Ham r4 A  acc=0.7905  157s
+  Beef r1 A  acc=0.7333  75s
+  Beef r2 B  acc=0.6667  20s
+  Beef r3 B  acc=0.8000  20s
+  Beef r2 A  acc=0.6000  74s
+  Ham r5 A  acc=0.7619  155s
+  Beef r4 B  acc=0.6000  20s
+  Beef r5 B  acc=0.6667  20s
+  Beef r3 A  acc=0.8000  73s
+  Beef r4 A  acc=0.6000  72s
+  Beef r5 A  acc=0.6333  71s
+  ACSF1 r1 B  acc=0.8300  41s
+  ACSF1 r2 B  acc=0.7700  42s
+  ACSF1 r3 B  acc=0.8000  42s
+  ACSF1 r1 A  acc=0.8400  154s
+  ACSF1 r2 A  acc=0.7800  154s
+  ACSF1 r4 B  acc=0.7800  42s
+  ACSF1 r3 A  acc=0.8100  155s
+  ACSF1 r5 B  acc=0.8500  43s
+  ACSF1 r4 A  acc=0.7800  156s
+  ToeSegmentation2 r1 B  acc=0.9385  49s
+  ACSF1 r5 A  acc=0.8400  157s
+  ToeSegmentation2 r2 B  acc=0.9077  50s
+  ToeSegmentation2 r1 A  acc=0.9462  186s
+  ToeSegmentation2 r3 B  acc=0.9538  49s
+  ToeSegmentation2 r4 B  acc=0.9308  49s
+  ToeSegmentation2 r2 A  acc=0.9077  186s
+  ToeSegmentation2 r5 B  acc=0.9154  50s
+  ToeSegmentation2 r3 A  acc=0.9538  184s
+  ToeSegmentation2 r4 A  acc=0.9385  185s
+  Worms r1 B  acc=0.7532  51s
+  ToeSegmentation2 r5 A  acc=0.9154  185s
+  Worms r2 B  acc=0.7532  50s
+  Worms r3 B  acc=0.7143  51s
+  Worms r1 A  acc=0.7662  191s
+  Worms r4 B  acc=0.8571  52s
+  Worms r2 A  acc=0.7273  191s
+  Worms r5 B  acc=0.7273  52s
+  Worms r3 A  acc=0.7143  190s
+  Worms r4 A  acc=0.8571  190s
+  ArrowHead r1 B  acc=0.8971  55s
+  ArrowHead r2 B  acc=0.8171  54s
+  Worms r5 A  acc=0.7143  190s
+  ArrowHead r3 B  acc=0.8857  55s
+  ArrowHead r1 A  acc=0.8857  208s
+  ArrowHead r4 B  acc=0.8914  54s
+  ArrowHead r2 A  acc=0.8229  208s
+  ArrowHead r5 B  acc=0.9143  55s
+  ArrowHead r3 A  acc=0.8914  208s
+  InsectEPGSmallTrain r1 B  FAILED: ValueError: all the input arrays must have same number of dimensions, but the array at index 0 has 1 dimension(s) and the array at index 1 has 2 dimension(s)
+  ArrowHead r4 A  acc=0.8857  206s
+  InsectEPGSmallTrain r2 B  acc=0.9157  60s
+  ArrowHead r5 A  acc=0.9143  207s
+  InsectEPGSmallTrain r3 B  acc=0.8835  59s
+  InsectEPGSmallTrain r1 A  acc=0.8675  224s
+  InsectEPGSmallTrain r2 A  acc=0.9157  226s
+  InsectEPGSmallTrain r4 B  acc=0.8956  60s
+  InsectEPGSmallTrain r5 B  acc=0.9076  60s
+  InsectEPGSmallTrain r3 A  acc=0.8755  221s
+  InsectEPGSmallTrain r4 A  acc=0.8956  208s
+  InsectEPGSmallTrain r5 A  acc=0.9076  202s
+
+  dataset                      R  mean delta   sd across resamples
+  ACSF1                        5     -0.0040                0.0089
+  ArrowHead                    5     +0.0011                0.0075
+  Beef                         5     +0.0267                0.0279
+  BeetleFly                    5     +0.0100                0.0224
+  BirdChicken                  5     -0.0100                0.0224
+  Car                          5     -0.0000                0.0118
+  ECG200                       5     +0.0060                0.0152
+  Ham                          5     +0.0095                0.0117
+  HouseTwenty                  5     +0.0067                0.0110
+  InsectEPGSmallTrain          4     +0.0020                0.0040
+  Lightning2                   5     -0.0197                0.0180
+  Lightning7                   5     +0.0055                0.0184
+  OliveOil                     5     +0.0000                0.0333
+  ToeSegmentation2             5     -0.0031                0.0042
+  Wine                         5     +0.0037                0.0155
+  Worms                        5     +0.0052                0.0148
+
+  grand mean delta  +0.0025   SE 0.0027  over 16 datasets x 5
+  variance within (split luck, resamples fix this)   0.000300
+  variance between (dataset effect, they do not)     0.000037
+
+  SE floor at 16 datasets, however many resamples: 0.0015
+  to resolve 0.0050 you need SE <= 0.0018
+
+   datasets  resamples  total runs  SE at R=30
+         16         23         736      0.0017
+         24          8         384      0.0014
+         28          6         336      0.0013
+         40          4         320      0.0011
+         60          2         240      0.0009
+        100          2         400      0.0007
+
+wrote /workspace/resample_power.json  (56.5 min)

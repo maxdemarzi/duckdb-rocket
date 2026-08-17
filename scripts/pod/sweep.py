@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from duckdb_rocket.datasets import RUNNABLE_SUBSET, UCR_SUBSET, describe  # noqa: E402
+from duckdb_rocket.datasets import RUNNABLE_SUBSET, UCR_SUBSET, describe, load  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -105,6 +105,17 @@ def main() -> int:
 
     for spec in skipped:
         print(f"SKIP  {describe(spec)}", file=sys.stderr)
+
+    # Serially, before any job starts: the archive downloads and extracts on first use, and doing
+    # that from several processes at once hands one of them a half-written file. Cost is seconds
+    # when the cache is warm and it removes a failure that otherwise only ever hits the FIRST run
+    # of each dataset -- which is exactly the one a fresh pod always performs.
+    print(f"warming the dataset cache for {len(specs)} datasets", flush=True)
+    for spec in specs:
+        try:
+            load(spec.name, "train"), load(spec.name, "test")
+        except Exception as exc:
+            print(f"  {spec.name}: FAILED TO LOAD -- {type(exc).__name__}: {exc}", file=sys.stderr)
 
     runs: list[dict] = []
     started_all = time.perf_counter()

@@ -369,6 +369,22 @@ def main() -> int:
             print(f"    ... and {len(jobs) - 6} more")
         return 0
 
+    # Pull every dataset into the cache SERIALLY before any job starts. The archive is downloaded
+    # and extracted on first use, and that is not safe to do from several processes at once: the
+    # pilot's only failure in 160 runs was the FIRST job to touch InsectEPGSmallTrain, which died
+    # in 1.2 s reading a half-written file ("array at index 0 has 1 dimension(s), index 1 has 2").
+    # Every later run of that dataset succeeded, because by then the cache was complete.
+    #
+    # Rare here and not rare in the campaign: a fresh pod running 40 datasets faces this 40 times,
+    # and each hit quietly costs one resample of one dataset rather than failing the run.
+    print(f"warming the dataset cache for {len(names)} datasets", flush=True)
+    from duckdb_rocket.datasets import load as _load
+    for n in names:
+        try:
+            _load(n, "train"), _load(n, "test")
+        except Exception as exc:                  # report and carry on; the run will fail loudly
+            print(f"  {n}: FAILED TO LOAD -- {type(exc).__name__}: {exc}", file=sys.stderr)
+
     runs: list[dict] = []
     started_all = time.perf_counter()
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:

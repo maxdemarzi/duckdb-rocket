@@ -81,6 +81,12 @@ def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]
         # pool from 112, and all four died near completion with no error message at all. With
         # --jobs J the box carries J x threads x onnx_threads at once.
         "--onnx-threads", str(args.onnx_threads),
+        # Same trap as the thread pools, in its memory form and with a worse failure. Left to
+        # itself the pipeline sets memory_limit to 70% of the cgroup, which is correct for one run
+        # and catastrophic for J of them: at --jobs 6 on a 64 GB cgroup, six runs each claimed
+        # 44.8 GB and the kernel took them at exit -9, with no DuckDB error and no traceback --
+        # 12 of the first 92 runs died this way. Divided here because only the driver knows J.
+        "--memory-limit", args.memory_limit,
         # One directory per (dataset, resample, arm). Without this, --jobs > 1 has concurrent runs
         # of the same dataset writing and reading one raw.parquet: observed as "No magic bytes
         # found at end of file" on the first launch, which is the loud version. The quiet version
@@ -96,8 +102,20 @@ def one_run(args, dataset: str, resample: int, arm: str, config: tuple[str, ...]
         return {"dataset": dataset, "resample": resample, "arm": arm, "error": "timeout"}
     elapsed = time.perf_counter() - started
     if proc.returncode != 0 or not out.exists():
+        # The stderr tail is useless on its own: ONNX Runtime prints tens of thousands of
+        # "Trying to register schema with name ..." lines, so the last 400 characters are always
+        # that, whatever actually went wrong. The first diagnosis of an OOM kill here read
+        # "defs.cc line 927" and pointed at a schema registration that was fine. Pull the
+        # pipeline's own verdict out instead, and keep the exit code, which is what says -9.
+        blob = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        signal = [ln for ln in blob.splitlines()
+                  if ln.strip() and "schema error" not in ln.lower()
+                  and "Trying to register schema" not in ln
+                  and "registered from" not in ln]
+        verdict = next((ln for ln in reversed(signal) if "FAILED" in ln or "Error" in ln), "")
         return {"dataset": dataset, "resample": resample, "arm": arm, "seconds": elapsed,
-                "error": (proc.stderr or proc.stdout or "")[-400:]}
+                "returncode": proc.returncode,
+                "error": (verdict or "\n".join(signal[-4:]))[:400]}
     report = json.loads(out.read_text(encoding="utf-8"))
     return {"dataset": dataset, "resample": resample, "arm": arm,
             "accuracy": report["accuracy"], "seconds": report["seconds"],
@@ -243,6 +261,12 @@ def main() -> int:
                              "what the box actually carries; size it to the CGROUP quota, which "
                              "on a RunPod GPU host is nothing like what nproc reports.")
     parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--memory-limit", default=None,
+                        help="DuckDB memory_limit PER RUN, e.g. '8GB'. Defaults to 60%% of the "
+                             "cgroup limit divided by --jobs, because the pipeline's own default "
+                             "is 70%% of the cgroup and every concurrent job would claim that "
+                             "same share. An OOM kill here leaves exit -9, no DuckDB error and no "
+                             "traceback, which looks exactly like a hang.")
     parser.add_argument("--timeout", type=int, default=7200)
     parser.add_argument("--target", type=float, default=0.005,
                         help="the effect size worth resolving. 0.005 is the scale of every "
@@ -253,6 +277,26 @@ def main() -> int:
     parser.add_argument("--analyse-only", action="store_true",
                         help="re-read --out and re-run the statistics, with no pod time at all")
     args = parser.parse_args()
+
+    if not args.memory_limit:
+        # The cgroup, not free(3): inside a container those differ and it is the cgroup that
+        # kills you. 60% rather than the pipeline's 70% because the model allocates OUTSIDE
+        # DuckDB's buffer manager, so the limit governs only part of a run's footprint.
+        total = None
+        for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+            try:
+                raw = Path(f).read_text().strip()
+                if raw != "max":
+                    total = int(raw)
+                    break
+            except (OSError, ValueError):
+                continue
+        if total and total < (1 << 62):          # v1 reports a sentinel when unlimited
+            per = int(total * 0.6 / max(1, args.jobs))
+            args.memory_limit = f"{max(1, per // (1 << 30))}GB"
+        else:
+            args.memory_limit = "8GB"
+        print(f"memory_limit {args.memory_limit} per run x {args.jobs} jobs", flush=True)
 
     if args.analyse_only:
         if not args.out.exists():

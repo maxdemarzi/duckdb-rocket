@@ -66,7 +66,30 @@ def main() -> int:
              "the sweep otherwise leaves most of the box idle. Wall clock is what a pod is "
              "billed by, so this is the difference between a $2 run and a $10 one.",
     )
+    parser.add_argument("--threads", type=int, default=2,
+                        help="DuckDB threads per run. jobs x threads x onnx-threads is what the "
+                             "box carries; the run itself is largely serial, so parallelism is "
+                             "better spent across jobs than inside one.")
+    parser.add_argument("--onnx-threads", type=int, default=3)
+    parser.add_argument("--memory-limit", default=None,
+                        help="DuckDB memory_limit PER RUN. Defaults to 60%% of the cgroup divided "
+                             "by --jobs; the pipeline's own default is 70%% of the cgroup, which "
+                             "every concurrent job would claim in full.")
     args = parser.parse_args()
+
+    if not args.memory_limit:
+        total = None
+        for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+            try:
+                raw = Path(f).read_text().strip()
+                if raw != "max":
+                    total = int(raw)
+                    break
+            except (OSError, ValueError):
+                continue
+        args.memory_limit = (f"{max(1, int(total * 0.6 / max(1, args.jobs)) // (1 << 30))}GB"
+                             if total and total < (1 << 62) else "8GB")
+        print(f"memory_limit {args.memory_limit} per run x {args.jobs} jobs", flush=True)
 
     if args.datasets:
         wanted = {n.strip() for n in args.datasets.split(",")}
@@ -96,6 +119,20 @@ def main() -> int:
             "--n-groups", str(args.n_groups),
             "--seed", str(seed),
             "--out", str(out),
+            # All four of these exist because --jobs > 1 makes a run stop being alone on the box,
+            # and phase5_pipeline.py sizes itself as though it always is. Left off, each concurrent
+            # run builds its thread pools from the full core count and claims 70% of the cgroup for
+            # memory, and they all share one data/phase5/<dataset> directory.
+            #
+            # The thread and memory versions are already recorded in PLAN.md and cost this project
+            # a session each. The directory one is worse than both: `predictions.json` is written
+            # there and read back to compute accuracy, so two concurrent seeds of one dataset can
+            # overwrite each other's and report an accuracy belonging to the other seed. Nothing
+            # crashes and both numbers look fine.
+            "--threads", str(args.threads),
+            "--onnx-threads", str(args.onnx_threads),
+            "--memory-limit", args.memory_limit,
+            "--workdir", str(ROOT / "data" / "sweep" / f"{spec.name}_seed{seed}"),
         ]
         if args.test_chunk:
             cmd += ["--test-chunk", str(args.test_chunk)]

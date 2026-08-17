@@ -21,6 +21,7 @@ into the number the pairing exists to remove.
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -113,7 +114,24 @@ def test_a_failed_run_carries_no_accuracy_and_is_ignored():
 
 def test_no_complete_pairs_says_so_instead_of_dividing_by_zero():
     a = analyse([{"dataset": "d0", "resample": 1, "arm": "A", "accuracy": 0.5}], target=0.005)
-    assert "note" in a and "datasets" not in a
+    assert "note" in a and "plans" not in a
+
+
+def test_one_dataset_refuses_to_size_a_campaign_rather_than_returning_nan():
+    """A single dataset cannot estimate between-dataset variance, and NaN reads as a finding.
+
+    This is not hypothetical: the smoke run of this pilot was one dataset, and the report
+    concluded "the between-dataset term dominates, and this comparison cannot be resolved by
+    resampling at any affordable scale" -- because `statistics.variance` of one value is NaN, NaN
+    fails every `<=` comparison, so every plan came back unreachable. The most confident sentence
+    in the output was the one with no data behind it.
+    """
+    a = analyse(runs_from({"d0": [0.01, 0.02, 0.03]}), target=0.005)
+    assert "note" in a
+    assert "plans" not in a, "sized a campaign from one dataset"
+    assert not any(isinstance(v, float) and math.isnan(v)
+                   for v in a.values() if isinstance(v, float)), "NaN escaped into the report"
+    assert a["datasets"] == 1 and a["var_within"] > 0   # what IS knowable is still reported
 
 
 def test_a_negative_between_estimate_is_reported_rather_than_hidden():

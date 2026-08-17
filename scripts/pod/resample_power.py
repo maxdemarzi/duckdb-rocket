@@ -135,7 +135,19 @@ def analyse(runs: list[dict], target: float) -> dict:
     # component is what is left after removing it. It can come out negative when the true
     # heterogeneity is near zero and D is small; that is an estimate of zero, not a defect, and
     # clamping it silently would turn "we cannot tell them apart" into "there is no heterogeneity".
-    var_of_means = statistics.variance(means) if D > 1 else float("nan")
+    # With one dataset there is no between-dataset variance to estimate, and every quantity below
+    # is NaN. NaN compares False against everything, so `se(d, r) <= want_se` fails for every plan
+    # and the report used to conclude "the between-dataset term dominates; this cannot be resolved
+    # at any affordable scale" -- a verdict assembled entirely from missing data, and one that
+    # reads exactly like a finding. Say what is actually true instead.
+    if D < 2:
+        return {"per_dataset": per_dataset, "datasets": D, "mean_resamples": R,
+                "grand_mean_delta": statistics.fmean(means), "var_within": within,
+                "note": f"{D} dataset with complete pairs: the between-dataset term cannot be "
+                        f"estimated at all from one dataset, so no campaign can be sized yet. "
+                        f"Needs at least 2, and realistically 8-10 for a usable estimate."}
+
+    var_of_means = statistics.variance(means)
     between_raw = var_of_means - within / R if R else float("nan")
     between = max(between_raw, 0.0)
 
@@ -175,8 +187,13 @@ def analyse(runs: list[dict], target: float) -> dict:
 
 
 def report(a: dict) -> None:
-    if "datasets" not in a:
-        print(f"  {a.get('note')}")
+    if "note" in a:
+        # Covers both "nothing complete yet" and "too few datasets to decompose". Printed instead
+        # of the plan table, never alongside it: a table of NaN beside a caveat still gets read as
+        # a table.
+        for ds, v in a.get("per_dataset", {}).items():
+            print(f"  {ds:<26} R={v['n_resamples']} mean delta {v['mean_delta']:+.4f}")
+        print(f"\n  {a['note']}")
         return
     print(f"\n  {'dataset':<26} {'R':>3} {'mean delta':>11} {'sd across resamples':>21}")
     for ds, v in a["per_dataset"].items():

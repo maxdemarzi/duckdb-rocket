@@ -647,6 +647,93 @@ died. It is 766 KB under the prepared-plan one.
 
 ---
 
+## Phase 7 — Raise the ceiling, or establish that it cannot be raised
+
+**The problem, stated as a number.** Routing and distillation were both competing for a ~3-point
+prize, because that is the whole gap between a cheap ridge and this teacher. But the per-row oracle
+over the four arms already built is **0.8483** against a best-achieved **0.7686** — about **+0.09
+sitting unclaimed** — and the pipeline is 4-8 points behind published bests on four of the six hard
+datasets. The headroom is real. Three routes to it are already closed:
+
+| tried | result |
+|---|---|
+| more architectures | overlap 3.74x / 3.75x / 3.78x — identical to within 1%; a third *lowered* the ensemble |
+| averaging the arms | 0.7619, below the 0.7686 best-single-arm |
+| margin-routing between arms, and picking the surest arm | best cell +0.0042 at p=0.27; surest-of-four −0.0032 |
+
+What survived is one measured asymmetry: **one model with two feature families overlaps at 2.99x
+where two models with one family overlap at 3.74x.** The representation does more work than the
+architecture. So the ordering below is by evidence, and the cheapest item is also the most
+decisive — which is the only reason to do it first.
+
+### 7a — Can *any* function of the posteriors reach the oracle? (no pod, hours)
+
+- [ ] The gate. All four arms' per-row posteriors are already archived for **17 of 17** overlap
+      datasets (`phase5_<ds>_{gpu,orion-bix,tabpfn-v2,ts}_soft.json`), so this needs no pod, no
+      weights and no new measurement — only a fit over files on disk.
+- [ ] Fit a stacker on the per-arm posterior vector per row, evaluated by **cross-validation within
+      the test rows**: fit on k−1 folds' posteriors and true labels, predict the held-out fold.
+      That is not the shippable design — a real stacker would train on out-of-fold posteriors over
+      the *train* split, which nothing has produced — but it answers the question that decides
+      whether the shippable design is worth building at all.
+- [ ] **The question it settles.** The closing line of the feature-route result is that reaching
+      +0.09 needs a signal that knows *which arm is right*, and no arm's own confidence is that
+      signal. A CV stacker is the most permissive such signal available: it may use every arm's full
+      distribution and real labels. If it recovers a useful fraction of the oracle, build the real
+      thing. **If it recovers nothing, the oracle is unreachable from these posteriors at all** and
+      the whole "collect the diversity" direction is closed — which is worth knowing for an
+      afternoon's work rather than a campaign.
+- [ ] Report the oracle-fraction recovered, not the raw accuracy: the arms differ in competence by
+      3.4 points, so a rule that merely learns "usually pick `tabicl-v2`" will look positive while
+      collecting none of the diversity.
+
+### 7b — A third feature family, since features are the axis that moved (small pod)
+
+- [ ] `catch22` rather than more `anofox_forecast`. Two reasons beyond novelty: it is **already in
+      `aeon`**, which this project depends on, so it adds no dependency; and it carries **no BSL
+      1.1 restriction**, where the 116-statistic ts family is a research instrument that can never
+      be a dependency. 22 features also sits far inside `tabicl-v2`'s 512-feature cap.
+- [ ] Add it to `phase5_pipeline.py --features` alongside `rocket`/`ts`/`both`. The plumbing exists;
+      what is new is a transform and its column names.
+- [ ] Measure what the ts family's addition measured, on the same 17 datasets: pairwise excess
+      overlap against each existing arm, the oracle over five arms, and the rows nobody gets right.
+      The prediction to falsify: a *third feature family* should move the oracle by roughly what
+      the second did (+0.0229) and by more than a third architecture did (+0.0174).
+- [ ] **Gate.** If the five-arm oracle does not rise, feature diversity is saturating and 7b stops
+      after one dataset family rather than becoming a survey of transforms.
+- [ ] Do **not** expect an averaging or margin rule to collect it — both are measured dead ends.
+      This item raises the bound; 7a decides whether anything can reach a bound.
+
+### 7c — The paper's own backbones, ranked last on purpose (licence decision, then a pod)
+
+- [ ] `tabpfn-v2-5` and `tabpfn-v3` both download and neither loads: one is published under tensor
+      names its exported graph was not built against (248 of 250 missing), the other is a torch zip
+      whose pickle stream uses an opcode the checkpoint reader does not implement. Both are fixed by
+      the same one-time `scripts/convert_model_weights.sh` conversion, deliberately not run for
+      these two — so it is a **licence decision, not a blocker**.
+- [ ] Ranked last despite being the easiest, because the evidence predicts it will not help: three
+      architectures already fail on the same rows to within 1%, and these are two more
+      architectures reading the same 500 ROCKET features. Worth doing for completeness against the
+      paper, not as a route to the ceiling.
+- [ ] If run, run it **inside 7b** rather than separately: a new backbone on a new feature family is
+      the only combination that has not been eliminated.
+
+### 7d — Re-test the overlap numbers before building on them
+
+- [ ] Everything above rests on 17 datasets and **one seed**, and the resample pilot measured split
+      luck at sd 0.0173 per dataset. The 2.99x-versus-3.74x separation is the load-bearing claim of
+      Phase 7 and has never been resampled.
+- [ ] `--resample` now exists in `phase5_pipeline.py` and in `distill_gate.py --route`, and the
+      pilot sized the campaign: at ~29 datasets, three resamples put a +0.0135-sized effect at ~6
+      SE. Extend the same treatment to `scripts/feature_route.py` and re-run the overlap matrix.
+- [ ] Do this **after 7a** — if 7a closes the direction, 7d is not worth running; if 7a opens it,
+      7d is what makes the result quotable.
+
+**Cost, honestly.** 7a is an afternoon and no money. 7b is a transform plus one pod pass over 17
+datasets. 7d is 29 datasets x 3 resamples, ~1.5 h at `--jobs 5`, and reuses the driver written for
+the routing re-test. 7c is a licence acceptance and then whatever 7b costs again. The ordering is
+7a → (7b, 7d) → 7c, and 7a can kill the rest.
+
 ## Standing risks
 
 | Risk | Phase | Mitigation |

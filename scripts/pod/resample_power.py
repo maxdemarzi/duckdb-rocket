@@ -285,6 +285,14 @@ def main() -> int:
                         help="re-read --out and re-run the statistics, with no pod time at all")
     args = parser.parse_args()
 
+    if args.analyse_only:
+        # Before the memory arithmetic, which is about running and has no business printing
+        # "memory_limit 8GB per run x 1 jobs" above a table of results computed weeks ago.
+        if not args.out.exists():
+            parser.error(f"no {args.out} to analyse")
+        report(analyse(json.loads(args.out.read_text(encoding="utf-8"))["runs"], args.target))
+        return 0
+
     if not args.memory_limit:
         # The cgroup, not free(3): inside a container those differ and it is the cgroup that
         # kills you. 60% rather than the pipeline's 70% because the model allocates OUTSIDE
@@ -304,13 +312,6 @@ def main() -> int:
         else:
             args.memory_limit = "8GB"
         print(f"memory_limit {args.memory_limit} per run x {args.jobs} jobs", flush=True)
-
-    if args.analyse_only:
-        if not args.out.exists():
-            parser.error(f"no {args.out} to analyse")
-        prior = json.loads(args.out.read_text(encoding="utf-8"))
-        report(analyse(prior["runs"], args.target))
-        return 0
 
     if args.datasets:
         # Validated against the full 112 equal-length univariate UCR archive, not against

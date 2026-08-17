@@ -1250,6 +1250,12 @@ def main() -> int:
             "model": args.model,
             "n_train": meta["n_train"],
             "n_test": meta["n_test"],
+            # WHICH SPLIT these labels describe. A resample preserves n_train and n_test exactly,
+            # so every existing consumer check -- and they do check both -- passes when a sidecar
+            # from resample 3 is read against resample 7's split. Right sizes, wrong rows, no
+            # error, and a routing or distillation result computed against another split's
+            # teacher. The only defence is to record it and have the consumer assert it.
+            "resample": args.resample,
             "note": "test row k of the dataset's test split is id n_train + k",
             "classes": sorted({c for v in by_row.values() for c in v}),
             "mean_proba": {str(k): by_row[k] for k in sorted(by_row)},

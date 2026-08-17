@@ -74,6 +74,12 @@ from sklearn.model_selection import train_test_split  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
 from duckdb_rocket.datasets import load  # noqa: E402
+
+# IMPORTED, never reimplemented. The student here and the teacher in phase5_pipeline.py must draw
+# byte-identical splits or every paired comparison silently compares different test sets, and two
+# copies of a stratified re-split would eventually disagree about tie-breaking or class order.
+sys.path.insert(0, str(ROOT / "scripts"))
+from phase5_pipeline import resample_split  # noqa: E402
 from duckdb_rocket.rocket import generate_kernels, normalize_series, transform  # noqa: E402
 
 ALPHAS = np.logspace(-3, 3, 10)
@@ -221,6 +227,29 @@ def load_ensemble_soft(directory: Path, dataset: str, models: list[str]) -> dict
         merged[key] = {c: sum(r[c] for r in rows) / len(rows) for c in classes}
     return {"dataset": dataset, "model": "+".join(models), "n_train": base["n_train"],
             "n_test": base["n_test"], "classes": classes, "mean_proba": merged}
+
+
+def load_split(name: str, resample: int):
+    """The dataset's (xtr, ytr, xte, yte) for a given resample. resample 0 is the archive's own."""
+    xtr, ytr = load(name, "train")
+    xte, yte = load(name, "test")
+    return resample_split(xtr, ytr, xte, yte, resample)
+
+
+def assert_same_split(soft: dict, dataset: str, resample: int) -> None:
+    """The sidecar must describe the split we are about to score against.
+
+    Not paranoia: a resample preserves n_train and n_test exactly, so `teacher_label_conf`'s size
+    assertion below passes when a resample-3 sidecar is read against resample-7's split. Right
+    sizes, wrong rows, no error, and every downstream number is the teacher's opinion of somebody
+    else's test set. Sidecars written before `resample` existed carry no key and are the archive's
+    own split, which is resample 0.
+    """
+    got = soft.get("resample", 0)
+    if got != resample:
+        raise ValueError(
+            f"{dataset}: teacher sidecar is for resample {got}, scoring against resample "
+            f"{resample}. The row counts match either way, so nothing else would have caught this.")
 
 
 def teacher_label_conf(soft: dict, n_test: int) -> tuple[np.ndarray, np.ndarray]:
@@ -1059,20 +1088,24 @@ def route_curve(spred, sconf, tpred, y, fracs) -> list[tuple[float, float]]:
 
 
 def _route_worker(t):
-    name, learner, seed, teacher_dir, cache = t
+    name, learner, seed, teacher_dir, cache, resample = t
     try:
-        cp = Path(cache) / f"{name}__{learner.replace('+', '_')}__seed{seed}.json" if cache else None
+        # The resample is IN THE CACHE KEY. Without it, a cached student from the archive split is
+        # served for resample 7 -- predictions of the right length for the wrong rows, which every
+        # check downstream passes.
+        cp = (Path(cache) / f"{name}__{learner.replace('+', '_')}__seed{seed}__r{resample}.json"
+              if cache else None)
         if cp is not None and cp.exists():
             d = json.loads(cp.read_text(encoding="utf-8"))
             return name, learner, d["pred"], d["conf"], ""
-        xtr, ytr = load(name, "train")
-        xte, _ = load(name, "test")
+        xtr, ytr, xte, _ = load_split(name, resample)
         pred, conf = SCORERS[learner](normalize_series(xtr), ytr, normalize_series(xte), seed=seed)
         pred, conf = [str(p) for p in pred], [float(c) for c in conf]
         if cp is not None:
             cp.parent.mkdir(parents=True, exist_ok=True)
             cp.write_text(json.dumps({"dataset": name, "learner": learner, "seed": seed,
-                                      "pred": pred, "conf": conf}), encoding="utf-8")
+                                      "resample": resample, "pred": pred, "conf": conf}),
+                          encoding="utf-8")
         return name, learner, pred, conf, ""
     except Exception as e:  # noqa: BLE001
         return name, learner, None, None, f"{type(e).__name__}: {e}"[:140]
@@ -1186,12 +1219,15 @@ def run_calibrate(args) -> int:
     rows = []
     for name in names:
         soft = load_soft(args.teacher, name)
-        _, yte = load(name, "test")
+        # Asserted before anything is computed from it: sizes alone cannot tell these apart.
+        assert_same_split(soft, name, args.resample)
+        _, _, _, yte = load_split(name, args.resample)
         tpred = teacher_labels(soft, len(yte))
         for lname in learners:
             if (name, lname) not in oof:
                 continue
-            got = _route_worker((name, lname, args.seed, str(args.teacher), str(args.route_cache)))
+            got = _route_worker((name, lname, args.seed, str(args.teacher),
+                                 str(args.route_cache), args.resample))
             if got[2] is None:
                 continue
             spred, sconf = np.asarray(got[2], dtype=object), np.asarray(got[3], dtype=float)
@@ -1259,7 +1295,7 @@ def run_route(args) -> int:
     print(f"routing: {len(names)} datasets, {len(learners)} learner(s), "
           f"escalating the least-confident 0..100% to the teacher\n")
 
-    jobs = sorted(((n, l, args.seed, str(args.teacher), str(args.route_cache))
+    jobs = sorted(((n, l, args.seed, str(args.teacher), str(args.route_cache), args.resample)
                    for n in names for l in learners),
                   key=lambda j: -reports[j[0]]["shape"]["n_test"])
     got: dict[tuple[str, str], tuple[list, list]] = {}
@@ -1372,6 +1408,12 @@ def main() -> int:
                     help="per-(dataset, learner, seed, repeat) arm scores, merged per arm, so "
                          "adding an arm or a repeat later costs only the new fits")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--resample", type=int, default=0,
+                    help="which train/test split to score on. 0 (default) is the archive's own, so "
+                         "every archived result reproduces. >0 re-splits the pooled data at the "
+                         "same per-class sizes, using the SAME function phase5_pipeline.py uses -- "
+                         "so --teacher must point at a directory of sidecars generated at the same "
+                         "resample, which is asserted rather than assumed.")
     ap.add_argument("--jobs", type=int, default=1,
                     help="parallel student fits; the gate is embarrassingly parallel across datasets")
     ap.add_argument("--cache", type=Path, default=ROOT / "data" / "gate_students",

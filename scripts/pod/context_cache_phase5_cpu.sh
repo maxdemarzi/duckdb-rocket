@@ -48,7 +48,11 @@ MODEL_DIR=/workspace/model_split_phase5
 DATASETS="${DATASETS:-ItalyPowerDemand OSULeaf}"
 CHUNK="${CHUNK:-128}"
 THREADS="${THREADS:-4}"
-ONNX_THREADS="${ONNX_THREADS:-4}"
+# Sized so the pools multiply out to the cores we actually have: DuckDB runs THREADS of them and
+# each ONNX session takes ONNX_THREADS. 16 vCPU gives 4x4, which is what the archived phase-5
+# numbers were taken at; a smaller box scales down instead of oversubscribing. CPU capacity was
+# exhausted at every size when this was first run, so the box is whatever was available.
+ONNX_THREADS="${ONNX_THREADS:-$(( $(nproc) / THREADS > 0 ? $(nproc) / THREADS : 1 ))}"
 
 log() { printf '\n=== %s  [%s]\n' "$*" "$(date -u +%H:%M:%S)"; }
 

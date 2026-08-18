@@ -1,0 +1,69 @@
+{
+  "dataset": "SemgHandMovementCh2",
+  "model": "tabicl-v2",
+  "device": "cpu",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "resample": 1,
+    "threads": 2,
+    "memory_limit": "12GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 64,
+    "context_cache": false,
+    "onnx_threads": 4,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "SemgHandMovementCh2",
+    "n_train": 450,
+    "n_test": 450,
+    "n_channels": 1,
+    "n_timepoints": 1500,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/resample/features/SemgHandMovementCh2_r1_A/raw.parquet"
+  },
+  "accuracy": 0.84,
+  "row_alignment": {
+    "predicted_rows": 450,
+    "distinct_ids": 450,
+    "group_rows": 18000,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 95.74,
+    "classify_seconds": 1863.4,
+    "classify_share": 0.9511,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 45.464,
+      "classify_median": 46.614,
+      "classify_max": 49.85,
+      "max_over_median": 1.07
+    }
+  },
+  "failures": [],
+  "seconds": 1963.8,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-65-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 96,
+    "containerised": true
+  },
+  "caveat": null
+}

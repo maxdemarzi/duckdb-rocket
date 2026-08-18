@@ -1,0 +1,69 @@
+{
+  "dataset": "EthanolLevel",
+  "model": "tabicl-v2",
+  "device": "cpu",
+  "features": "both",
+  "n_feature_columns": 616,
+  "ts_feature_source": "anofox_forecast (BSL 1.1, experiment only)",
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "resample": 1,
+    "threads": 2,
+    "memory_limit": "12GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 64,
+    "context_cache": false,
+    "onnx_threads": 4,
+    "cpu_count_source": "sched_getaffinity"
+  },
+  "shape": {
+    "dataset": "EthanolLevel",
+    "n_train": 504,
+    "n_test": 500,
+    "n_channels": 1,
+    "n_timepoints": 1751,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/resample/features/EthanolLevel_r1_B/raw.parquet"
+  },
+  "accuracy": 0.782,
+  "row_alignment": {
+    "predicted_rows": 500,
+    "distinct_ids": 500,
+    "group_rows": 20000,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 122.13,
+    "classify_seconds": 2508.28,
+    "classify_share": 0.9536,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 60.225,
+      "classify_median": 62.314,
+      "classify_max": 67.333,
+      "max_over_median": 1.08
+    }
+  },
+  "failures": [],
+  "seconds": 2720.0,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.8.0-65-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 96,
+    "containerised": true
+  },
+  "caveat": null
+}

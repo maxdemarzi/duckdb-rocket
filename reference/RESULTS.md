@@ -1902,6 +1902,100 @@ It computes none of the result. The generation is mechanical templating that can
 avoided, because `tabfm_classify` needs N named scalar columns — the `LIST` form crashes the
 engine — so a 40-group run is ~1.1 MB of SQL.
 
+## Phase 7b′ — does concatenating feature families raise the ceiling? (2026-08-18)
+
+**Yes, by about nine tenths of an accuracy point, and it is not free.**
+
+`--features rocket` (500 ROCKET columns) against `--features both` (500 ROCKET + 116
+`anofox_forecast` statistics = 616 columns), paired on the same resampled split per dataset, over the
+29 hard datasets. RTX A6000 secure pod running `--device cpu`, 7.65-core cgroup, 46.6 GB, 843.6 min.
+
+**27 datasets paired: mean +0.00923, SE 0.00368, t = 2.51 on df 26, p ~ 0.019.**
+B wins 15, A wins 6, 6 exact ties. Net **+57 correct rows out of 6665**.
+
+| dataset | rocket | both | delta | in test rows |
+|---|---|---|---|---|
+| Beef | 0.7333 | 0.8000 | +0.0667 | +2 of 30 |
+| RefrigerationDevices | 0.7787 | 0.8293 | +0.0507 | +19 of 375 |
+| Ham | 0.7714 | 0.8000 | +0.0286 | +3 of 105 |
+| Lightning7 | 0.7534 | 0.7808 | +0.0274 | +2 of 73 |
+| ScreenType | 0.6667 | 0.6880 | +0.0213 | +8 of 375 |
+| SemgHandSubjectCh2 | 0.9333 | 0.9533 | +0.0200 | +9 of 450 |
+| SmallKitchenAppliances | 0.8240 | 0.8427 | +0.0187 | +7 of 375 |
+| InlineSkate | 0.4891 | 0.5073 | +0.0182 | +10 of 550 |
+| DistalPhalanxOutlineAgeGroup | 0.8273 | 0.8417 | +0.0144 | +2 of 139 |
+| MiddlePhalanxTW | 0.5649 | 0.5779 | +0.0130 | +2 of 154 |
+| WormsTwoClass | 0.7922 | 0.8052 | +0.0130 | +1 of 77 |
+| MedicalImages | 0.8447 | 0.8553 | +0.0105 | +8 of 760 |
+| DistalPhalanxTW | 0.7554 | 0.7626 | +0.0072 | +1 of 139 |
+| ProximalPhalanxTW | 0.8098 | 0.8146 | +0.0049 | +1 of 205 |
+| SemgHandMovementCh2 | 0.8400 | 0.8422 | +0.0022 | +1 of 450 |
+| Herring | 0.6719 | 0.6719 | +0.0000 | +0 of 64 |
+| Lightning2 | 0.7541 | 0.7541 | +0.0000 | +0 of 61 |
+| ACSF1 | 0.8400 | 0.8400 | +0.0000 | +0 of 100 |
+| Haptics | 0.6136 | 0.6136 | +0.0000 | +0 of 308 |
+| Earthquakes | 0.7482 | 0.7482 | +0.0000 | +0 of 139 |
+| MiddlePhalanxOutlineAgeGroup | 0.6948 | 0.6948 | +0.0000 | +0 of 154 |
+| ProximalPhalanxOutlineAgeGroup | 0.8683 | 0.8634 | -0.0049 | -1 of 205 |
+| ArrowHead | 0.8857 | 0.8800 | -0.0057 | -1 of 175 |
+| LargeKitchenAppliances | 0.9280 | 0.9200 | -0.0080 | -3 of 375 |
+| Worms | 0.7662 | 0.7532 | -0.0130 | -1 of 77 |
+| EthanolLevel | 0.7980 | 0.7820 | -0.0160 | -8 of 500 |
+| Computers | 0.8840 | 0.8640 | -0.0200 | -5 of 250 |
+
+**Read the last column.** Six datasets change no prediction at all, and several deltas are one or two
+rows — Beef's +0.0667, the largest, is two rows out of thirty. The result is real but it is assembled
+from small margins, and the single-split `+0.0088, 4 wins to 2` this replaced was made of the same
+rows without the error bar.
+
+**The cost, in seconds.** 616 columns are slower than 500 on every dataset measured:
+
+| dataset | rocket | both | extra |
+|---|---|---|---|
+| RefrigerationDevices | 1,278 s | 1,678 s | +400 s |
+| LargeKitchenAppliances | 1,297 s | 1,675 s | +378 s |
+| SmallKitchenAppliances | 1,268 s | 1,638 s | +370 s |
+| ProximalPhalanxTW | 842 s | 1,079 s | +237 s |
+
+Four to seven extra minutes per dataset for +0.009 accuracy. Timings are comparable only *within* a
+dataset — the campaign was restarted mid-flight from `--jobs 2` to `--jobs 1`, so seconds do not
+compare across that boundary. Accuracy does: it is deterministic given the split and the seed.
+
+**Also: `ts` features are BSL 1.1 (`anofox_forecast`) and cannot ship.** A +0.009 gain from columns
+this project cannot distribute is a research finding, not a product change. `catch22` (22 columns, in
+`aeon`, unrestricted) is the shippable version of the same idea and is untested.
+
+### Two datasets are missing, asymmetrically
+
+`MiddlePhalanxOutlineCorrect` and `DistalPhalanxOutlineCorrect` — both **600 training rows**, the
+largest in the set — completed arm A (1,494 s) and had arm B killed by the kernel at 132 s and 34 s,
+under `--jobs 1`, so one run alone exceeded 46.6 GB. B is the wider arm, so **memory pressure removes
+pairs exactly where B is most expensive**, and the direction of the resulting bias is unknown. 2 of 29
+does not overturn the result; omitting the mechanism from the write-up would misrepresent it.
+
+`--test-chunk` is not the fix: it sizes the query side only, and a group's chunks share one context,
+so the context encode runs at full width regardless.
+
+### The harness printed a false verdict, and now refuses to
+
+The R=1 run reported *"the between-dataset term dominates, and this comparison cannot be resolved by
+resampling at any affordable scale."* That was an artifact of R=1, not a finding:
+
+| | R=1 asserted | corrected with the pilot's measured within |
+|---|---|---|
+| `var_within` (split luck) | 0.000000 | 0.000300 (pilot at R=4.94) |
+| `var_between` | 0.000365 | **0.000065** |
+| SE floor at D=27 | 0.0037 "however many resamples" | **0.00155** |
+| runs to reach SE ≤ 0.0018 | unreachable at any scale | **R=14, 756 runs** |
+
+With one resample per dataset nothing can observe within-dataset variance, so `within` defaults to
+0.0; the decomposition then assigns the whole spread to `between`, `se(d, r)` loses its dependence on
+`r`, and the "cannot be resolved" line prints for **every** input. The pilot had already measured
+within at **8×** between — the term zeroed out was the larger one. `analyse()` now carries an `R < 2`
+guard beside the existing `D < 2` one: mean and SE are returned (both valid at R=1), the decomposition
+and every plan sized from it are withheld. Resampling here would nearly halve the SE (R=3 → 0.0025,
+108 new runs, ~28 h), the opposite of what was printed.
+
 ## Not done
 
 - **A noise floor worth the name, and it is now the binding constraint.** One was measured (0.0509)

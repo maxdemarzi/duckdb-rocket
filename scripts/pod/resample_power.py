@@ -208,6 +208,33 @@ def analyse(runs: list[dict], target: float) -> dict:
                         f"Needs at least 2, and realistically 8-10 for a usable estimate."}
 
     var_of_means = statistics.variance(means)
+    # Every dataset has exactly one resample, so `within_vars` is empty and `within` is 0.0 -- not
+    # because split luck was measured to be absent but because nothing here can see it. Decomposing
+    # anyway assigns the whole observed spread to `between`, and since resamples only ever reduce the
+    # within term, `se(d, r)` then has no `r` in it: the report concludes "the between-dataset term
+    # dominates, this cannot be resolved by resampling at any affordable scale" as a matter of
+    # arithmetic, for every input, whatever the truth is. This is the same defect the D < 2 branch
+    # above exists to prevent, one level down, and it fired for real on the 7b' features campaign at
+    # R=1 -- where the pilot had already measured within at 0.000300 against between at 0.0000374,
+    # i.e. the term being set to zero was the one worth 8x the other.
+    #
+    # The grand mean and its SE are still perfectly good at R=1: SE is just the spread of the D
+    # paired per-dataset deltas over sqrt(D), which is what a paired test uses. Only the DECOMPOSITION
+    # and everything sized from it are unavailable. Return the former, refuse the latter.
+    if not within_vars:
+        se_obs = math.sqrt(var_of_means / D)
+        return {"per_dataset": per_dataset, "datasets": D, "mean_resamples": R,
+                "grand_mean_delta": statistics.fmean(means),
+                "se_observed": se_obs,
+                "var_of_means": var_of_means,
+                "var_within": None, "var_between": None,
+                "note": f"R=1 on every dataset: var_within is UNMEASURABLE, not zero, so the "
+                        f"between/within split and every campaign plan built on it are withheld. "
+                        f"The effect itself is unaffected: mean {statistics.fmean(means):+.5f}, "
+                        f"SE {se_obs:.5f} over {D} paired datasets. Do NOT read this as evidence "
+                        f"that resampling cannot help -- that question needs R>=2 to even ask. "
+                        f"Re-run with --resamples 3 to size anything."}
+
     between_raw = var_of_means - within / R if R else float("nan")
     between = max(between_raw, 0.0)
 

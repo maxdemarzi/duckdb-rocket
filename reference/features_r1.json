@@ -237,9 +237,331 @@
       "seconds": 1222.6,
       "n_test": 308,
       "failures": []
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7786666666666666,
+      "seconds": 1278.3,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.8293333333333334,
+      "seconds": 1678.3,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "ScreenType",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.6666666666666666,
+      "seconds": 1312.7,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "ScreenType",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.688,
+      "seconds": 1665.8,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "Earthquakes",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7482014388489209,
+      "seconds": 658.6,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "Earthquakes",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.7482014388489209,
+      "seconds": 753.6,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "InlineSkate",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.4890909090909091,
+      "seconds": 928.3,
+      "n_test": 550,
+      "failures": []
+    },
+    {
+      "dataset": "InlineSkate",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.5072727272727273,
+      "seconds": 1354.2,
+      "n_test": 550,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7553956834532374,
+      "seconds": 729.6,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.762589928057554,
+      "seconds": 919.8,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "Computers",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.884,
+      "seconds": 708.1,
+      "n_test": 250,
+      "failures": []
+    },
+    {
+      "dataset": "Computers",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.864,
+      "seconds": 911.6,
+      "n_test": 250,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.8273381294964028,
+      "seconds": 715.3,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.841726618705036,
+      "seconds": 975.0,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.8682926829268293,
+      "seconds": 903.5,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.8634146341463415,
+      "seconds": 1080.4,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.8097560975609757,
+      "seconds": 842.1,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.8146341463414634,
+      "seconds": 1079.1,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.824,
+      "seconds": 1267.5,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.8426666666666667,
+      "seconds": 1638.1,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.928,
+      "seconds": 1296.6,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.92,
+      "seconds": 1675.2,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.845360824742268,
+      "seconds": 1493.7,
+      "n_test": 291,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "B",
+      "seconds": 134.14240457396954,
+      "returncode": 1,
+      "error": "FAILED after 132.3s (exit -9)"
+    },
+    {
+      "dataset": "DistalPhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.855072463768116,
+      "seconds": 1532.1,
+      "n_test": 276,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "B",
+      "seconds": 36.537831588007975,
+      "returncode": 1,
+      "error": "FAILED after 34.3s (exit -9)"
+    },
+    {
+      "dataset": "SemgHandSubjectCh2",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.9333333333333333,
+      "seconds": 1994.9,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "SemgHandSubjectCh2",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.9533333333333334,
+      "seconds": 2607.4,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "EthanolLevel",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.798,
+      "seconds": 2080.4,
+      "n_test": 500,
+      "failures": []
+    },
+    {
+      "dataset": "EthanolLevel",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.782,
+      "seconds": 2720.0,
+      "n_test": 500,
+      "failures": []
+    },
+    {
+      "dataset": "SemgHandMovementCh2",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.84,
+      "seconds": 1963.8,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "SemgHandMovementCh2",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.8422222222222222,
+      "seconds": 2623.9,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "MedicalImages",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.8447368421052631,
+      "seconds": 2544.2,
+      "n_test": 760,
+      "failures": []
+    },
+    {
+      "dataset": "MedicalImages",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.8552631578947368,
+      "seconds": 3307.3,
+      "n_test": 760,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.6948051948051948,
+      "seconds": 749.6,
+      "n_test": 154,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.6948051948051948,
+      "seconds": 941.5,
+      "n_test": 154,
+      "failures": []
     }
   ],
-  "elapsed_seconds": 1451.3,
+  "elapsed_seconds": 50617.9,
   "analysis": {
     "per_dataset": {
       "ACSF1": {
@@ -266,6 +588,46 @@
           "1": 0.06666666666666676
         }
       },
+      "Computers": {
+        "n_resamples": 1,
+        "mean_delta": -0.020000000000000018,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.020000000000000018
+        }
+      },
+      "DistalPhalanxOutlineAgeGroup": {
+        "n_resamples": 1,
+        "mean_delta": 0.014388489208633115,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.014388489208633115
+        }
+      },
+      "DistalPhalanxTW": {
+        "n_resamples": 1,
+        "mean_delta": 0.007194244604316613,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.007194244604316613
+        }
+      },
+      "Earthquakes": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
+      "EthanolLevel": {
+        "n_resamples": 1,
+        "mean_delta": -0.016000000000000014,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.016000000000000014
+        }
+      },
       "Ham": {
         "n_resamples": 1,
         "mean_delta": 0.02857142857142858,
@@ -290,6 +652,22 @@
           "1": 0.0
         }
       },
+      "InlineSkate": {
+        "n_resamples": 1,
+        "mean_delta": 0.018181818181818243,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.018181818181818243
+        }
+      },
+      "LargeKitchenAppliances": {
+        "n_resamples": 1,
+        "mean_delta": -0.008000000000000007,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.008000000000000007
+        }
+      },
       "Lightning2": {
         "n_resamples": 1,
         "mean_delta": 0.0,
@@ -306,12 +684,84 @@
           "1": 0.0273972602739726
         }
       },
+      "MedicalImages": {
+        "n_resamples": 1,
+        "mean_delta": 0.010526315789473717,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.010526315789473717
+        }
+      },
+      "MiddlePhalanxOutlineAgeGroup": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
       "MiddlePhalanxTW": {
         "n_resamples": 1,
         "mean_delta": 0.012987012987012991,
         "sd_within": null,
         "deltas": {
           "1": 0.012987012987012991
+        }
+      },
+      "ProximalPhalanxOutlineAgeGroup": {
+        "n_resamples": 1,
+        "mean_delta": -0.004878048780487809,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.004878048780487809
+        }
+      },
+      "ProximalPhalanxTW": {
+        "n_resamples": 1,
+        "mean_delta": 0.004878048780487698,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.004878048780487698
+        }
+      },
+      "RefrigerationDevices": {
+        "n_resamples": 1,
+        "mean_delta": 0.05066666666666675,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.05066666666666675
+        }
+      },
+      "ScreenType": {
+        "n_resamples": 1,
+        "mean_delta": 0.021333333333333315,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.021333333333333315
+        }
+      },
+      "SemgHandMovementCh2": {
+        "n_resamples": 1,
+        "mean_delta": 0.0022222222222222365,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0022222222222222365
+        }
+      },
+      "SemgHandSubjectCh2": {
+        "n_resamples": 1,
+        "mean_delta": 0.020000000000000018,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.020000000000000018
+        }
+      },
+      "SmallKitchenAppliances": {
+        "n_resamples": 1,
+        "mean_delta": 0.01866666666666672,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.01866666666666672
         }
       },
       "Worms": {
@@ -331,52 +781,52 @@
         }
       }
     },
-    "datasets": 11,
+    "datasets": 27,
     "mean_resamples": 1.0,
-    "grand_mean_delta": 0.01180982570770866,
-    "se_observed": 0.006752662511971584,
+    "grand_mean_delta": 0.009225475535478735,
+    "se_observed": 0.003677805715876765,
     "var_within": 0.0,
-    "var_between": 0.0005015829610064502,
-    "var_between_raw": 0.0005015829610064502,
-    "se_floor_at_this_D": 0.006752662511971584,
+    "var_between": 0.0003652088818608667,
+    "var_between_raw": 0.0003652088818608667,
+    "se_floor_at_this_D": 0.003677805715876765,
     "target_effect": 0.005,
     "se_needed_for_target": 0.0017857142857142859,
     "plans": [
       {
-        "datasets": 11,
+        "datasets": 27,
         "resamples_needed": null,
         "runs": null,
-        "se_at_30": 0.006752662511971584
+        "se_at_30": 0.003677805715876765
       },
       {
         "datasets": 24,
         "resamples_needed": null,
         "runs": null,
-        "se_at_30": 0.0045715741317335565
+        "se_at_30": 0.0039009020423746584
       },
       {
         "datasets": 28,
         "resamples_needed": null,
         "runs": null,
-        "se_at_30": 0.004232455218759177
+        "se_at_30": 0.003611533518074256
       },
       {
         "datasets": 40,
         "resamples_needed": null,
         "runs": null,
-        "se_at_30": 0.0035411260956313396
+        "se_at_30": 0.0030216257290607102
       },
       {
         "datasets": 60,
         "resamples_needed": null,
         "runs": null,
-        "se_at_30": 0.0028913173497169364
+        "se_at_30": 0.002467147076621317
       },
       {
         "datasets": 100,
         "resamples_needed": null,
         "runs": null,
-        "se_at_30": 0.002239604788810852
+        "se_at_30": 0.0019110439080797352
       }
     ]
   }

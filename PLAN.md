@@ -714,47 +714,78 @@ that has failed four times.
       `--arms features`. Sidecars land in `reference/resample/features/`, campaign JSON in
       `reference/features_r1.json`. **In progress: 11 of 29 datasets paired.**
 
-**Interim R=1 result, 11 datasets — read the third column, not the second.**
+**R=1 COMPLETE, 2026-08-18.** 27 of 29 datasets paired, 843.6 min (14.1 h) of pod time.
+**Mean +0.00923, SE 0.00368, t = 2.51 on df 26, p ~ 0.019.** B wins 15, A wins 6, 6 exact ties.
+Concatenation helps, by **about nine tenths of an accuracy point**, reliably.
 
-| | delta | in test rows |
+| dataset | delta | in test rows |
 |---|---|---|
 | Beef | +0.0667 | +2 of 30 |
+| RefrigerationDevices | +0.0507 | +19 of 375 |
 | Ham | +0.0286 | +3 of 105 |
 | Lightning7 | +0.0274 | +2 of 73 |
+| ScreenType | +0.0213 | +8 of 375 |
+| SemgHandSubjectCh2 | +0.0200 | +9 of 450 |
+| SmallKitchenAppliances | +0.0187 | +7 of 375 |
+| InlineSkate | +0.0182 | +10 of 550 |
+| DistalPhalanxOutlineAgeGroup | +0.0144 | +2 of 139 |
 | MiddlePhalanxTW | +0.0130 | +2 of 154 |
 | WormsTwoClass | +0.0130 | +1 of 77 |
-| Worms | −0.0130 | −1 of 77 |
-| ArrowHead | −0.0057 | −1 of 175 |
-| ACSF1, Haptics, Herring, Lightning2 | 0.0000 | **no prediction changes at all** |
+| MedicalImages | +0.0105 | +8 of 760 |
+| DistalPhalanxTW | +0.0072 | +1 of 139 |
+| ProximalPhalanxTW | +0.0049 | +1 of 205 |
+| SemgHandMovementCh2 | +0.0022 | +1 of 450 |
+| Herring | +0.0000 | +0 of 64 |
+| Lightning2 | +0.0000 | +0 of 61 |
+| ACSF1 | +0.0000 | +0 of 100 |
+| Haptics | +0.0000 | +0 of 308 |
+| Earthquakes | +0.0000 | +0 of 139 |
+| MiddlePhalanxOutlineAgeGroup | +0.0000 | +0 of 154 |
+| ProximalPhalanxOutlineAgeGroup | -0.0049 | -1 of 205 |
+| ArrowHead | -0.0057 | -1 of 175 |
+| LargeKitchenAppliances | -0.0080 | -3 of 375 |
+| Worms | -0.0130 | -1 of 77 |
+| EthanolLevel | -0.0160 | -8 of 500 |
+| Computers | -0.0200 | -5 of 250 |
 
-Paired mean **+0.0118**, SE **0.0068**, t = 1.75 at n=11 — under the ~2.2 needed. B wins 5, A wins 2,
-**4 exact ties**. Converted to rows the whole effect is **net +8 correct out of ~1,224 test rows**,
-and the largest single delta is two rows on a 30-row test set. This is the same handful of rows the
-archived single-split `+0.0088` was made of, now with an error bar on it.
+Net **+57 correct rows out of 6665**. Artefacts: `reference/features_r1.json`,
+`reference/resample/features/` (56 sidecars), `reference/resample/feat_r1.log`.
 
-Two things to carry into the verdict:
+**What the point costs, in seconds.** Arm B is 616 columns against 500 and is slower on every
+dataset: RefrigerationDevices 1,278 -> 1,678 s (+400), LargeKitchenAppliances 1,297 -> 1,675 s
+(+378), SmallKitchenAppliances 1,268 -> 1,638 s (+370), ProximalPhalanxTW 842 -> 1,079 s (+237).
+**+0.009 accuracy for four to seven extra minutes per dataset** is the recommendation in honest
+form. (Timing is comparable only within a dataset: the campaign was restarted mid-flight from
+`--jobs 2` to `--jobs 1`. Accuracy is unaffected, being deterministic given split and seed.)
 
-- **The 11 done are the small end.** Cheapest-first ordering means the 18 remaining are the large
-  datasets (`EthanolLevel` 504 train / 1751 long, `SemgHand*` 450, the Phalanx family ~400). The
-  current mean is a small-dataset estimate and may not survive contact with more training signal.
-- **If the effect holds across all 29, it reaches significance** (SE ≈ 0.0042, t ≈ 2.8). So the
-  campaign is worth finishing — the answer is currently a trend, not a result.
-- **Arm B is consistently slower**: +45 s, +42 s and +72 s on the first three datasets
-  (169 vs 124, 173 vs 131, 302 vs 230). 616 columns against 500. A verdict of "+0.0118 for ~35%
-  more wall clock" is a different recommendation from "+0.0118 free", and the honest framing is the
-  first. **Timing is only comparable within a dataset whose two arms ran at the same `--jobs`** —
-  the campaign was restarted mid-flight from `--jobs 2` to `--jobs 1` (see `docs/POD.md`, ONNX
-  allocating outside `memory_limit`), so cross-phase second counts are not comparable. Accuracy is
-  unaffected: it is deterministic given the split and seed.
-- [ ] Add `catch22` as a third family — 22 more columns, already in `aeon`, no BSL 1.1 restriction
-      unlike `anofox_forecast`, so unlike the ts family it could actually ship. `rocket+catch22` at
-      522 columns and `rocket+ts+catch22` at 638 both stay inside the per-estimator budget at G=40.
-- [ ] **Gate.** Concatenation either beats ROCKET-only on the hard datasets across resamples or it
-      does not. If it does not, Phase 7 ends with the ceiling established as unreachable by every
-      route this project can construct, which is a real result and should be written as one.
-- [ ] What NOT to do, now measured rather than assumed: another backbone (three fail on the same
-      rows), an averaging rule (below best-single-arm), a margin router (+0.0042, p=0.27), or a
-      supervised stacker (+0.0053, p=0.33).
+**Two datasets lost, and not at random.** `MiddlePhalanxOutlineCorrect` and
+`DistalPhalanxOutlineCorrect` — both **600 training rows**, the largest in the set — completed arm A
+(1,494 s) and had arm B killed (132 s, 34 s) by the kernel at `--jobs 1`, so a single run alone
+exceeded the 46.6 GB cgroup. The loss is **asymmetric by construction**: B is the wider arm, so
+memory pressure removes pairs precisely where B is most expensive. 2 of 29 is not disqualifying, but
+the direction of the resulting bias is unknown and must be stated with the result, not omitted.
+`--test-chunk` does NOT fix this: it sizes only the query side, and a group's chunks share one
+context, so the context encode runs at full size regardless.
+
+**The R=1 report's own campaign-sizing verdict was WRONG, and the harness now refuses to produce it.**
+It printed "the between-dataset term dominates, and this comparison cannot be resolved by resampling
+at any affordable scale," which reads like a finding and was an artifact:
+
+| | R=1 asserted | corrected using the pilot's measured within |
+|---|---|---|
+| `var_within` (split luck) | 0.000000 | 0.000300 (pilot, R=4.94) |
+| `var_between` | 0.000365 | **0.000065** |
+| SE floor at D=27 | 0.0037 "however many resamples" | **0.00155** |
+| runs to reach SE <= 0.0018 | unreachable at any scale | **R=14, 756 runs** |
+
+At R=1 no dataset has two resamples, so `within_vars` is empty and `within` is 0.0 — unmeasurable,
+not measured. The decomposition then hands the entire observed spread to `between`, and because
+resamples only reduce the within term, `se(d, r)` loses its `r` and the "cannot be resolved" verdict
+becomes arithmetic that prints for every input. The pilot had already measured within at **8x**
+between, so the term zeroed out was the larger one. `analyse()` now has an `R < 2` guard mirroring the
+existing `D < 2` one: it returns the mean and SE, which are valid at R=1, and withholds the split and
+every plan sized from it. **Resampling would nearly halve the SE here** (R=3 -> 0.0025 for 108 new
+runs, ~28 h) — the opposite of what was printed.
 
 ### 7b — A third feature family as a fourth arm (SUPERSEDED by 7b′)
 
@@ -815,10 +846,14 @@ expensive direction**. `--jobs 5` does not run at all on the large datasets: ONN
 46.6 GB cgroup. Measured instead, on 7.65 cores:
 
 - Small datasets (≤ ~155 train rows) run two-up: **93–420 s** per run.
-- Large datasets need `--jobs 1` and take **300–1,200 s** per run. Haptics alone was 1,028 s and
-  1,223 s for its two arms.
-- R=1 over 29 datasets x 2 arms is therefore **8–10 h serial**, not 1.5 h — call it single-digit
-  dollars on a secure A6000, but a working day of wall clock.
+- Large datasets need `--jobs 1` and run **840–1,680 s** per run. Haptics was 1,028/1,223 s for its
+  two arms, RefrigerationDevices 1,278/1,678, LargeKitchenAppliances 1,297/1,675.
+- R=1 over 29 datasets x 2 arms **measured 843.6 min = 14.1 h**. Two earlier figures in this file
+  were both wrong and both optimistic: "1.5 h at `--jobs 5`" (which cannot run at all), then
+  "8–10 h serial", extrapolated from the small datasets before the large ones had landed. 14.1 h is
+  the observed number — single-digit dollars on a secure A6000, but a night of wall clock.
+- The 600-training-row datasets do not fit arm B in 46.6 GB **at any concurrency**. Budget for
+  losing them, or get more memory.
 
 The growable design is what makes this survivable: `one_run` returns a completed run from its
 sidecar, so R=3 pays only for the two new resamples and a mid-campaign restart costs nothing already

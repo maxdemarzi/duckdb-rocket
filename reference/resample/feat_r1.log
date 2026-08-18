@@ -1,0 +1,145 @@
+29 datasets x 1 resamples x 2 arms = 58 runs
+comparison 'features':
+  A --num-kernels 10000 --n-groups 40 --features rocket
+  B --num-kernels 10000 --n-groups 40 --features both
+warming the dataset cache for 29 datasets
+  Herring r1 A  acc=0.6719  124s
+  Herring r1 B  acc=0.6719  169s
+  Lightning2 r1 A  acc=0.7541  131s
+  Lightning2 r1 B  acc=0.7541  173s
+  MiddlePhalanxTW r1 A  FAILED: FAILED after 112.5s (exit -9)
+  Lightning7 r1 A  acc=0.7534  230s
+  MiddlePhalanxTW r1 B  FAILED: FAILED after 466.8s (exit -9)
+  Lightning7 r1 B  acc=0.7808  302s
+  Ham r1 A  acc=0.7714  318s
+  Beef r1 A  acc=0.7333  93s
+  Ham r1 B  acc=0.8000  418s
+  Beef r1 B  acc=0.8000  120s
+  ACSF1 r1 A  acc=0.8400  337s
+  ACSF1 r1 B  acc=0.8400  410s
+  Worms r1 A  acc=0.7662  405s
+  Worms r1 B  acc=0.7532  568s
+  WormsTwoClass r1 A  acc=0.7922  413s
+  ArrowHead r1 A  acc=0.8857  329s
+  WormsTwoClass r1 B  acc=0.8052  545s
+  ArrowHead r1 B  acc=0.8800  421s
+  Haptics r1 A  acc=0.6136  1028s
+  Haptics r1 B  acc=0.6136  1223s
+  RefrigerationDevices r1 A  FAILED: FAILED after 609.0s (exit -9)
+  RefrigerationDevices r1 B  FAILED: FAILED after 72.7s (exit -9)
+  ScreenType r1 A  FAILED: FAILED after 61.8s (exit -9)
+  ScreenType r1 B  FAILED: FAILED after 60.1s (exit -9)
+  Earthquakes r1 B  FAILED: FAILED after 38.6s (exit -9)
+29 datasets x 1 resamples x 2 arms = 58 runs
+comparison 'features':
+  A --num-kernels 10000 --n-groups 40 --features rocket
+  B --num-kernels 10000 --n-groups 40 --features both
+warming the dataset cache for 29 datasets
+  Herring r1 A  acc=0.6719  124s
+  Herring r1 B  acc=0.6719  169s
+  Lightning2 r1 A  acc=0.7541  131s
+  Lightning2 r1 B  acc=0.7541  173s
+  MiddlePhalanxTW r1 A  acc=0.5649  630s
+  MiddlePhalanxTW r1 B  acc=0.5779  817s
+  Lightning7 r1 A  acc=0.7534  230s
+  Lightning7 r1 B  acc=0.7808  302s
+  Ham r1 A  acc=0.7714  318s
+  Ham r1 B  acc=0.8000  418s
+  Beef r1 A  acc=0.7333  93s
+  Beef r1 B  acc=0.8000  120s
+  ACSF1 r1 A  acc=0.8400  337s
+  ACSF1 r1 B  acc=0.8400  410s
+  Worms r1 A  acc=0.7662  405s
+  Worms r1 B  acc=0.7532  568s
+  WormsTwoClass r1 A  acc=0.7922  413s
+  WormsTwoClass r1 B  acc=0.8052  545s
+  ArrowHead r1 A  acc=0.8857  329s
+  ArrowHead r1 B  acc=0.8800  421s
+  Haptics r1 A  acc=0.6136  1028s
+  Haptics r1 B  acc=0.6136  1223s
+  RefrigerationDevices r1 A  acc=0.7787  1278s
+  RefrigerationDevices r1 B  acc=0.8293  1678s
+  ScreenType r1 A  acc=0.6667  1313s
+  ScreenType r1 B  acc=0.6880  1666s
+  Earthquakes r1 A  acc=0.7482  659s
+  Earthquakes r1 B  acc=0.7482  754s
+  InlineSkate r1 A  acc=0.4891  928s
+  InlineSkate r1 B  acc=0.5073  1354s
+  DistalPhalanxTW r1 A  acc=0.7554  730s
+  DistalPhalanxTW r1 B  acc=0.7626  920s
+  Computers r1 A  acc=0.8840  708s
+  Computers r1 B  acc=0.8640  912s
+  DistalPhalanxOutlineAgeGroup r1 A  acc=0.8273  715s
+  DistalPhalanxOutlineAgeGroup r1 B  acc=0.8417  975s
+  ProximalPhalanxOutlineAgeGroup r1 A  acc=0.8683  904s
+  ProximalPhalanxOutlineAgeGroup r1 B  acc=0.8634  1080s
+  ProximalPhalanxTW r1 A  acc=0.8098  842s
+  ProximalPhalanxTW r1 B  acc=0.8146  1079s
+  SmallKitchenAppliances r1 A  acc=0.8240  1268s
+  SmallKitchenAppliances r1 B  acc=0.8427  1638s
+  LargeKitchenAppliances r1 A  acc=0.9280  1297s
+  LargeKitchenAppliances r1 B  acc=0.9200  1675s
+  MiddlePhalanxOutlineCorrect r1 A  acc=0.8454  1494s
+  MiddlePhalanxOutlineCorrect r1 B  FAILED: FAILED after 132.3s (exit -9)
+  DistalPhalanxOutlineCorrect r1 A  acc=0.8551  1532s
+  DistalPhalanxOutlineCorrect r1 B  FAILED: FAILED after 34.3s (exit -9)
+  SemgHandSubjectCh2 r1 A  acc=0.9333  1995s
+  SemgHandSubjectCh2 r1 B  acc=0.9533  2607s
+  EthanolLevel r1 A  acc=0.7980  2080s
+  EthanolLevel r1 B  acc=0.7820  2720s
+  SemgHandMovementCh2 r1 A  acc=0.8400  1964s
+  SemgHandMovementCh2 r1 B  acc=0.8422  2624s
+  MedicalImages r1 A  acc=0.8447  2544s
+  MedicalImages r1 B  acc=0.8553  3307s
+  MiddlePhalanxOutlineAgeGroup r1 A  acc=0.6948  750s
+  MiddlePhalanxOutlineAgeGroup r1 B  acc=0.6948  942s
+
+  dataset                      R  mean delta   sd across resamples
+  ACSF1                        1     +0.0000        (one resample)
+  ArrowHead                    1     -0.0057        (one resample)
+  Beef                         1     +0.0667        (one resample)
+  Computers                    1     -0.0200        (one resample)
+  DistalPhalanxOutlineAgeGroup   1     +0.0144        (one resample)
+  DistalPhalanxTW              1     +0.0072        (one resample)
+  Earthquakes                  1     +0.0000        (one resample)
+  EthanolLevel                 1     -0.0160        (one resample)
+  Ham                          1     +0.0286        (one resample)
+  Haptics                      1     +0.0000        (one resample)
+  Herring                      1     +0.0000        (one resample)
+  InlineSkate                  1     +0.0182        (one resample)
+  LargeKitchenAppliances       1     -0.0080        (one resample)
+  Lightning2                   1     +0.0000        (one resample)
+  Lightning7                   1     +0.0274        (one resample)
+  MedicalImages                1     +0.0105        (one resample)
+  MiddlePhalanxOutlineAgeGroup   1     +0.0000        (one resample)
+  MiddlePhalanxTW              1     +0.0130        (one resample)
+  ProximalPhalanxOutlineAgeGroup   1     -0.0049        (one resample)
+  ProximalPhalanxTW            1     +0.0049        (one resample)
+  RefrigerationDevices         1     +0.0507        (one resample)
+  ScreenType                   1     +0.0213        (one resample)
+  SemgHandMovementCh2          1     +0.0022        (one resample)
+  SemgHandSubjectCh2           1     +0.0200        (one resample)
+  SmallKitchenAppliances       1     +0.0187        (one resample)
+  Worms                        1     -0.0130        (one resample)
+  WormsTwoClass                1     +0.0130        (one resample)
+
+  grand mean delta  +0.0092   SE 0.0037  over 27 datasets x 1
+  variance within (split luck, resamples fix this)   0.000000
+  variance between (dataset effect, they do not)     0.000365
+
+  SE floor at 27 datasets, however many resamples: 0.0037
+  to resolve 0.0050 you need SE <= 0.0018
+
+   datasets  resamples  total runs  SE at R=30
+         27       >200           -      0.0037
+         24       >200           -      0.0039
+         28       >200           -      0.0036
+         40       >200           -      0.0030
+         60       >200           -      0.0025
+        100       >200           -      0.0019
+
+  No row reaches the target: the between-dataset term dominates, and this 
+  comparison cannot be resolved by resampling at any affordable scale. That is 
+  a result about the effect, not a failure of the harness.
+
+wrote /workspace/features_r1.json  (843.6 min)

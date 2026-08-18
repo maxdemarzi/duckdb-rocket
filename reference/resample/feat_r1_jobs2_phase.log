@@ -1,0 +1,32 @@
+29 datasets x 1 resamples x 2 arms = 58 runs
+comparison 'features':
+  A --num-kernels 10000 --n-groups 40 --features rocket
+  B --num-kernels 10000 --n-groups 40 --features both
+warming the dataset cache for 29 datasets
+  Herring r1 A  acc=0.6719  124s
+  Herring r1 B  acc=0.6719  169s
+  Lightning2 r1 A  acc=0.7541  131s
+  Lightning2 r1 B  acc=0.7541  173s
+  MiddlePhalanxTW r1 A  FAILED: FAILED after 112.5s (exit -9)
+  Lightning7 r1 A  acc=0.7534  230s
+  MiddlePhalanxTW r1 B  FAILED: FAILED after 466.8s (exit -9)
+  Lightning7 r1 B  acc=0.7808  302s
+  Ham r1 A  acc=0.7714  318s
+  Beef r1 A  acc=0.7333  93s
+  Ham r1 B  acc=0.8000  418s
+  Beef r1 B  acc=0.8000  120s
+  ACSF1 r1 A  acc=0.8400  337s
+  ACSF1 r1 B  acc=0.8400  410s
+  Worms r1 A  acc=0.7662  405s
+  Worms r1 B  acc=0.7532  568s
+  WormsTwoClass r1 A  acc=0.7922  413s
+  ArrowHead r1 A  acc=0.8857  329s
+  WormsTwoClass r1 B  acc=0.8052  545s
+  ArrowHead r1 B  acc=0.8800  421s
+  Haptics r1 A  acc=0.6136  1028s
+  Haptics r1 B  acc=0.6136  1223s
+  RefrigerationDevices r1 A  FAILED: FAILED after 609.0s (exit -9)
+  RefrigerationDevices r1 B  FAILED: FAILED after 72.7s (exit -9)
+  ScreenType r1 A  FAILED: FAILED after 61.8s (exit -9)
+  ScreenType r1 B  FAILED: FAILED after 60.1s (exit -9)
+  Earthquakes r1 B  FAILED: FAILED after 38.6s (exit -9)

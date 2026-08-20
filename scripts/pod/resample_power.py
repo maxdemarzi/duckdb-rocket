@@ -83,6 +83,13 @@ ARM_SETS = {
     #: 4 wins to 2, on one split; this is what tests it properly.
     "features": (("--num-kernels", "10000", "--n-groups", "40", "--features", "rocket"),
                  ("--num-kernels", "10000", "--n-groups", "40", "--features", "both")),
+    #: The shippable question "features" cannot answer: `both` is rocket+ts, and ts is BSL 1.1
+    #: (anofox_forecast) -- a real +0.0092 (p~0.019, R=1 over 27 datasets) that can never ship as a
+    #: dependency. `both22` is rocket+catch22 (aeon, MIT, already a dependency), 500+22=522 columns.
+    #: Same 29 datasets, same pairing, so this measures directly against the number that matters
+    #: rather than needing a separate noise estimate.
+    "features22": (("--num-kernels", "10000", "--n-groups", "40", "--features", "rocket"),
+                   ("--num-kernels", "10000", "--n-groups", "40", "--features", "both22")),
 }
 
 

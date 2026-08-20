@@ -71,10 +71,43 @@ def binding_cpu_count() -> tuple[int, str]:
     is **128 threads per session** -- and DuckDB runs several classify calls at once, each with
     its own session. Measured on a 64-core pod: 132 threads in one process and a load average of
     143, for a workload with `SET threads = 4`.
+
+    **A fourth sighting: `sched_getaffinity` does not see a CFS quota.** A container throttled by
+    `cpu.cfs_quota_us`/`cpu.cfs_period_us` (cgroup v1) or `cpu.max` (v2) rather than by a
+    restrictive cpuset still reports the *host's* full affinity mask -- measured on a RunPod pod
+    that returned 112 from `sched_getaffinity` while billed for a ~11.9-core quota
+    (`cfs_quota_us=1190000`, `cfs_period_us=100000`). Sizing `threads`/`onnx_threads` from 112
+    there would reproduce the exact 132-thread incident above, from the other detection path.
+    Whichever of the two says fewer cores wins; each one is blind to what the other catches.
     """
     if hasattr(os, "sched_getaffinity"):
-        return len(os.sched_getaffinity(0)), "sched_getaffinity"
-    return os.cpu_count() or 1, "cpu_count"
+        affinity, source = len(os.sched_getaffinity(0)), "sched_getaffinity"
+    else:
+        affinity, source = os.cpu_count() or 1, "cpu_count"
+
+    for path, kind in (
+        (Path("/sys/fs/cgroup/cpu.max"), "cgroup v2 cpu.max"),                              # unified
+        (Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"), "cgroup v1 cfs_quota"),               # legacy
+    ):
+        try:
+            if kind == "cgroup v2 cpu.max":
+                quota_str, period_str = path.read_text(encoding="utf-8").split()
+                if quota_str == "max":
+                    continue
+                quota, period = int(quota_str), int(period_str)
+            else:
+                quota = int(path.read_text(encoding="utf-8").strip())
+                if quota <= 0:  # -1 means "no quota set"
+                    continue
+                period = int((path.parent / "cpu.cfs_period_us").read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            continue
+        quota_cores = max(1, quota // period)
+        if quota_cores < affinity:
+            return quota_cores, kind
+        break  # a quota file existed and was readable; do not also check the legacy path
+
+    return affinity, source
 
 
 def default_onnx_threads(duckdb_threads: int) -> int:

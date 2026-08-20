@@ -249,6 +249,57 @@ SELECT column_name FROM (DESCRIBE SELECT * FROM ts_features_by('probe_long', id,
     return names
 
 
+def catch22_feature_names(catch24: bool = False) -> list[str]:
+    """The catch22 (or catch24) feature names, from aeon's own catalogue rather than typed by hand.
+
+    Unlike `ts_feature_names`, which probes anofox_forecast because its 116 columns are the
+    extension's to define, catch22 is a Python transformer with a fixed, dataset-independent output
+    shape -- 22 names always, in one order -- so there is nothing to probe against real data. aeon
+    is MIT and already a project dependency (`ts_features_screen.py` uses it for dataset loading),
+    which is the whole reason catch22 is the distributable replacement for the BSL 1.1 ts family.
+    """
+    from aeon.transformations.collection.feature_based import Catch22
+
+    return list(Catch22(catch24=catch24).get_features_arguments)
+
+
+def write_catch22_parquet(raw_parquet: str, outdir: Path) -> Path:
+    """The catch22 features, computed once per series, in the same (id, named columns) shape tsfeat
+    has -- so `build_sql` can load it with `read_parquet` exactly where it would otherwise `LOAD
+    anofox_forecast`.
+
+    Reads the SAME values ts_feature_names/ts_long read: `raw_parquet`'s `values` column, which
+    `write_raw_parquet` has already normalised. Computing catch22 from un-normalised series would
+    make this family mean something different from the ts family it stands in for, and the two
+    would stop being comparable.
+
+    Univariate only -- catch22 is defined over one channel, the same restriction `ts_features_by`
+    carries -- and NaN-guarded downstream by `build_sql`'s `isfinite` projection rather than here,
+    so a near-constant series produces the same "0.0, and counted" behaviour ts columns get.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from aeon.transformations.collection.feature_based import Catch22
+
+    tbl = pq.read_table(raw_parquet, columns=["id", "values"])
+    ids = tbl.column("id").to_numpy()
+    x = np.asarray(tbl.column("values").to_pylist(), dtype=np.float64)[:, np.newaxis, :]
+
+    c22 = Catch22()
+    f = c22.fit_transform(x)
+    names = c22.get_features_arguments
+
+    out = outdir / "catch22.parquet"
+    pq.write_table(
+        pa.table({
+            "id": pa.array(ids, type=pa.int64()),
+            **{n: pa.array(f[:, j], type=pa.float64()) for j, n in enumerate(names)},
+        }),
+        out,
+    )
+    return out
+
+
 def _per_group_export(outdir: Path) -> str:
     """Dump each group's own probabilities, not just the average over them.
 
@@ -279,46 +330,63 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               onnx_threads: int, load_rocket: str = "", device: str = "cpu",
               model: str = MODEL, anofox_extension: Path | None = None,
               register_dir: Path | None = None, features: str = "rocket",
-              ts_names: list[str] | None = None, per_group: bool = False,
+              ts_names: list[str] | None = None, catch22_names: list[str] | None = None,
+              catch22_parquet: str | None = None, per_group: bool = False,
               tabfm_max_memory: str | None = None, context_cache: bool = False) -> str:
     # Which feature families the classifier sees. `rocket` is the 500 random-convolution features
     # per group that every result so far uses. `ts` is anofox_forecast's 116 statistics, which beat
-    # 10,000 ROCKET features on three of six hard datasets under a ridge. `both` is the open
-    # question: concatenation gained nothing under a ridge (+0.0017 mean), but a ridge on 500
-    # standardised random features drowns 116 statistics, and an in-context model need not.
+    # 10,000 ROCKET features on three of six hard datasets under a ridge, but is BSL 1.1 and can
+    # never be a dependency -- ts and both are experiments, not a shippable configuration. `catch22`
+    # is the distributable stand-in: 22 of the same kind of statistic, already in aeon (MIT, already
+    # a dependency), no licence restriction. `both` is rocket+ts (the licence-gated measurement);
+    # `both22` is rocket+catch22 (the shippable one) -- 7b' measured +0.0092 (p~0.019, R=1 over 27
+    # datasets) for `both`, and `both22` exists to ask whether catch22 recovers any of that.
     #
-    # 500 + 116 = 616 stays inside the max_features raised above.
-    if features not in ("rocket", "ts", "both"):
-        raise ValueError(f"features must be rocket, ts or both, not {features!r}")
+    # 500 + 116 = 616 and 500 + 22 = 522 both stay inside the max_features raised above.
+    if features not in ("rocket", "ts", "catch22", "both", "both22"):
+        raise ValueError(f"features must be rocket, ts, catch22, both or both22, not {features!r}")
     ts_names = list(ts_names or [])
+    catch22_names = list(catch22_names or [])
     if features in ("ts", "both") and not ts_names:
         raise ValueError(f"features={features} needs ts_names; probe them with ts_feature_names()")
+    if features in ("catch22", "both22") and not catch22_names:
+        raise ValueError(f"features={features} needs catch22_names; get them with "
+                         f"catch22_feature_names()")
+    if features in ("catch22", "both22") and not catch22_parquet:
+        raise ValueError(f"features={features} needs catch22_parquet; compute it with "
+                         f"write_catch22_parquet()")
 
     n_features = config.features_per_group
-    use_rocket = features in ("rocket", "both")
+    use_rocket = features in ("rocket", "both", "both22")
     use_ts = features in ("ts", "both")
+    use_catch22 = features in ("catch22", "both22")
 
     rocket_names = [f"f{j}" for j in range(n_features)] if use_rocket else []
     ts_only_names = list(ts_names) if use_ts else []
+    catch22_only_names = list(catch22_names) if use_catch22 else []
+    # Mutually exclusive by construction (features admits only one non-rocket family at a time), so
+    # concatenating rather than branching keeps every line below oblivious to which family it is.
+    second_only_names = ts_only_names + catch22_only_names
 
     # Two forms of every name, because they are read in two ways and conflating them is a silent
     # failure. `names` is what goes inside the string literals of `features := ['...']`; `quoted` is
-    # the identifier. They differ for the ts columns: those are the extension's own names, not ones
-    # we chose, and `quantile_0.1` contains a dot that DuckDB otherwise reads as a qualifier.
-    names = rocket_names + ts_only_names
-    quoted = rocket_names + [f'"{n}"' for n in ts_only_names]
+    # the identifier. They differ for the second-family columns: those are someone else's names, not
+    # ones we chose, and e.g. `quantile_0.1` contains a dot that DuckDB otherwise reads as a qualifier.
+    names = rocket_names + second_only_names
+    quoted = rocket_names + [f'"{n}"' for n in second_only_names]
 
-    # The ts features are computed once per SERIES, not per group -- they have no kernel bank and so
-    # no ensemble axis. With features=ts every one of the 40 groups would therefore see identical
-    # columns and score identically, which is 40x the cost of one group for none of the benefit.
+    # The second family's features are computed once per SERIES, not per group -- neither has a
+    # kernel bank and so neither has an ensemble axis. With features=ts/catch22 every one of the 40
+    # groups would therefore see identical columns and score identically, which is 40x the cost of
+    # one group for none of the benefit.
     #
-    # The rocket bank still runs in ts mode, cheaply, because it is what feeds the kernel-bank
-    # fingerprint and the id/split/label columns; only the classifier stops seeing it. So ts mode
+    # The rocket bank still runs in this mode, cheaply, because it is what feeds the kernel-bank
+    # fingerprint and the id/split/label columns; only the classifier stops seeing it. So this mode
     # wants a SMALL --num-kernels as well as one group -- 10,000 over one group is 20,000 features
     # per group, which RocketPFNConfig rejects against the feature cap, and the error would arrive
     # sounding like a cap problem rather than a mode problem.
-    if features == "ts" and config.n_groups != 1:
-        raise ValueError("features=ts has no per-group variation; use --n-groups 1 "
+    if features in ("ts", "catch22") and config.n_groups != 1:
+        raise ValueError(f"features={features} has no per-group variation; use --n-groups 1 "
                          "(and a small --num-kernels, e.g. 500: the bank only feeds the "
                          "integrity fingerprint in this mode)")
     # The id-recovery key is the WHOLE feature vector, not a prefix of it.
@@ -342,31 +410,33 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     # The projection that turns stored features into the named scalar columns the classifier takes.
     # DuckDB lists are 1-based, so rocket feature j lives at r.f[j + 1].
     #
-    # ts columns are guarded for finiteness. They are unbounded statistics on real data -- a
-    # near-constant series makes a variance-normalised one non-finite -- and the screen measured
-    # between 101 and 540 non-finite values per dataset. A NaN reaching the classifier is not a
-    # loud failure, it is a quietly worse number.
+    # Second-family columns are guarded for finiteness. They are unbounded statistics on real data --
+    # a near-constant series makes a variance-normalised one non-finite -- and the ts screen measured
+    # between 101 and 540 non-finite values per dataset. A NaN reaching the classifier is not a loud
+    # failure, it is a quietly worse number.
     proj_parts = [f"r.f[{j + 1}] AS f{j}" for j in range(n_features)] if use_rocket else []
     proj_parts += [f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END AS "{n}"'
-                   for n in ts_only_names]
+                   for n in second_only_names]
     projection = ", ".join(proj_parts)
 
     # The id-recovery key must be the whole vector the classifier echoes back, in the same order as
-    # `features`. With ts columns that is the rocket list concatenated with the guarded ts values --
+    # `features`. With a second family that is the rocket list concatenated with its guarded values --
     # `||` on LISTs -- and the order here and in key_join above are the one invariant that cannot
     # drift, which is why a test compares them element by element rather than trusting this.
-    ts_key_list = ("[" + ", ".join(f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END'
-                                   for n in ts_only_names) + "]") if use_ts else ""
-    if use_rocket and use_ts:
-        key_from_list = f"r.f || {ts_key_list}"
-    elif use_ts:
-        key_from_list = ts_key_list
+    second_key_list = ("[" + ", ".join(f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END'
+                                       for n in second_only_names) + "]") if second_only_names else ""
+    if use_rocket and second_only_names:
+        key_from_list = f"r.f || {second_key_list}"
+    elif second_only_names:
+        key_from_list = second_key_list
     else:
         key_from_list = "r.f"
 
-    # feat_cur holds the rocket features; tsfeat holds the per-series ts features. Every statement
-    # that reads features reads this same FROM clause, so the two can never fall out of step.
-    feat_from = "feat_cur r" + (" JOIN tsfeat t USING (id)" if use_ts else "")
+    # feat_cur holds the rocket features; tsfeat/c22feat holds the per-series second-family features.
+    # Every statement that reads features reads this same FROM clause, so the two can never fall out
+    # of step.
+    second_table = "tsfeat" if use_ts else ("c22feat" if use_catch22 else None)
+    feat_from = "feat_cur r" + (f" JOIN {second_table} t USING (id)" if second_table else "")
 
     # `LOAD anofox_tabfm` takes the installed (community, CPU-only) extension. A GPU run needs a
     # self-built cuda flavor loaded from a path instead -- no GPU build is published for any
@@ -508,6 +578,19 @@ SELECT CASE WHEN (SELECT count(*) FROM tsfeat) <> (SELECT count(*) FROM raw)
             THEN CAST('tsfeat has a different row count than raw' AS BIGINT) ELSE 0 END AS ts_check;
 """)
 
+    if use_catch22:
+        # catch22 has no DuckDB extension: it is computed in Python (aeon), once per series, before
+        # this SQL runs (write_catch22_parquet), and loaded here exactly the way `raw` itself is --
+        # read_parquet, not an in-database transform. Same per-series/no-kernel-bank reasoning as
+        # ts above, and the same row-count guard against a silently multiplying join.
+        parts.append(f"""
+CREATE OR REPLACE TABLE c22feat AS SELECT * FROM read_parquet('{catch22_parquet}');
+
+-- One row per series or the joins below silently multiply the feature tables.
+SELECT CASE WHEN (SELECT count(*) FROM c22feat) <> (SELECT count(*) FROM raw)
+            THEN CAST('c22feat has a different row count than raw' AS BIGINT) ELSE 0 END AS c22_check;
+""")
+
     parts.append(f"""
 CREATE OR REPLACE TABLE feat_cur (id BIGINT, split VARCHAR, label VARCHAR, f DOUBLE[]);
 CREATE OR REPLACE TABLE train_cur (y VARCHAR, {schema_cols});
@@ -630,8 +713,8 @@ INSERT INTO f0_checks
 -- (InlineSkate: 29), because that is the reason the GROUP BY in `score` exists.
 --
 -- The failure the old column stood in for is covered directly by min/max groups per row.
--- Counted on the actual join key, not on the rocket vector: under --features ts the key is the
--- statistics and a duplicate count over `f` would describe columns the classifier never saw.
+-- Counted on the actual join key, not on the rocket vector: under --features ts/catch22 the key is
+-- the statistics and a duplicate count over `f` would describe columns the classifier never saw.
 -- The fingerprint stays r.f[1], which is the kernel bank and is what that column is for.
 SELECT {g}, count(*) - count(DISTINCT ({key_from_list})), sum(r.f[1])
   FROM {feat_from} WHERE r.split = 'test';
@@ -791,15 +874,16 @@ def main() -> int:
     parser.add_argument(
         "--features",
         default="rocket",
-        choices=("rocket", "ts", "both"),
+        choices=("rocket", "ts", "catch22", "both", "both22"),
         help="Which feature families the classifier sees. 'rocket' is the 500 "
              "random-convolution features per group behind every result so far. 'ts' is "
-             "anofox_forecast's 116 in-database statistics, which beat 10,000 ROCKET features on "
-             "three of six hard datasets under a ridge -- univariate only, and it forces "
-             "--n-groups 1 because those statistics have no kernel bank and so no ensemble axis. "
-             "'both' is the open question: concatenation gained nothing under a ridge, but a ridge "
-             "drowns 116 statistics in 500 random features and an in-context model need not. "
-             "anofox_forecast is BSL 1.1, so ts and both are experiments, never a dependency.",
+             "anofox_forecast's 116 in-database statistics -- univariate only, and it forces "
+             "--n-groups 1 because those statistics have no kernel bank and so no ensemble axis; "
+             "BSL 1.1, so it is an experiment, never a dependency. 'both' is rocket+ts, measured "
+             "at +0.0092 mean (p~0.019, R=1 over 27 hard datasets, PLAN.md 7b') but not shippable "
+             "for the same licence reason. 'catch22' is the distributable stand-in -- 22 aeon "
+             "statistics (MIT, already a dependency), same univariate/--n-groups 1 restriction. "
+             "'both22' is rocket+catch22: the shippable version of the 'both' measurement.",
     )
     parser.add_argument(
         "--anofox-extension",
@@ -939,15 +1023,24 @@ def main() -> int:
         shell_args = [*shell_args, "-unsigned"]
 
     ts_names: list[str] = []
-    if args.features in ("ts", "both"):
+    catch22_names: list[str] = []
+    catch22_parquet: Path | None = None
+    if args.features in ("ts", "catch22", "both", "both22"):
         if meta["multivariate"]:
-            print(f"      --features {args.features} is univariate only: ts_features_by takes one "
-                  f"(group, time, value) triple and {args.dataset} has {meta['n_channels']} channels")
+            print(f"      --features {args.features} is univariate only: ts_features_by and "
+                  f"catch22 both take one channel and {args.dataset} has "
+                  f"{meta['n_channels']} channels")
             return 1
+    if args.features in ("ts", "both"):
         ts_names = ts_feature_names(shell, meta["raw_parquet"])
         print(f"      + {len(ts_names)} anofox_forecast statistics per series "
               f"({args.features}); BSL 1.1, so this is an experiment and not a dependency",
               flush=True)
+    if args.features in ("catch22", "both22"):
+        catch22_names = catch22_feature_names()
+        catch22_parquet = write_catch22_parquet(meta["raw_parquet"], workdir)
+        print(f"      + {len(catch22_names)} catch22 statistics per series "
+              f"({args.features}); MIT, distributable", flush=True)
 
     sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
                     args.test_chunk, onnx_threads, load_rocket,
@@ -955,6 +1048,8 @@ def main() -> int:
                     anofox_extension=args.anofox_extension,
                     register_dir=args.register_model_dir,
                     features=args.features, ts_names=ts_names,
+                    catch22_names=catch22_names,
+                    catch22_parquet=(catch22_parquet.as_posix() if catch22_parquet else None),
                     per_group=args.per_group_soft,
                     tabfm_max_memory=args.tabfm_max_memory,
                     context_cache=args.context_cache)
@@ -1183,9 +1278,11 @@ def main() -> int:
         # recorded the mode nowhere but in the filename. A number whose provenance lives in a
         # filename is a number that will eventually be misread.
         "features": args.features,
-        "n_feature_columns": (len(ts_names) if args.features == "ts"
-                              else config.features_per_group + len(ts_names)),
+        "n_feature_columns": (len(ts_names) + len(catch22_names)
+                              if args.features in ("ts", "catch22")
+                              else config.features_per_group + len(ts_names) + len(catch22_names)),
         "ts_feature_source": ("anofox_forecast (BSL 1.1, experiment only)" if ts_names else None),
+        "catch22_feature_source": ("aeon (MIT, distributable)" if catch22_names else None),
         "anofox_extension": (str(args.anofox_extension) if args.anofox_extension else None),
         "registered_graph": (str(args.register_model_dir) if args.register_model_dir else None),
         "config": {

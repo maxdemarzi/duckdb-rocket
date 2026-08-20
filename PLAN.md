@@ -793,8 +793,13 @@ runs, ~28 h) — the opposite of what was printed.
       `aeon`**, which this project depends on, so it adds no dependency; and it carries **no BSL
       1.1 restriction**, where the 116-statistic ts family is a research instrument that can never
       be a dependency. 22 features also sits far inside `tabicl-v2`'s 512-feature cap.
-- [ ] Add it to `phase5_pipeline.py --features` alongside `rocket`/`ts`/`both`. The plumbing exists;
-      what is new is a transform and its column names.
+- [x] Add it to `phase5_pipeline.py --features` alongside `rocket`/`ts`/`both`, as `catch22` and
+      `both22` (rocket+catch22). `catch22_feature_names()`/`write_catch22_parquet()` compute the 22
+      statistics in Python via aeon (no DuckDB extension exists for it, so `build_sql` loads them
+      with `read_parquet` where `ts` mode would `LOAD anofox_forecast`), joined the same way `tsfeat`
+      is. Smoke-tested against the real extension on Coffee (both modes, 1.0000, clean integrity
+      checks). **Not yet run**: the 27-dataset resample campaign that would say whether `both22`
+      recovers any of `both`'s +0.0092 — see RESULTS.md, "Plumbing done, campaign not run".
 - [ ] Measure what the ts family's addition measured, on the same 17 datasets: pairwise excess
       overlap against each existing arm, the oracle over five arms, and the rows nobody gets right.
       The prediction to falsify: a *third feature family* should move the oracle by roughly what

@@ -138,10 +138,12 @@ def main() -> int:
     # part that can be bounded and the shard count has to do the rest.
     ap.add_argument("--memory-limit", help="DuckDB memory_limit per phase5 run, e.g. '24GB'. "
                                            "Set this whenever more than one sweep runs at once.")
-    ap.add_argument("--features", default="rocket", choices=("rocket", "ts", "both"),
-                    help="which feature families the classifier sees. 'ts' is anofox_forecast's "
-                         "116 statistics and needs --n-groups 1, since there is no kernel bank to "
-                         "slice and 40 identical groups would be 40x the cost for one answer.")
+    ap.add_argument("--features", default="rocket",
+                    choices=("rocket", "ts", "catch22", "both", "both22"),
+                    help="which feature families the classifier sees. 'ts' (anofox_forecast, BSL "
+                         "1.1) and 'catch22' (aeon, MIT, distributable) both need --n-groups 1, "
+                         "since there is no kernel bank to slice and 40 identical groups would be "
+                         "40x the cost for one answer.")
     ap.add_argument("--n-groups", type=int,
                     help="override phase5's 40 groups. Required to be 1 for --features ts.")
     ap.add_argument("--num-kernels", type=int,
@@ -157,9 +159,10 @@ def main() -> int:
     args = ap.parse_args()
     # phase5 refuses n_groups != 1 for ts features, and it is right to: the groups exist to slice a
     # kernel bank, and there is no bank here. Caught before the sweep rather than once per dataset.
-    if args.features == "ts" and (args.n_groups or 40) != 1:
-        ap.error("--features ts needs --n-groups 1: the 116 statistics do not come from a kernel "
-                 "bank, so 40 groups would compute the same features 40 times for one answer")
+    if args.features in ("ts", "catch22") and (args.n_groups or 40) != 1:
+        ap.error(f"--features {args.features} needs --n-groups 1: those statistics do not come "
+                 "from a kernel bank, so 40 groups would compute the same features 40 times for "
+                 "one answer")
 
     cands = candidates(cache_only=False)
     if args.from_gate:

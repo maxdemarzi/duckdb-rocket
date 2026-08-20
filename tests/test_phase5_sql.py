@@ -339,24 +339,29 @@ def test_duplicate_series_are_reported_but_not_asserted_on():
 # pin the plumbing for the experiment that answers it.
 
 TS = ["mean", "standard_deviation", "quantile_0.1", "fft_coefficient_3_imag"]
+CATCH22 = ["DN_HistogramMode_5", "DN_HistogramMode_10", "CO_f1ecac"]
 
 
-def build_features(mode: str, n_groups: int = 40, ts=TS, num_kernels: int | None = None) -> str:
+def build_features(mode: str, n_groups: int = 40, ts=TS, catch22=None,
+                   num_kernels: int | None = None) -> str:
+    if catch22 is None:
+        catch22 = CATCH22 if mode in ("catch22", "both22") else []
     cfg = RocketPFNConfig(num_kernels=num_kernels or (500 if n_groups == 1 else 10_000),
                           n_groups=n_groups, seed=0, n_estimators=1)
     cfg.validate()
     meta = {"raw_parquet": "/tmp/raw.parquet", "n_train": 50, "n_test": 150,
             "multivariate": False, "n_channels": 1}
     return p5.build_sql(cfg, meta, WORKDIR, 4, "20GB", WORKDIR, 128, 16,
-                        features=mode, ts_names=ts)
+                        features=mode, ts_names=ts, catch22_names=catch22,
+                        catch22_parquet="/tmp/catch22.parquet" if catch22 else None)
 
 
-@pytest.mark.parametrize("mode", ["rocket", "ts", "both"])
+@pytest.mark.parametrize("mode", ["rocket", "ts", "catch22", "both", "both22"])
 def test_the_join_key_matches_the_feature_list_in_every_mode(mode):
     # THE invariant. The key is rebuilt from the classifier's echoed columns, so if its order ever
     # diverges from `features := [...]` the join compares feature 3 against feature 7 -- which does
     # not error, it silently recovers the wrong ids. Checked element by element, in order.
-    sql = build_features(mode, n_groups=1 if mode == "ts" else 40)
+    sql = build_features(mode, n_groups=1 if mode in ("ts", "catch22") else 40)
     assert _join_key_columns(sql) == _feature_names(sql)
 
 
@@ -412,8 +417,68 @@ def test_ts_modes_require_the_probed_names():
         build_features("both", ts=[])
 
 
+# --- catch22: the distributable stand-in for ts -------------------------------------------
+#
+# Same shape contract as tsfeat, but loaded via read_parquet instead of an extension call, since
+# catch22 has no DuckDB extension -- it is computed in Python (aeon) before this SQL runs. Mirrors
+# the ts tests above one for one; PLAN.md 7b' is the reason this family exists at all.
+
+def test_both22_is_rocket_then_catch22_and_nothing_dropped():
+    sql = build_features("both22")
+    names = _feature_names(sql)
+    assert names == [f"f{j}" for j in range(500)] + CATCH22
+    assert len(names) == 500 + len(CATCH22)
+
+
+def test_catch22_only_drops_the_rocket_columns():
+    sql = build_features("catch22", n_groups=1)
+    assert _feature_names(sql) == CATCH22
+
+
+def test_catch22_features_are_guarded_for_finiteness():
+    sql = build_features("both22")
+    for n in CATCH22:
+        assert f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END' in sql
+
+
+def test_catch22_is_loaded_via_read_parquet_not_an_extension():
+    # No DuckDB extension computes catch22 -- write_catch22_parquet does it in Python beforehand,
+    # and build_sql only ever reads the result back.
+    sql = build_features("both22")
+    assert "CREATE OR REPLACE TABLE c22feat AS SELECT * FROM read_parquet(" in sql
+    assert "ts_features_by" not in sql and "LOAD anofox_forecast" not in sql
+
+
+def test_catch22_features_are_computed_once_not_per_group():
+    sql = build_features("both22")
+    assert sql.count("CREATE OR REPLACE TABLE c22feat") == 1
+    assert sql.index("CREATE OR REPLACE TABLE c22feat") < sql.index("-- Group 0:")
+
+
+def test_catch22_row_count_is_checked_against_raw():
+    assert "c22_check" in build_features("both22")
+
+
+def test_catch22_alone_refuses_a_multi_group_ensemble():
+    with pytest.raises(ValueError, match="no per-group variation"):
+        build_features("catch22", n_groups=40)
+
+
+def test_catch22_modes_require_the_names_and_the_parquet():
+    with pytest.raises(ValueError, match="needs catch22_names"):
+        build_features("both22", catch22=[])
+
+
+def test_ts_and_catch22_are_mutually_exclusive_in_one_run():
+    # both = rocket+ts; both22 = rocket+catch22. Neither mode joins the other family's table.
+    sql_both = build_features("both")
+    assert "c22feat" not in sql_both
+    sql_both22 = build_features("both22")
+    assert "tsfeat" not in sql_both22 and "anofox_forecast" not in sql_both22
+
+
 def test_an_unknown_feature_mode_is_refused():
-    with pytest.raises(ValueError, match="rocket, ts or both"):
+    with pytest.raises(ValueError, match="rocket, ts, catch22, both or both22"):
         build_features("tsfresh")
 
 

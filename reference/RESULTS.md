@@ -1963,7 +1963,18 @@ compare across that boundary. Accuracy does: it is deterministic given the split
 
 **Also: `ts` features are BSL 1.1 (`anofox_forecast`) and cannot ship.** A +0.009 gain from columns
 this project cannot distribute is a research finding, not a product change. `catch22` (22 columns, in
-`aeon`, unrestricted) is the shippable version of the same idea and is untested.
+`aeon`, unrestricted) is the shippable version of the same idea.
+
+**Plumbing done, campaign not run.** `--features catch22` (rocket dropped, `--n-groups 1`, same
+restriction `ts` carries) and `--features both22` (rocket+catch22, the shippable analogue of `both`)
+are wired into `phase5_pipeline.py` — `catch22_feature_names()`/`write_catch22_parquet()` compute the
+22 statistics in Python via aeon's `Catch22` transformer (no DuckDB extension exists for it, so it is
+loaded with `read_parquet` exactly where `ts` mode would `LOAD anofox_forecast`) and joined the same
+way `tsfeat` is. Smoke-tested end to end against the real extension on Coffee: `catch22` alone and
+`both22` both scored 1.0000 with clean integrity checks (`c22_check`, `prime_check`,
+`features_check` all 0) and exact row alignment. **Not yet measured**: whether `catch22` recovers any
+of the `+0.0092` `both` gained on the 27-dataset resample campaign — that needs the same pod pass
+`--features both` got, at `--features both22`.
 
 ### Two datasets are missing, asymmetrically
 

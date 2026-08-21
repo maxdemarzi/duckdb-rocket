@@ -1963,18 +1963,86 @@ compare across that boundary. Accuracy does: it is deterministic given the split
 
 **Also: `ts` features are BSL 1.1 (`anofox_forecast`) and cannot ship.** A +0.009 gain from columns
 this project cannot distribute is a research finding, not a product change. `catch22` (22 columns, in
-`aeon`, unrestricted) is the shippable version of the same idea.
+`aeon`, unrestricted) was written as the shippable version of the same idea and measured below — it
+is not.
 
-**Plumbing done, campaign not run.** `--features catch22` (rocket dropped, `--n-groups 1`, same
-restriction `ts` carries) and `--features both22` (rocket+catch22, the shippable analogue of `both`)
-are wired into `phase5_pipeline.py` — `catch22_feature_names()`/`write_catch22_parquet()` compute the
-22 statistics in Python via aeon's `Catch22` transformer (no DuckDB extension exists for it, so it is
-loaded with `read_parquet` exactly where `ts` mode would `LOAD anofox_forecast`) and joined the same
-way `tsfeat` is. Smoke-tested end to end against the real extension on Coffee: `catch22` alone and
-`both22` both scored 1.0000 with clean integrity checks (`c22_check`, `prime_check`,
-`features_check` all 0) and exact row alignment. **Not yet measured**: whether `catch22` recovers any
-of the `+0.0092` `both` gained on the 27-dataset resample campaign — that needs the same pod pass
-`--features both` got, at `--features both22`.
+### catch22 does not stand in for ts
+
+`--features both22` (rocket+catch22, 522 columns) was built to answer one question: does *any*
+generic time-series-statistics family reproduce `both`'s +0.0092, or was that number specific to
+`anofox_forecast`'s particular 116 statistics? Same 29 hard datasets, same pairing, same driver
+(`resample_power.py --arms features22`), run 2026-08-21 on an RTX 6000 Ada community pod (CPU
+inference only, $0.74/hr) — chosen for the memory headroom (72.6 GB cgroup / 11-core CFS quota,
+against the `both` campaign's 46.6 GB / 7.65 cores), specifically to see whether the two datasets
+`both` lost to OOM would complete this time.
+
+**Result: negative.** Mean **−0.00523**, SE 0.00326, t=−1.61 on 28 df (not significant, p≈0.12).
+B (catch22) wins 8 datasets, ties 6, loses 15 — net **43 correct rows lost of 7,232**, against
+`both`'s net +57 gained of 6,665. Full pairing achieved this time — all 29 datasets, not 27 — and
+memory was not the reason it lands negative: `MiddlePhalanxOutlineCorrect` and
+`DistalPhalanxOutlineCorrect`, the two `both` lost to OOM, both completed clean here and both paired
+at effectively zero (−0.0036, +0.0000).
+
+| dataset | delta | in test rows | delta under `both` (ts) |
+|---|---|---|---|
+| Beef | +0.0333 | +1 of 30 | +0.0667 |
+| Lightning7 | +0.0274 | +2 of 73 | +0.0274 |
+| SmallKitchenAppliances | +0.0133 | +5 of 375 | +0.0187 |
+| WormsTwoClass | +0.0130 | +1 of 77 | +0.0130 |
+| SemgHandSubjectCh2 | +0.0111 | +5 of 450 | +0.0200 |
+| ProximalPhalanxTW | +0.0049 | +1 of 205 | +0.0049 |
+| MedicalImages | +0.0039 | +3 of 760 | +0.0105 |
+| LargeKitchenAppliances | +0.0027 | +1 of 375 | −0.0080 |
+| Lightning2, MiddlePhalanxTW, Ham, Earthquakes, InlineSkate, MiddlePhalanxOutlineCorrect | 0.0000 | +0 | 0/+0/+0.0286/0/+0.0182/n/a |
+| DistalPhalanxOutlineCorrect | −0.0036 | −1 of 276 | n/a (lost to OOM) |
+| EthanolLevel | −0.0040 | −2 of 500 | −0.0160 |
+| ProximalPhalanxOutlineAgeGroup | −0.0049 | −1 of 205 | −0.0049 |
+| RefrigerationDevices | −0.0053 | −2 of 375 | **+0.0507** |
+| MiddlePhalanxOutlineAgeGroup | −0.0065 | −1 of 154 | 0.0000 |
+| DistalPhalanxOutlineAgeGroup | −0.0072 | −1 of 139 | +0.0144 |
+| DistalPhalanxTW | −0.0144 | −2 of 139 | +0.0072 |
+| Herring | −0.0156 | −1 of 64 | 0.0000 |
+| Haptics | −0.0162 | −5 of 308 | 0.0000 |
+| Computers | −0.0240 | −6 of 250 | −0.0200 |
+| SemgHandMovementCh2 | −0.0244 | −11 of 450 | **+0.0022** |
+| Worms | −0.0260 | −2 of 77 | −0.0130 |
+| ArrowHead | −0.0286 | −5 of 175 | −0.0057 |
+| ACSF1 | −0.0300 | −3 of 100 | 0.0000 |
+| ScreenType | −0.0507 | −19 of 375 | **+0.0213** |
+
+**The interesting part is the sign, not just the mean.** Four datasets flip: `RefrigerationDevices`
+(+0.0507 → −0.0053), `ScreenType` (+0.0213 → −0.0507, the largest swing in either campaign),
+`DistalPhalanxTW` (+0.0072 → −0.0144) and `SemgHandMovementCh2` (+0.0022 → −0.0244). Three tie
+exactly (`Lightning7`, `WormsTwoClass`, `ProximalPhalanxTW`) — small samples, plausibly coincidence
+rather than a shared mechanism. The premise behind writing catch22 in the first place — "any
+generic statistics family should do roughly what ts did" — is what this table falsifies: 22
+statistics and 116 statistics are not interchangeable representations of the same idea, even
+though both are textbook time-series feature catalogues computed from the same normalised series.
+**7b closes here.** No further feature-family survey (catch22, then what — a fourth catalogue on
+the strength of a coin flip) is justified by this result.
+
+**A fourth container-blindness sighting, found sizing this pod.** `binding_cpu_count()`
+(`duckdb_rocket/budget.py`) read `sched_getaffinity` to catch a cpuset-restricted container, which
+is what earlier incidents needed. This pod restricts CPU via a CFS quota instead
+(`cfs_quota_us=1190000`, `cfs_period_us=100000` ≈ 11.9 cores) with no restrictive cpuset, so
+`sched_getaffinity` returned 112 — the host's full core count — and would have sized
+`threads`/`onnx_threads` from it, reproducing the exact 132-thread-in-one-process incident PLAN.md
+already records, from the other detection path. Fixed before any run started: `binding_cpu_count`
+now also reads `cpu.max` (v2) / `cfs_quota_us`+`cfs_period_us` (v1) and returns whichever of quota
+and affinity is narrower. Neither check subsumes the other.
+
+**A second, unrelated infra fault, mid-campaign.** `Ham` and `Haptics` both failed to load —
+`Ham_TEST.ts` truncated at case 101 of 105, `Haptics_TRAIN.ts` at case 152 of 155 — a partial
+download on this pod's first fetch from the UCR archive mirror, not a code defect. Deleted the
+cached files, redownloaded cleanly, and backfilled both (0.0000 and −0.0162 respectively) in a
+28.9-minute follow-up pass once the main run finished; the growable per-(dataset, arm) sidecar
+design meant this cost only those two datasets, not a restart.
+
+Pod time: 813.2 min (main pass, 27 of 29 paired) + 28.9 min (backfill) ≈ **14.0 h** — essentially
+identical to `both`'s 843.6 min despite `both22` being 94 columns narrower, which says the
+inference cost is dominated by something other than column count at this width (context row
+count, most likely, per the ECG5000 finding below). Artefacts: `reference/features22_r1.json`,
+`reference/resample/features22/` (58 sidecars), `reference/resample/feat22_r1.log`.
 
 ### Two datasets are missing, asymmetrically
 

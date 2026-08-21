@@ -1,0 +1,97 @@
+memory_limit 43GB per run x 1 jobs
+29 datasets x 1 resamples x 2 arms = 58 runs
+comparison 'features22':
+  A --num-kernels 10000 --n-groups 40 --features rocket
+  B --num-kernels 10000 --n-groups 40 --features both22
+warming the dataset cache for 29 datasets
+  Ham: FAILED TO LOAD -- OSError: Inconsistent number of dimensions in case 101. Expecting 1 but have read 0
+  Haptics: FAILED TO LOAD -- OSError: Inconsistent number of dimensions in case 153. Expecting 1 but have read 0
+  Herring r1 A  acc=0.6719  126s
+  Herring r1 B  acc=0.6562  132s
+  Lightning2 r1 A  acc=0.7541  128s
+  Lightning2 r1 B  acc=0.7541  135s
+  MiddlePhalanxTW r1 A  acc=0.5649  824s
+  MiddlePhalanxTW r1 B  acc=0.5649  912s
+  Lightning7 r1 A  acc=0.7534  154s
+  Lightning7 r1 B  acc=0.7808  149s
+  Ham r1 A  FAILED: OSError: Inconsistent number of dimensions in case 101. Expecting 1 but have read 0
+  Ham r1 B  FAILED: OSError: Inconsistent number of dimensions in case 101. Expecting 1 but have read 0
+  Beef r1 A  acc=0.7333  89s
+  Beef r1 B  acc=0.7667  90s
+  ACSF1 r1 A  acc=0.8400  211s
+  ACSF1 r1 B  acc=0.8100  219s
+  Worms r1 A  acc=0.7662  218s
+  Worms r1 B  acc=0.7403  234s
+  WormsTwoClass r1 A  acc=0.7922  226s
+  WormsTwoClass r1 B  acc=0.8052  240s
+  ArrowHead r1 A  acc=0.8857  248s
+  ArrowHead r1 B  acc=0.8571  302s
+  Haptics r1 A  FAILED: OSError: Inconsistent number of dimensions in case 153. Expecting 1 but have read 0
+  Haptics r1 B  FAILED: OSError: Inconsistent number of dimensions in case 153. Expecting 1 but have read 0
+  RefrigerationDevices r1 A  acc=0.7787  1435s
+  RefrigerationDevices r1 B  acc=0.7733  1468s
+  ScreenType r1 A  acc=0.6667  1209s
+  ScreenType r1 B  acc=0.6160  1201s
+  Earthquakes r1 A  acc=0.7482  650s
+  Earthquakes r1 B  acc=0.7482  762s
+  InlineSkate r1 A  acc=0.4891  1110s
+  InlineSkate r1 B  acc=0.4891  970s
+  DistalPhalanxTW r1 A  acc=0.7554  815s
+  DistalPhalanxTW r1 B  acc=0.7410  786s
+  Computers r1 A  acc=0.8840  665s
+  Computers r1 B  acc=0.8600  615s
+  DistalPhalanxOutlineAgeGroup r1 A  acc=0.8273  708s
+  DistalPhalanxOutlineAgeGroup r1 B  acc=0.8201  894s
+  ProximalPhalanxOutlineAgeGroup r1 A  acc=0.8683  735s
+  ProximalPhalanxOutlineAgeGroup r1 B  acc=0.8634  927s
+  ProximalPhalanxTW r1 A  acc=0.8098  813s
+  ProximalPhalanxTW r1 B  acc=0.8146  813s
+  SmallKitchenAppliances r1 A  acc=0.8240  1122s
+  SmallKitchenAppliances r1 B  acc=0.8373  1496s
+  LargeKitchenAppliances r1 A  acc=0.9280  1330s
+  LargeKitchenAppliances r1 B  acc=0.9307  1156s
+  MiddlePhalanxOutlineCorrect r1 A  acc=0.8454  1427s
+  MiddlePhalanxOutlineCorrect r1 B  acc=0.8454  1500s
+  DistalPhalanxOutlineCorrect r1 A  acc=0.8551  1419s
+  DistalPhalanxOutlineCorrect r1 B  acc=0.8514  1494s
+  SemgHandSubjectCh2 r1 A  acc=0.9333  1665s
+  SemgHandSubjectCh2 r1 B  acc=0.9444  1737s
+  EthanolLevel r1 A  acc=0.7980  1769s
+  EthanolLevel r1 B  acc=0.7940  1946s
+  SemgHandMovementCh2 r1 A  acc=0.8400  1674s
+  SemgHandMovementCh2 r1 B  acc=0.8156  1802s
+  MedicalImages r1 A  acc=0.8447  2164s
+  MedicalImages r1 B  acc=0.8487  2298s
+  MiddlePhalanxOutlineAgeGroup r1 A  acc=0.6948  697s
+  MiddlePhalanxOutlineAgeGroup r1 B  acc=0.6883  736s
+  ACSF1                      R=1 mean delta -0.0300
+  ArrowHead                  R=1 mean delta -0.0286
+  Beef                       R=1 mean delta +0.0333
+  Computers                  R=1 mean delta -0.0240
+  DistalPhalanxOutlineAgeGroup R=1 mean delta -0.0072
+  DistalPhalanxOutlineCorrect R=1 mean delta -0.0036
+  DistalPhalanxTW            R=1 mean delta -0.0144
+  Earthquakes                R=1 mean delta +0.0000
+  EthanolLevel               R=1 mean delta -0.0040
+  Herring                    R=1 mean delta -0.0156
+  InlineSkate                R=1 mean delta +0.0000
+  LargeKitchenAppliances     R=1 mean delta +0.0027
+  Lightning2                 R=1 mean delta +0.0000
+  Lightning7                 R=1 mean delta +0.0274
+  MedicalImages              R=1 mean delta +0.0039
+  MiddlePhalanxOutlineAgeGroup R=1 mean delta -0.0065
+  MiddlePhalanxOutlineCorrect R=1 mean delta +0.0000
+  MiddlePhalanxTW            R=1 mean delta +0.0000
+  ProximalPhalanxOutlineAgeGroup R=1 mean delta -0.0049
+  ProximalPhalanxTW          R=1 mean delta +0.0049
+  RefrigerationDevices       R=1 mean delta -0.0053
+  ScreenType                 R=1 mean delta -0.0507
+  SemgHandMovementCh2        R=1 mean delta -0.0244
+  SemgHandSubjectCh2         R=1 mean delta +0.0111
+  SmallKitchenAppliances     R=1 mean delta +0.0133
+  Worms                      R=1 mean delta -0.0260
+  WormsTwoClass              R=1 mean delta +0.0130
+
+  R=1 on every dataset: var_within is UNMEASURABLE, not zero, so the between/within split and every campaign plan built on it are withheld. The effect itself is unaffected: mean -0.00502, SE 0.00347 over 27 paired datasets. Do NOT read this as evidence that resampling cannot help -- that question needs R>=2 to even ask. Re-run with --resamples 3 to size anything.
+
+wrote reference/features22_r1.json  (813.2 min)

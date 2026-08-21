@@ -1,0 +1,845 @@
+{
+  "comparison": "features22",
+  "arms": {
+    "A": [
+      "--num-kernels",
+      "10000",
+      "--n-groups",
+      "40",
+      "--features",
+      "rocket"
+    ],
+    "B": [
+      "--num-kernels",
+      "10000",
+      "--n-groups",
+      "40",
+      "--features",
+      "both22"
+    ]
+  },
+  "resamples": 1,
+  "runs": [
+    {
+      "dataset": "Herring",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.671875,
+      "seconds": 125.7,
+      "n_test": 64,
+      "failures": []
+    },
+    {
+      "dataset": "Herring",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.65625,
+      "seconds": 132.0,
+      "n_test": 64,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7540983606557377,
+      "seconds": 128.0,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning2",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.7540983606557377,
+      "seconds": 134.9,
+      "n_test": 61,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.564935064935065,
+      "seconds": 824.2,
+      "n_test": 154,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxTW",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.564935064935065,
+      "seconds": 912.0,
+      "n_test": 154,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7534246575342466,
+      "seconds": 153.7,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Lightning7",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.7808219178082192,
+      "seconds": 148.6,
+      "n_test": 73,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.7714285714285715,
+      "seconds": 182.7,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Ham",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.7714285714285715,
+      "seconds": 193.3,
+      "n_test": 105,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7333333333333333,
+      "seconds": 89.1,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "Beef",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.7666666666666667,
+      "seconds": 89.5,
+      "n_test": 30,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.84,
+      "seconds": 211.2,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "ACSF1",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.81,
+      "seconds": 219.0,
+      "n_test": 100,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7662337662337663,
+      "seconds": 218.5,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "Worms",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.7402597402597403,
+      "seconds": 233.7,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7922077922077922,
+      "seconds": 225.9,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "WormsTwoClass",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8051948051948052,
+      "seconds": 240.2,
+      "n_test": 77,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.8857142857142857,
+      "seconds": 248.3,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "ArrowHead",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8571428571428571,
+      "seconds": 301.9,
+      "n_test": 175,
+      "failures": []
+    },
+    {
+      "dataset": "Haptics",
+      "resample": 1,
+      "arm": "A",
+      "accuracy": 0.6136363636363636,
+      "seconds": 667.1,
+      "n_test": 308,
+      "failures": []
+    },
+    {
+      "dataset": "Haptics",
+      "resample": 1,
+      "arm": "B",
+      "accuracy": 0.5974025974025974,
+      "seconds": 682.7,
+      "n_test": 308,
+      "failures": []
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7786666666666666,
+      "seconds": 1434.6,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "RefrigerationDevices",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.7733333333333333,
+      "seconds": 1467.8,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "ScreenType",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.6666666666666666,
+      "seconds": 1208.6,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "ScreenType",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.616,
+      "seconds": 1200.9,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "Earthquakes",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7482014388489209,
+      "seconds": 649.6,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "Earthquakes",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.7482014388489209,
+      "seconds": 762.1,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "InlineSkate",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.4890909090909091,
+      "seconds": 1109.8,
+      "n_test": 550,
+      "failures": []
+    },
+    {
+      "dataset": "InlineSkate",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.4890909090909091,
+      "seconds": 969.8,
+      "n_test": 550,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.7553956834532374,
+      "seconds": 814.9,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxTW",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.7410071942446043,
+      "seconds": 786.5,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "Computers",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.884,
+      "seconds": 664.9,
+      "n_test": 250,
+      "failures": []
+    },
+    {
+      "dataset": "Computers",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.86,
+      "seconds": 614.7,
+      "n_test": 250,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.8273381294964028,
+      "seconds": 707.7,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8201438848920863,
+      "seconds": 894.1,
+      "n_test": 139,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.8682926829268293,
+      "seconds": 734.6,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8634146341463415,
+      "seconds": 926.6,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.8097560975609757,
+      "seconds": 813.3,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "ProximalPhalanxTW",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8146341463414634,
+      "seconds": 812.8,
+      "n_test": 205,
+      "failures": []
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.824,
+      "seconds": 1122.2,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "SmallKitchenAppliances",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8373333333333334,
+      "seconds": 1496.4,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.928,
+      "seconds": 1329.6,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "LargeKitchenAppliances",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.9306666666666666,
+      "seconds": 1155.6,
+      "n_test": 375,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.845360824742268,
+      "seconds": 1426.9,
+      "n_test": 291,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.845360824742268,
+      "seconds": 1500.4,
+      "n_test": 291,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.855072463768116,
+      "seconds": 1419.2,
+      "n_test": 276,
+      "failures": []
+    },
+    {
+      "dataset": "DistalPhalanxOutlineCorrect",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8514492753623188,
+      "seconds": 1493.5,
+      "n_test": 276,
+      "failures": []
+    },
+    {
+      "dataset": "SemgHandSubjectCh2",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.9333333333333333,
+      "seconds": 1665.0,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "SemgHandSubjectCh2",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.9444444444444444,
+      "seconds": 1737.0,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "EthanolLevel",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.798,
+      "seconds": 1769.1,
+      "n_test": 500,
+      "failures": []
+    },
+    {
+      "dataset": "EthanolLevel",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.794,
+      "seconds": 1946.5,
+      "n_test": 500,
+      "failures": []
+    },
+    {
+      "dataset": "SemgHandMovementCh2",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.84,
+      "seconds": 1673.9,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "SemgHandMovementCh2",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8155555555555556,
+      "seconds": 1802.1,
+      "n_test": 450,
+      "failures": []
+    },
+    {
+      "dataset": "MedicalImages",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.8447368421052631,
+      "seconds": 2164.4,
+      "n_test": 760,
+      "failures": []
+    },
+    {
+      "dataset": "MedicalImages",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.8486842105263158,
+      "seconds": 2298.5,
+      "n_test": 760,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "A",
+      "cached": true,
+      "accuracy": 0.6948051948051948,
+      "seconds": 696.7,
+      "n_test": 154,
+      "failures": []
+    },
+    {
+      "dataset": "MiddlePhalanxOutlineAgeGroup",
+      "resample": 1,
+      "arm": "B",
+      "cached": true,
+      "accuracy": 0.6883116883116883,
+      "seconds": 735.7,
+      "n_test": 154,
+      "failures": []
+    }
+  ],
+  "elapsed_seconds": 1735.2,
+  "analysis": {
+    "per_dataset": {
+      "ACSF1": {
+        "n_resamples": 1,
+        "mean_delta": -0.029999999999999916,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.029999999999999916
+        }
+      },
+      "ArrowHead": {
+        "n_resamples": 1,
+        "mean_delta": -0.02857142857142858,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.02857142857142858
+        }
+      },
+      "Beef": {
+        "n_resamples": 1,
+        "mean_delta": 0.03333333333333344,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.03333333333333344
+        }
+      },
+      "Computers": {
+        "n_resamples": 1,
+        "mean_delta": -0.02400000000000002,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.02400000000000002
+        }
+      },
+      "DistalPhalanxOutlineAgeGroup": {
+        "n_resamples": 1,
+        "mean_delta": -0.007194244604316502,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.007194244604316502
+        }
+      },
+      "DistalPhalanxOutlineCorrect": {
+        "n_resamples": 1,
+        "mean_delta": -0.0036231884057971175,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.0036231884057971175
+        }
+      },
+      "DistalPhalanxTW": {
+        "n_resamples": 1,
+        "mean_delta": -0.014388489208633115,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.014388489208633115
+        }
+      },
+      "Earthquakes": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
+      "EthanolLevel": {
+        "n_resamples": 1,
+        "mean_delta": -0.0040000000000000036,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.0040000000000000036
+        }
+      },
+      "Ham": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
+      "Haptics": {
+        "n_resamples": 1,
+        "mean_delta": -0.016233766233766267,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.016233766233766267
+        }
+      },
+      "Herring": {
+        "n_resamples": 1,
+        "mean_delta": -0.015625,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.015625
+        }
+      },
+      "InlineSkate": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
+      "LargeKitchenAppliances": {
+        "n_resamples": 1,
+        "mean_delta": 0.002666666666666595,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.002666666666666595
+        }
+      },
+      "Lightning2": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
+      "Lightning7": {
+        "n_resamples": 1,
+        "mean_delta": 0.0273972602739726,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0273972602739726
+        }
+      },
+      "MedicalImages": {
+        "n_resamples": 1,
+        "mean_delta": 0.003947368421052699,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.003947368421052699
+        }
+      },
+      "MiddlePhalanxOutlineAgeGroup": {
+        "n_resamples": 1,
+        "mean_delta": -0.00649350649350644,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.00649350649350644
+        }
+      },
+      "MiddlePhalanxOutlineCorrect": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
+      "MiddlePhalanxTW": {
+        "n_resamples": 1,
+        "mean_delta": 0.0,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.0
+        }
+      },
+      "ProximalPhalanxOutlineAgeGroup": {
+        "n_resamples": 1,
+        "mean_delta": -0.004878048780487809,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.004878048780487809
+        }
+      },
+      "ProximalPhalanxTW": {
+        "n_resamples": 1,
+        "mean_delta": 0.004878048780487698,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.004878048780487698
+        }
+      },
+      "RefrigerationDevices": {
+        "n_resamples": 1,
+        "mean_delta": -0.005333333333333301,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.005333333333333301
+        }
+      },
+      "ScreenType": {
+        "n_resamples": 1,
+        "mean_delta": -0.05066666666666664,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.05066666666666664
+        }
+      },
+      "SemgHandMovementCh2": {
+        "n_resamples": 1,
+        "mean_delta": -0.02444444444444438,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.02444444444444438
+        }
+      },
+      "SemgHandSubjectCh2": {
+        "n_resamples": 1,
+        "mean_delta": 0.011111111111111072,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.011111111111111072
+        }
+      },
+      "SmallKitchenAppliances": {
+        "n_resamples": 1,
+        "mean_delta": 0.01333333333333342,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.01333333333333342
+        }
+      },
+      "Worms": {
+        "n_resamples": 1,
+        "mean_delta": -0.025974025974025983,
+        "sd_within": null,
+        "deltas": {
+          "1": -0.025974025974025983
+        }
+      },
+      "WormsTwoClass": {
+        "n_resamples": 1,
+        "mean_delta": 0.012987012987012991,
+        "sd_within": null,
+        "deltas": {
+          "1": 0.012987012987012991
+        }
+      }
+    },
+    "datasets": 29,
+    "mean_resamples": 1.0,
+    "grand_mean_delta": -0.005233517510670192,
+    "se_observed": 0.003255427035403922,
+    "var_of_means": 0.0003073363503023243,
+    "var_within": null,
+    "var_between": null,
+    "note": "R=1 on every dataset: var_within is UNMEASURABLE, not zero, so the between/within split and every campaign plan built on it are withheld. The effect itself is unaffected: mean -0.00523, SE 0.00326 over 29 paired datasets. Do NOT read this as evidence that resampling cannot help -- that question needs R>=2 to even ask. Re-run with --resamples 3 to size anything."
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "dataset": "ScreenType",
+  "model": "tabicl-v2",
+  "device": "cpu",
+  "features": "both22",
+  "n_feature_columns": 522,
+  "ts_feature_source": null,
+  "catch22_feature_source": "aeon (MIT, distributable)",
+  "anofox_extension": null,
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "resample": 1,
+    "threads": 2,
+    "memory_limit": "43GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128,
+    "context_cache": false,
+    "onnx_threads": 2,
+    "cpu_count_source": "cgroup v1 cfs_quota"
+  },
+  "shape": {
+    "dataset": "ScreenType",
+    "n_train": 375,
+    "n_test": 375,
+    "n_channels": 1,
+    "n_timepoints": 720,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/resample/features22/ScreenType_r1_B/raw.parquet"
+  },
+  "accuracy": 0.616,
+  "row_alignment": {
+    "predicted_rows": 375,
+    "distinct_ids": 375,
+    "group_rows": 15000,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 38.83,
+    "classify_seconds": 1157.39,
+    "classify_share": 0.9675,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 27.594,
+      "classify_median": 28.54,
+      "classify_max": 41.287,
+      "max_over_median": 1.45
+    }
+  },
+  "failures": [],
+  "seconds": 1200.9,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.5.0-35-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 112,
+    "containerised": true
+  },
+  "caveat": null
+}

@@ -789,6 +789,23 @@ runs, ~28 h) — the opposite of what was printed.
 
 ### 7b — A third feature family as a fourth arm (SUPERSEDED by 7b′)
 
+> **catch22 is done and the answer is no — it does not stand in for ts.** `--features both22`
+> (rocket+catch22, 522 columns) against `rocket` alone, same 29 hard datasets, same pairing as
+> `both`: **mean −0.00523, SE 0.00326, t=−1.61 on df 28 (not significant, p≈0.12), B wins 8, ties
+> 6, A wins 15** — net **43 rows lost of 7,232**, the mirror image of `both`'s 15/6/6 win a
+> **+57-row gain**. catch22 was written as "the distributable version of the same idea" on the
+> assumption that any generic time-series-statistics family would substitute for `ts`; it does
+> not. `ScreenType` is the sharpest case: **+0.0213 under `both`, −0.0507 under `both22`** — the
+> same dataset, opposite sign, from swapping one 100-ish-statistic catalogue for a 22-statistic
+> one. `RefrigerationDevices` (+0.0507 → −0.0053) and `DistalPhalanxTW`/`SemgHandMovementCh2` flip
+> the same way. Two datasets `both` never got a pair for (`MiddlePhalanxOutlineCorrect`,
+> `DistalPhalanxOutlineCorrect`, lost there to a 46.6 GB OOM) completed clean here on a
+> 72.6 GB/11-core pod — the wider memory budget didn't change the verdict, both paired at ~0. This
+> closes catch22 as a `ts` substitute; 7b does not continue past one dataset family. Full table and
+> the CFS-quota bug found while sizing the pod: RESULTS.md, "catch22 does not stand in for ts".
+> `reference/features22_r1.json`, `reference/resample/features22/` (58 sidecars),
+> `reference/resample/feat22_r1.log`.
+
 - [ ] `catch22` rather than more `anofox_forecast`. Two reasons beyond novelty: it is **already in
       `aeon`**, which this project depends on, so it adds no dependency; and it carries **no BSL
       1.1 restriction**, where the 116-statistic ts family is a research instrument that can never
@@ -798,8 +815,11 @@ runs, ~28 h) — the opposite of what was printed.
       statistics in Python via aeon (no DuckDB extension exists for it, so `build_sql` loads them
       with `read_parquet` where `ts` mode would `LOAD anofox_forecast`), joined the same way `tsfeat`
       is. Smoke-tested against the real extension on Coffee (both modes, 1.0000, clean integrity
-      checks). **Not yet run**: the 27-dataset resample campaign that would say whether `both22`
-      recovers any of `both`'s +0.0092 — see RESULTS.md, "Plumbing done, campaign not run".
+      checks).
+- [x] **Run `--features both22` across the 29 hard datasets, resampled.** Done 2026-08-21 on an
+      RTX 6000 Ada CPU-inference pod (11-core CFS quota, 72.6 GB): mean −0.00523, SE 0.00326 over
+      29 paired datasets, 813.2 + 28.9 min (backfill) ≈ 14.0 h pod time. Result: negative, see the
+      callout above.
 - [ ] Measure what the ts family's addition measured, on the same 17 datasets: pairwise excess
       overlap against each existing arm, the oracle over five arms, and the rows nobody gets right.
       The prediction to falsify: a *third feature family* should move the oracle by roughly what

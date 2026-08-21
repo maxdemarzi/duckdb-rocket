@@ -16,10 +16,12 @@ history. What survives below is the traps, because those cost real time and will
 
 ## Open
 
-1. **Submitted.** [duckdb/community-extensions#2497](https://github.com/duckdb/community-extensions/pull/2497),
-   from the pinned commit `e325474`. Nothing to do but respond to review. Re-pin `ref` only if
-   `src/`, `extension_config.cmake`, `CMakeLists.txt` or the duckdb submodule changes; doc and
-   script commits do not alter what is built.
+1. **Merged 2026-08-18.** [duckdb/community-extensions#2497](https://github.com/duckdb/community-extensions/pull/2497),
+   from the pinned commit `e325474`. `INSTALL rocket FROM community; LOAD rocket;` works with no
+   local build — verified against the published binary. Re-pin `ref` (which now means opening a
+   follow-up PR, not editing this one) only if `src/`, `extension_config.cmake`,
+   `CMakeLists.txt` or the duckdb submodule changes; doc and script commits do not alter what is
+   built.
 2. **Prebuilt shell published** and `scripts/pod/bootstrap.sh`'s caching path is live, verified
    by re-downloading through the exact URL bootstrap builds and by a pod hitting it in anger
    (`using the prebuilt shell for … -- skipping the build`).

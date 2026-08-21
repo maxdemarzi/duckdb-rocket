@@ -37,8 +37,14 @@ local accuracy exactly. That is a subset chosen for spread, not the paper's 92-d
 and the two numbers measure different things — see [reference/RESULTS.md](reference/RESULTS.md).
 
 The extension builds on **nine platforms** — Linux (amd64/arm64), macOS (amd64/arm64), Windows
-(MSVC and mingw) and all three wasm targets — and is
-[submitted to community-extensions](https://github.com/duckdb/community-extensions/pull/2497).
+(MSVC and mingw) and all three wasm targets — and is **merged into community-extensions**
+([duckdb/community-extensions#2497](https://github.com/duckdb/community-extensions/pull/2497),
+merged 2026-08-18). No build required:
+
+```sql
+INSTALL rocket FROM community;
+LOAD rocket;
+```
 
 ```sql
 SELECT rocket_transform(values, 250, 0, 0) FROM series;   -- 500 features from 250 kernels

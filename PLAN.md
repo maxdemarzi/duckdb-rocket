@@ -638,11 +638,12 @@ died. It is 766 KB under the prepared-plan one.
       discovery), [#25](https://github.com/DataZooDE/anofox-tabfm/issues/25) (the flavor
       repository host does not resolve).
 - [x] Package `rocket` for the DuckDB community-extensions repo (metadata, CI matrix, docs) —
-      [submitted](https://github.com/duckdb/community-extensions/pull/2497). The descriptor was
-      verified against their `build.py` and all 314 existing entries rather than copied from one;
-      the distribution pipeline runs on this repo and is **green on nine platforms**, including
-      the three wasm targets that `description.yml` had excluded since its first draft for no
-      recorded reason.
+      [submitted, and **merged 2026-08-18**](https://github.com/duckdb/community-extensions/pull/2497)
+      (`samansmink`). The descriptor was verified against their `build.py` and all 314 existing
+      entries rather than copied from one; the distribution pipeline runs on this repo and is
+      **green on nine platforms**, including the three wasm targets that `description.yml` had
+      excluded since its first draft for no recorded reason. **Live**: `INSTALL rocket FROM
+      community; LOAD rocket;` works with no local build, verified against the published binary.
 - [x] README with the composition example front and center
 
 ---

@@ -156,6 +156,13 @@ def main() -> int:
                          "sweep exact from a single run (scripts/perf_levers.py --groups)")
     ap.add_argument("--timeout-min", type=float, default=90.0,
                     help="per-dataset timeout; a single pathological dataset must not eat the budget")
+    ap.add_argument("--max-train-rows", type=int, default=0,
+                    help="cap the labelled context at this many rows (stratified, 0 = no cap). "
+                         "The context is re-encoded on every classify call and its size, not the "
+                         "test-row count, is what has driven every OOM this project has hit -- "
+                         "ECG5000's 500-row context alone needed ~29-44GB. Applies uniformly, not "
+                         "per-dataset: most candidates have fewer training rows than any sane cap "
+                         "and are unaffected; only the few with a larger native train split are.")
     args = ap.parse_args()
     # phase5 refuses n_groups != 1 for ts features, and it is right to: the groups exist to slice a
     # kernel bank, and there is no bank here. Caught before the sweep rather than once per dataset.
@@ -228,6 +235,8 @@ def main() -> int:
             cmd += ["--anofox-extension", str(args.anofox_extension)]
         if args.register_model_dir:
             cmd += ["--register-model-dir", str(args.register_model_dir)]
+        if args.max_train_rows:
+            cmd += ["--max-train-rows", str(args.max_train_rows)]
         print(f"\n[{ran + 1}/{len(todo)}] {name}  n_test={c['n_test']} classes={c['n_classes']} "
               f"(elapsed {elapsed:.0f}/{args.budget_min:.0f} min)", flush=True)
         try:

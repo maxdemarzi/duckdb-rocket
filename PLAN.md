@@ -649,6 +649,42 @@ died. It is 766 KB under the prepared-plan one.
 
 ## Phase 7 — Raise the ceiling, or establish that it cannot be raised
 
+> **PHASE 7 CLOSED, 2026-08-21. The ceiling cannot be raised by any shippable route this project
+> found, and 7c is not being run to check the one route left because the evidence already
+> predicts its answer.**
+>
+> Four routes were tried against the +0.09 oracle-vs-best-achieved gap below, and every one that
+> could ship failed:
+>
+> | route | result | ships? |
+> |---|---|---|
+> | more architectures (a 4th backbone) | overlap unchanged to within 1%; one *lowered* the ensemble | — |
+> | averaging the arms | 0.7619, below the 0.7686 best single arm | — |
+> | margin-routing / surest-arm | best cell +0.0042 at p=0.27 | — |
+> | supervised stacking on real labels | −0.0421, p=0.02 — worse than doing nothing | — |
+> | concatenation, `ts` family (`both`) | **+0.0092, p≈0.019, real** | **no — BSL 1.1** |
+> | concatenation, `catch22` family (`both22`) | −0.0052, not significant, sign flips on 4/29 datasets | yes, but doesn't work |
+>
+> The only route that ever produced a real, resampled, significant gain (`both`, +0.0092) depends
+> on a family (`anofox_forecast`) this project can never distribute. Its shippable stand-in
+> (`catch22`) was measured, not assumed, and does not reproduce the gain — see RESULTS.md,
+> "catch22 does not stand in for ts". That closes 7b/7b′ as a *shippable* answer, on top of 7a
+> already closing selection.
+>
+> **7c (two more backbones, `tabpfn-v2-5`/`tabpfn-v3`, on the same features) is skipped by
+> decision, not left undone.** It was always ranked last because the evidence — three existing
+> backbones already agreeing to within 1% on the same rows — predicts it reproduces rather than
+> beats what is already measured, and it additionally needs a licence acceptance and a pod pass to
+> find out. Spending both to confirm a predicted null is not worth it. If that evidence is ever
+> contradicted (a fourth backbone actually disagreeing with the other three on a meaningful number
+> of rows), this is the item to revisit.
+>
+> **The verdict, stated plainly:** the pipeline's accuracy on the hard datasets is what it is.
+> +0.09 of oracle headroom exists in principle — some arm is right on almost every row — but
+> nothing this project can ship knows *which* arm, and the one representation change that helped
+> is a licence away from being usable. Phase 7 does not continue past this; a future session
+> revisiting the ceiling should start from this table, not from 7a.
+
 **The problem, stated as a number.** Routing and distillation were both competing for a ~3-point
 prize, because that is the whole gap between a cheap ridge and this teacher. But the per-row oracle
 over the four arms already built is **0.8483** against a best-achieved **0.7686** — about **+0.09
@@ -829,7 +865,12 @@ runs, ~28 h) — the opposite of what was printed.
 - [ ] Do **not** expect an averaging or margin rule to collect it — both are measured dead ends.
       This item raises the bound; 7a decides whether anything can reach a bound.
 
-### 7c — The paper's own backbones, ranked last on purpose (licence decision, then a pod)
+### 7c — The paper's own backbones (licence decision, then a pod) — **NOT RUN, closed by decision**
+
+**Skipped 2026-08-21.** Not attempted, and not left as a dangling TODO: with 7b/7b′ closed, this is
+the last route Phase 7 had, and the evidence already predicts its answer (three backbones agreeing
+to within 1% on the same rows) more strongly than it is worth a licence acceptance and a pod pass to
+confirm. See the closed-verdict block at the top of Phase 7.
 
 - [ ] `tabpfn-v2-5` and `tabpfn-v3` both download and neither loads: one is published under tensor
       names its exported graph was not built against (248 of 250 missing), the other is a torch zip
@@ -840,8 +881,9 @@ runs, ~28 h) — the opposite of what was printed.
       architectures already fail on the same rows to within 1%, and these are two more
       architectures reading the same 500 ROCKET features. Worth doing for completeness against the
       paper, not as a route to the ceiling.
-- [ ] If run, run it **inside 7b** rather than separately: a new backbone on a new feature family is
-      the only combination that has not been eliminated.
+- [ ] If run, run it against `rocket` alone rather than "inside 7b" as originally planned — 7b/7b′
+      closed negative on the shippable feature set, so there is no surviving feature-family
+      combination left to nest this inside.
 
 ### 7d — Re-test the overlap numbers (original text, kept for the reasoning) — SUPERSEDED
 
@@ -861,9 +903,10 @@ load-bearing only for a rule that could exploit the diversity, and no such rule 
 resampling effort belongs on 7b' instead, where the +0.0088 concatenation result is single-split and
 would be quoted.
 
-**Cost, honestly.** 7a is done: an afternoon and no money. 7b is a transform plus one pod pass over 17
-datasets. 7c is a licence acceptance and then whatever 7b' costs again. **Revised ordering:
-7b' → 7c**, with 7a done and 7d dropped.
+**Cost, honestly.** 7a is done: an afternoon and no money. 7b/7b′ is done: a transform, ~14 h pod time
+twice over (ts, then catch22), both accounted for above. 7c would have been a licence acceptance and
+another pod pass; **decided not worth it** — see the closed-verdict block at the top of Phase 7. 7d is
+dropped. Nothing in Phase 7 remains open.
 
 The 7b' figure this file carried — *"~1.5 h each at `--jobs 5`"* — was **wrong, and wrong in the
 expensive direction**. `--jobs 5` does not run at all on the large datasets: ONNX allocates outside
@@ -901,7 +944,7 @@ computed. **Do not size a further resample campaign from the old estimate.**
 | TabPFN inference dominates runtime, making C++ ROCKET pointless | 3 | Phase 3 measures this *before* any C++ is written |
 | Conclusions drawn from one dataset | 1, 5 | 10-dataset subset; noise floor measured first |
 | **`tabfm_classify` memory scales with the test batch, outside DuckDB's accounting** | 5 | Retired by `--test-chunk`, which bounds peak by chunk size. Verified identity-preserving (GunPoint, 0/150 rows disagreeing). Defaults ON in `scripts/pod/sweep.py`, OFF in `phase5_pipeline.py` so an archived result reproduces unchanged. `SET memory_limit` does **not** contain it — the allocation is ONNX's, not the buffer manager's |
-| A container's limits are not what `free` and `nproc` report | 5 | Both now read explicitly: `threads` was already pinned for this reason, `memory_limit` now comes from the cgroup. A cgroup OOM kill leaves no DuckDB error and no Python traceback — it looks exactly like a hang |
+| A container's limits are not what `free` and `nproc` report | 5, 7 | Both now read explicitly: `threads` was already pinned for this reason, `memory_limit` now comes from the cgroup. A cgroup OOM kill leaves no DuckDB error and no Python traceback — it looks exactly like a hang. **Fourth instance, found in 7b′/7c sizing**: `sched_getaffinity` catches a cpuset restriction but not a CFS quota (`cpu.max`/`cfs_quota_us`) — a RunPod pod reported 112 cores via affinity while billed for ~11.9. `binding_cpu_count()` now checks both and returns whichever is narrower |
 | Local Windows timings mislead (WDDM spills instead of OOM) | all | Numbers come from pods, not the 3060 |
 | **TabPFN v2.5 weights need an accepted Prior Labs licence** | 1, 5 | One-time browser acceptance, then `TABPFN_TOKEN` in the environment; inject into every pod, never commit it |
 | A forgotten pod bills silently | all | `check` before and after every session; shared account |

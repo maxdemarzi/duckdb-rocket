@@ -630,13 +630,24 @@ died. It is 766 KB under the prepared-plan one.
 - [x] Open the `anofox-tabfm` PRs identified in Phase 2 — **both turned out moot**, which Phase 2
       established before any code was written: probability output already exists, and list-valued
       features were a *bug* rather than a feature request. Filed as such and **merged upstream**
-      (#17/#18). Five further contributions came out of Phase 5 rather than Phase 2:
-      [#19](https://github.com/DataZooDE/anofox-tabfm/pull/19) (container-aware thread default,
-      **merged**, shipped in v2026.08.13), [#22](https://github.com/DataZooDE/anofox-tabfm/pull/22)
+      (#17/#18). **Every upstream item this project filed is now merged or closed, checked
+      2026-08-21** — [#19](https://github.com/DataZooDE/anofox-tabfm/pull/19) (container-aware
+      thread default, shipped in v2026.08.13), [#22](https://github.com/DataZooDE/anofox-tabfm/pull/22)
       (Ort::Env ordering), [#23](https://github.com/DataZooDE/anofox-tabfm/pull/23) (ScatterND
       CUDA workaround), [#24](https://github.com/DataZooDE/anofox-tabfm/pull/24) (Windows CUDA
-      discovery), [#25](https://github.com/DataZooDE/anofox-tabfm/issues/25) (the flavor
-      repository host does not resolve).
+      discovery) — **all three merged 2026-08-14 and already in the installed community build**
+      (`extension_version 443f854`, verified live) —
+      [#25](https://github.com/DataZooDE/anofox-tabfm/issues/25) (the flavor repository host does
+      not resolve, **closed**), [#34](https://github.com/DataZooDE/anofox-tabfm/pull/34) (a
+      misspelled `features := [...]` name silently dropped, **merged** 08-15),
+      [#36](https://github.com/DataZooDE/anofox-tabfm/pull/36) (`anofox_tabfm_max_memory`,
+      **merged** 08-16), [#38](https://github.com/DataZooDE/anofox-tabfm/pull/38)/
+      [#40](https://github.com/DataZooDE/anofox-tabfm/pull/40) (split-context encoding, **merged**
+      08-16/08-17). **#34/#36/#38/#40 are merged to `main` but not yet in a tagged release** —
+      `main` is 16 commits ahead of `v2026.08.15`, which is what `community-extensions` still pins
+      (`ref: 51f0850`). So `phase5_pipeline.py`'s `--tabfm-max-memory`/`--context-cache` stay
+      opt-in flags exactly as written; nothing to change until DataZooDE cuts a new tag and
+      `community-extensions` bumps its pin to it — a release-cadence wait, not a review wait.
 - [x] Package `rocket` for the DuckDB community-extensions repo (metadata, CI matrix, docs) —
       [submitted, and **merged 2026-08-18**](https://github.com/duckdb/community-extensions/pull/2497)
       (`samansmink`). The descriptor was verified against their `build.py` and all 314 existing

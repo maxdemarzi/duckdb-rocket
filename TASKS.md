@@ -33,11 +33,16 @@ history. What survives below is the traps, because those cost real time and will
    legitimately change when clang-format reformatted `src/` — whitespace-only, but not the same
    source, so the old binary was not republished under the new key.
 
-3. **Upstream review is out of our hands**: [#22](https://github.com/DataZooDE/anofox-tabfm/pull/22)
+3. **Checked 2026-08-21: every filed upstream item is resolved.** [#22](https://github.com/DataZooDE/anofox-tabfm/pull/22)
    (Ort::Env ordering), [#23](https://github.com/DataZooDE/anofox-tabfm/pull/23) (ScatterND graph
-   workaround), [#24](https://github.com/DataZooDE/anofox-tabfm/pull/24) (Windows CUDA discovery),
-   [#25](https://github.com/DataZooDE/anofox-tabfm/issues/25) (dead `ext.anofox.com`).
-   [#19](https://github.com/DataZooDE/anofox-tabfm/pull/19) merged and shipped in `v2026.08.13`.
+   workaround) and [#24](https://github.com/DataZooDE/anofox-tabfm/pull/24) (Windows CUDA
+   discovery) all merged 2026-08-14 and are **already in the installed community build**
+   (verified live: `extension_version 443f854`). [#25](https://github.com/DataZooDE/anofox-tabfm/issues/25)
+   (dead `ext.anofox.com`) is closed. [#19](https://github.com/DataZooDE/anofox-tabfm/pull/19)
+   merged and shipped in `v2026.08.13`. Four more from later phases are also merged but not yet
+   released — [#34](https://github.com/DataZooDE/anofox-tabfm/pull/34), [#36](https://github.com/DataZooDE/anofox-tabfm/pull/36),
+   [#38](https://github.com/DataZooDE/anofox-tabfm/pull/38), [#40](https://github.com/DataZooDE/anofox-tabfm/pull/40)
+   — see PLAN.md Phase 6 for why that leaves `--tabfm-max-memory`/`--context-cache` opt-in as-is.
 
 ## GPU: works, but only if you build it
 

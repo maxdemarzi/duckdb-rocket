@@ -158,18 +158,24 @@ if [ ! -x build/release/duckdb ]; then
 fi
 build/release/duckdb -c "SELECT len(rocket_transform([1.0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]::DOUBLE[], 3, 0, 0)) AS n;"
 
-# Publish it so the next pod skips the build entirely. One command, from a machine with `gh`:
+# Publish it so the next pod skips the build entirely. Two commands, from a machine with `gh`:
 #
-#   gh release create prebuilt --title "prebuilt shells" --notes "keyed by build inputs" 2>/dev/null
-#   gh release upload prebuilt \
-#       "build/release/duckdb#${ARTIFACT}" --repo maxdemarzi/duckdb-rocket --clobber
+#   cp build/release/duckdb "${ARTIFACT}"
+#   gh release upload prebuilt "${ARTIFACT}" --repo maxdemarzi/duckdb-rocket --clobber
 #
-# The '#name' syntax renames the asset on upload, which is what makes the keyed lookup above
-# work. Publishing is deliberately manual: an artifact that uploads itself from whatever
+# NOT `"build/release/duckdb#${ARTIFACT}"`. That reads like a rename and isn't one: gh's own
+# `--help` says `#text` "define[s] a display label" -- cosmetic, shown in the release's web UI --
+# and the uploaded asset keeps the LOCAL file's basename (`duckdb`), which the keyed lookup above
+# can never match. Verified empirically on gh 2.96.0: it silently uploaded as `duckdb`, not the
+# key, and the wrong-name asset had to be deleted and re-uploaded from a renamed copy. The local
+# file must carry the target name before `gh release upload` ever sees it.
+#
+# Publishing is deliberately manual otherwise: an artifact that uploads itself from whatever
 # happens to be checked out is how the wrong binary becomes the cached one.
 if [ ! -f /root/.rocket_prebuilt_note ]; then
-    echo "  to skip this build next time: gh release upload prebuilt \\"
-    echo "      \"build/release/duckdb#${ARTIFACT}\" --repo maxdemarzi/duckdb-rocket --clobber"
+    echo "  to skip this build next time:"
+    echo "      cp build/release/duckdb \"${ARTIFACT}\""
+    echo "      gh release upload prebuilt \"${ARTIFACT}\" --repo maxdemarzi/duckdb-rocket --clobber"
     touch /root/.rocket_prebuilt_note 2>/dev/null || true
 fi
 

@@ -655,6 +655,23 @@ died. It is 766 KB under the prepared-plan one.
       **green on nine platforms**, including the three wasm targets that `description.yml` had
       excluded since its first draft for no recorded reason. **Live**: `INSTALL rocket FROM
       community; LOAD rocket;` works with no local build, verified against the published binary.
+- [x] **Publish a GPU (`cuda`-flavor) `anofox_tabfm` build, 2026-08-21.** No GPU build exists
+      upstream at all — `ext.anofox.com`, the host named in the extension's own error message, has
+      never resolved (#25 closed the issue, not the host) — so this project's own
+      [`prebuilt` release](https://github.com/maxdemarzi/duckdb-rocket/releases/tag/prebuilt) is
+      the only place one is downloadable. The previously-published asset there predated #22 (a
+      real CUDA EP-load fix) by hours; rebuilt from current `main` (`f148d68`, ~5 min on a
+      prebuilt-ORT-archive path) and republished as
+      `anofox_tabfm-cuda-f148d68ea939-linux_x86_64.duckdb_extension`, old one deleted. **Verified
+      on a real GPU, not just smoke-tested**: GunPoint reproduced its archived CPU accuracy
+      exactly (0.9933) in 35.0s against the archive's 184.6s CPU run — the
+      identical-accuracy-plus-speedup signature this project already trusts as GPU proof (Phase 5,
+      RESULTS.md). `--register-model-dir` turned out to be unnecessary against this build — #23's
+      graph patch lives in anofox-tabfm's own `resources/` since that PR, so `main` ships it
+      bundled; TASKS.md's GPU section covers what changed. Also found and fixed: `gh release
+      upload "file#name"` does not rename the asset — verified empirically, it silently keeps the
+      local basename — so both `bootstrap.sh` and `anofox_cuda.sh` printed a publish command that
+      would have produced an unfetchable asset; fixed to rename the file before uploading.
 - [x] README with the composition example front and center
 
 ---

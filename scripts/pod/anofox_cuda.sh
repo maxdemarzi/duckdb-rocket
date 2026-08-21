@@ -129,12 +129,17 @@ anofox_fetch() {
 }
 
 anofox_publish() {
-    local built key
+    local built key dest
     built="$(find "$ANOFOX_DIR/build" -name 'anofox_tabfm.duckdb_extension' | head -1)"
     [ -n "$built" ] || { echo "nothing built under $ANOFOX_DIR/build"; return 1; }
     key="$(anofox_key)" || return 1
+    dest="$(dirname "$built")/$key"
     echo "publish with:"
-    echo "  gh release upload prebuilt \"$built#$key\" --repo maxdemarzi/duckdb-rocket --clobber"
+    # NOT "$built#$key" -- gh's `#text` sets a cosmetic display label, not the asset filename
+    # (its own --help says so; verified empirically on gh 2.96.0, which kept the local basename
+    # and left anofox_fetch's keyed lookup unable to find it). Rename the file first.
+    echo "  cp \"$built\" \"$dest\""
+    echo "  gh release upload prebuilt \"$dest\" --repo maxdemarzi/duckdb-rocket --clobber"
 }
 
 case "${1:-}" in

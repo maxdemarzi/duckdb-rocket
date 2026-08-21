@@ -44,27 +44,51 @@ history. What survives below is the traps, because those cost real time and will
    [#38](https://github.com/DataZooDE/anofox-tabfm/pull/38), [#40](https://github.com/DataZooDE/anofox-tabfm/pull/40)
    — see PLAN.md Phase 6 for why that leaves `--tabfm-max-memory`/`--context-cache` opt-in as-is.
 
-## GPU: works, but only if you build it
+## GPU: works, and now downloadable (2026-08-21)
 
-Reversed from the previous handoff, which recorded GPU as closed. It is reachable — it is just not
-*downloadable*.
+Reversed twice. The previous handoff recorded GPU as closed; the one before this recorded it as
+"reachable, just not downloadable." Now a build is downloadable — from this repo, not upstream.
 
-- **No GPU build is published for any platform.** `ext.anofox.com` — the host named in
+- **Published: `anofox_tabfm-cuda-f148d68ea939-linux_x86_64.duckdb_extension`**, on
+  [maxdemarzi/duckdb-rocket's `prebuilt` release](https://github.com/maxdemarzi/duckdb-rocket/releases/tag/prebuilt),
+  built from anofox-tabfm's current `main` (`f148d68`). `ext.anofox.com` — the host named in
   `anofox_tabfm`'s own error message, in its `anofox_tabfm_device` setting description and in its
-  README — has no DNS record. Filed upstream as
-  [#25](https://github.com/DataZooDE/anofox-tabfm/issues/25). Building the cuda flavor takes ~25
-  minutes.
-- **`tabicl-v2` cannot run on CUDA with the shipped graph.** It fails at a `ScatterND` node because
-  the CUDA `Slice` computing that node's `indices` returns its input untrimmed — an ONNX Runtime
-  bug, present in 1.26.0 and 1.28.0. The workaround is a graph edit
-  ([#23](https://github.com/DataZooDE/anofox-tabfm/pull/23)) and is bit-identical on CPU. Point a
-  run at the patched graph with `--register-model-dir`.
-- **The pipeline supports this directly**: `--device cuda --anofox-extension <path>
-  --register-model-dir <dir>`. `--device cuda` without `--anofox-extension` is rejected, because
-  the installed community build is CPU-only and would run on the CPU while reporting success.
+  README — still has no DNS record ([#25](https://github.com/DataZooDE/anofox-tabfm/issues/25),
+  closed but not actually fixed at that host), so upstream itself still ships nothing. This is a
+  same-day rebuild-and-republish, not a new problem solved — `scripts/pod/anofox_cuda.sh` already
+  had the fetch/cache/publish machinery; what was missing was a current binary. Building the cuda
+  flavor from a clean pod took **~5 minutes** here (prebuilt ORT-GPU archive path, not from
+  source) — the ~25-30 min figure in earlier notes was pessimistic or measured under contention.
+- **`--register-model-dir` is no longer needed.** The `tabicl-v2` ScatterND-on-CUDA workaround
+  ([#23](https://github.com/DataZooDE/anofox-tabfm/pull/23)) patches `resources/graph_tabicl_classification.onnx`
+  directly in the anofox-tabfm repo, and [#31](https://github.com/DataZooDE/anofox-tabfm/pull/31)
+  ("exports re-apply the ScatterND pins themselves") keeps it that way — so a build from current
+  `main` ships the patched graph as its own bundled resource. **Verified, not assumed**: GunPoint
+  on the freshly built extension, `--device cuda --anofox-extension <path>` alone, no
+  `--register-model-dir`, reproduced its archived CPU accuracy **exactly** (0.9933) in **35.0s**
+  against the archived CPU run's 184.6s — a ~5.3x speedup, and the same
+  identical-accuracy-plus-large-speedup signature Phase 5 already established as the GPU
+  verification pattern (GunPoint CPU-vs-GPU, RESULTS.md). The graph-edit/register-model-dir
+  description below is now historical, kept for anyone running an *older* anofox-tabfm commit.
+- **`tabicl-v2` cannot run on CUDA with the shipped graph on an anofox-tabfm build predating
+  #23.** It fails at a `ScatterND` node because the CUDA `Slice` computing that node's `indices`
+  returns its input untrimmed — an ONNX Runtime bug, present in 1.26.0 and 1.28.0. On such a build
+  the workaround is `--register-model-dir` pointed at a separately patched graph.
+- **The pipeline supports this directly**: `--device cuda --anofox-extension <path>` (optionally
+  `--register-model-dir <dir>` for a pre-#23 build). `--device cuda` without `--anofox-extension`
+  is rejected, because the installed community build is CPU-only and would run on the CPU while
+  reporting success.
 - **Windows GPU additionally needs [#24](https://github.com/DataZooDE/anofox-tabfm/pull/24)** —
-  device discovery was compiled out there. With that patch it works on the local RTX 3060, and the
-  CUDA 12 runtime must be on `PATH`.
+  device discovery was compiled out there, merged and confirmed live in the installed community
+  build. A Windows *cuda-flavor build* of our own (as opposed to the community CPU build's device
+  discovery) is still unbuilt and unpublished — only linux_x86_64 has been done. With #24 the CPU
+  build's device discovery works on the local RTX 3060, and the CUDA 12 runtime must be on `PATH`.
+- **A real bug found and fixed while publishing this**: `gh release upload prebuilt
+  "file#name" --clobber` does NOT rename the asset — gh's own `--help` says `#text` sets a
+  cosmetic display label, and the uploaded asset keeps the local file's basename. Verified on gh
+  2.96.0: it silently published as `anofox_tabfm.duckdb_extension`, not the keyed name, and had to
+  be deleted and re-uploaded from a renamed copy. Both `bootstrap.sh` and `anofox_cuda.sh` printed
+  the wrong instruction; fixed in both to rename the file before calling `gh`.
 - **`anofox_tabfm_gpu_precision` defaults to bf16.** It reads as ROCm/MIGraphX-only, and CUDA
   reproducing CPU accuracy exactly is evidence it did not apply — but that was not confirmed from
   the code path. Before any ROCm run, pin `fp32` and re-verify accuracy *before* believing a speed

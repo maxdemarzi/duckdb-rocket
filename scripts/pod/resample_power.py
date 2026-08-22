@@ -90,6 +90,16 @@ ARM_SETS = {
     #: rather than needing a separate noise estimate.
     "features22": (("--num-kernels", "10000", "--n-groups", "40", "--features", "rocket"),
                    ("--num-kernels", "10000", "--n-groups", "40", "--features", "both22")),
+    #: A different question from "features"/"features22": not a family to CONCATENATE, but whether
+    #: the extractor itself -- rocket_transform vs aeon's MultiRocket, both run as G=40 independent
+    #: groups of 500 -- is the thing costing the paper's 92-dataset reproduction its 2.3 points.
+    #: RocketPFN's own ablation (arXiv 2606.21786 S4.7) says extractor choice is under 0.006 at
+    #: G>=5 and should therefore change nothing; TS2TabPFN (arXiv 2608.04174) measured a much
+    #: bigger Rocket-vs-MultiRocket gap under a different TabPFN-family ensembling scheme, which is
+    #: the one external result in tension with that. Same 29 hard datasets, same pairing, so a
+    #: negative result here closes the same way features22 did, on the same footing.
+    "features_mr": (("--num-kernels", "10000", "--n-groups", "40", "--features", "rocket"),
+                    ("--num-kernels", "10000", "--n-groups", "40", "--features", "multirocket")),
 }
 
 

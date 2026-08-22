@@ -343,9 +343,11 @@ CATCH22 = ["DN_HistogramMode_5", "DN_HistogramMode_10", "CO_f1ecac"]
 
 
 def build_features(mode: str, n_groups: int = 40, ts=TS, catch22=None,
-                   num_kernels: int | None = None) -> str:
+                   num_kernels: int | None = None, multirocket: bool | None = None) -> str:
     if catch22 is None:
         catch22 = CATCH22 if mode in ("catch22", "both22") else []
+    if multirocket is None:
+        multirocket = mode == "multirocket"
     cfg = RocketPFNConfig(num_kernels=num_kernels or (500 if n_groups == 1 else 10_000),
                           n_groups=n_groups, seed=0, n_estimators=1)
     cfg.validate()
@@ -353,10 +355,11 @@ def build_features(mode: str, n_groups: int = 40, ts=TS, catch22=None,
             "multivariate": False, "n_channels": 1}
     return p5.build_sql(cfg, meta, WORKDIR, 4, "20GB", WORKDIR, 128, 16,
                         features=mode, ts_names=ts, catch22_names=catch22,
-                        catch22_parquet="/tmp/catch22.parquet" if catch22 else None)
+                        catch22_parquet="/tmp/catch22.parquet" if catch22 else None,
+                        multirocket_parquet="/tmp/multirocket.parquet" if multirocket else None)
 
 
-@pytest.mark.parametrize("mode", ["rocket", "ts", "catch22", "both", "both22"])
+@pytest.mark.parametrize("mode", ["rocket", "ts", "catch22", "both", "both22", "multirocket"])
 def test_the_join_key_matches_the_feature_list_in_every_mode(mode):
     # THE invariant. The key is rebuilt from the classifier's echoed columns, so if its order ever
     # diverges from `features := [...]` the join compares feature 3 against feature 7 -- which does
@@ -477,8 +480,51 @@ def test_ts_and_catch22_are_mutually_exclusive_in_one_run():
     assert "tsfeat" not in sql_both22 and "anofox_forecast" not in sql_both22
 
 
+# --- multirocket: a full extractor swap, not a concatenation ------------------------------
+#
+# Unlike ts/catch22 (per-series statistics with no kernel bank), MultiRocket is itself a random
+# convolutional extractor and varies per group exactly like rocket_transform does -- so it keeps
+# rocket's naming and n_groups freedom instead of collapsing to n_groups=1.
+
+def test_multirocket_is_a_full_swap_not_a_concatenation():
+    sql = build_features("multirocket")
+    assert _feature_names(sql) == [f"f{j}" for j in range(500)]
+
+
+def test_multirocket_is_loaded_via_read_parquet_not_an_extension():
+    # write_multirocket_parquet computes MultiRocket in Python (aeon) before this SQL runs;
+    # build_sql only reads the result back, and rocket_transform never runs in this mode.
+    sql = build_features("multirocket")
+    assert "CREATE OR REPLACE TABLE mrraw AS SELECT * FROM read_parquet(" in sql
+    assert "rocket_transform" not in sql
+
+
+def test_multirocket_row_count_is_checked_against_raw():
+    assert "mr_check" in build_features("multirocket")
+
+
+def test_multirocket_needs_the_parquet():
+    with pytest.raises(ValueError, match="needs multirocket_parquet"):
+        build_features("multirocket", multirocket=False)
+
+
+def test_multirocket_does_not_force_a_single_group():
+    # Unlike ts/catch22, MultiRocket has its own per-group randomness, so a 40-group ensemble is
+    # exactly the point rather than 40x the work for identical numbers.
+    build_features("multirocket", n_groups=40)  # must not raise
+
+
+def test_multirocket_group_offsets_are_feature_indexed_not_kernel_indexed():
+    # fill_feat's $1 means "kernel-bank offset" for rocket_transform but "feature-list offset
+    # into mrraw.mr" for multirocket -- 500 features/group here, not 250 kernels/group, so group 1
+    # must offset by 500. Reusing rocket's kernel-index arithmetic would silently overlap groups.
+    sql = build_features("multirocket")
+    assert "EXECUTE fill_feat(500)" in sql
+    assert "EXECUTE fill_feat(250)" not in sql
+
+
 def test_an_unknown_feature_mode_is_refused():
-    with pytest.raises(ValueError, match="rocket, ts, catch22, both or both22"):
+    with pytest.raises(ValueError, match="rocket, ts, catch22, both, both22 or multirocket"):
         build_features("tsfresh")
 
 

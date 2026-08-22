@@ -966,6 +966,50 @@ The growable design is what makes this survivable: `one_run` returns a completed
 sidecar, so R=3 pays only for the two new resamples and a mid-campaign restart costs nothing already
 computed. **Do not size a further resample campaign from the old estimate.**
 
+## Phase 8 — MultiRocket as an extractor swap (literature-motivated, not a Phase 7 reopen)
+
+Phase 7 closed the *concatenation* route (add a second feature family, `both`/`both22`) as not
+shippable. This is a different axis: swap `rocket_transform` itself for aeon's MultiRocket, same
+G=40 independent groups, same 500 features/group, same 29 hard datasets, same paired driver. It
+exists because of a literature check (2026-08-22) for anything that could close the paper's
+92-dataset gap (0.8770 measured vs 0.900 reported, "The paper's 92-dataset protocol" in
+RESULTS.md):
+
+- RocketPFN's own ablation (arXiv 2606.21786 S4.7, read directly) says extractor choice
+  (Rocket/MiniRocket/MultiRocket) differs by under 0.006 once G>=5 — by the authors' own numbers
+  this should change nothing, and neither should `anofox_tabfm`'s e=1-only limitation (<0.003 at
+  G>=5 per the same section). Both were checked because they were the obvious suspects; the
+  paper itself rules them out, which points back at the already-known confound instead —
+  `tabicl-v2` is TabICL, not the paper's actual TabPFN v2.5.
+- TS2TabPFN (arXiv 2608.04174, ECML PKDD 2026, code at github.com/gabrielcmerlin/TS2TabPFN — repo
+  and paper both verified to exist, not merely cited) measured a much bigger gap: MultiROCKET
+  reaching HC2 parity where plain ROCKET was significantly worse, under a TabPFN-family
+  classifier. Different ensembling scheme (TabPFN's own internal feature subsampling, not a
+  manual G-group average) and it never compares against RocketPFN, so it is not directly
+  transferable evidence — but it is the one concrete number in tension with RocketPFN's own
+  ablation, and cheap to test directly rather than argue about.
+
+**Implemented, not yet run at scale.** `--features multirocket` in `phase5_pipeline.py`:
+`write_multirocket_parquet()` runs G independently-seeded `aeon.MultiRocket(n_kernels=84)`
+instances (the library's minimum — smaller divides by zero), one per group, each cropped to
+`features_per_group` columns and stored as one `DOUBLE[]` per series so `build_sql` slices group
+g out with `mr[g*500+1 : g*500+500]` — the same list-slice idiom `rocket_transform`'s own output
+already uses, so nothing downstream of `feat_cur` changes. Independent per-group draws rather
+than one big transform sliced into G pieces, because MultiRocket's output columns are laid out
+dilation-block by dilation-block — a contiguous slice of one transform would not sample the
+extractor's randomness independently per group the way RocketPFN's own design assumes.
+
+Verified end to end on GunPoint (CPU, local): `mr_check`/`prime_check`/`features_check` all 0,
+150/150 row alignment, 4-4 groups per row, accuracy 0.9933 (matches the plain-rocket number in
+the 92-dataset table). Precompute cost checked on the longest hard dataset, InlineSkate (650
+series, 1,882 timepoints): 22.6 s for all 40 groups — negligible next to `tabfm_classify`.
+
+- [ ] Run `resample_power.py --arms features_mr` over the same 29 hard datasets `features22` used
+      (`reference/resample/features22/`'s dataset names), R=1 first, same growable design.
+- [ ] If it moves anything, resample further before reading the sign; if not, close it the same
+      honest way `both22` closed — a measured negative is still the answer, not a reason to keep
+      trying variants.
+
 ## Standing risks
 
 | Risk | Phase | Mitigation |

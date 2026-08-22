@@ -300,6 +300,63 @@ def write_catch22_parquet(raw_parquet: str, outdir: Path) -> Path:
     return out
 
 
+def write_multirocket_parquet(raw_parquet: str, outdir: Path, n_groups: int,
+                              features_per_group: int, seed: int) -> Path:
+    """G independently-seeded MultiRocket feature groups, computed once in Python (aeon has no
+    DuckDB extension for it), laid out exactly like `raw`'s own `values` column so `build_sql`
+    can slice group g's features out of one list with `mr[g*features_per_group+1 : ...]` -- the
+    same list-slice idiom `r.f[j+1]` already uses for `rocket_transform`'s output, so nothing
+    downstream of `feat_cur` needs to know a feature came from here rather than the extension.
+
+    One MultiRocket instance PER GROUP, each its own random_state, mirrors how `rocket_transform`
+    is called in the loop below: not one big bank sliced into G pieces, but G independent draws --
+    the design RocketPFN's own G-group ensembling assumes (arXiv 2606.21786 S4.7 tests exactly
+    this independence when comparing Rocket/MiniRocket/MultiRocket as extractors). Slicing one
+    MultiRocket transform's output columns into G contiguous pieces would not have that property:
+    its features are laid out dilation-block by dilation-block, so a contiguous slice mixes
+    whichever dilations happen to land in that range rather than sampling the extractor's
+    randomness independently per group.
+
+    aeon's MultiRocket needs `n_kernels >= 84` -- the fixed MiniRocket-style kernel-shape count it
+    is built on; anything smaller divides by zero inside aeon -- and produces 8 * n_kernels
+    features at that floor, i.e. 672. That is more than most `features_per_group` values in use
+    here (500), so the excess is a deterministic prefix crop rather than a shortfall needing a
+    workaround.
+
+    Univariate only, the same restriction `write_catch22_parquet` carries, and reads the SAME
+    normalised `values` column it does -- computing this from un-normalised series would make the
+    comparison against `rocket_transform` (run on the same normalised values) mean something else.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from aeon.transformations.collection.convolution_based import MultiRocket
+
+    tbl = pq.read_table(raw_parquet, columns=["id", "values"])
+    ids = tbl.column("id").to_numpy()
+    x = np.asarray(tbl.column("values").to_pylist(), dtype=np.float64)[:, np.newaxis, :]
+
+    groups = []
+    for g in range(n_groups):
+        mr = MultiRocket(n_kernels=84, random_state=seed * 10_007 + g)
+        f = np.asarray(mr.fit_transform(x), dtype=np.float64)
+        if f.shape[1] < features_per_group:
+            raise RuntimeError(
+                f"group {g}: MultiRocket produced {f.shape[1]} features, need "
+                f"{features_per_group}; raise n_kernels in write_multirocket_parquet")
+        groups.append(f[:, :features_per_group])
+    mr_features = np.concatenate(groups, axis=1)  # (n_series, n_groups * features_per_group)
+
+    out = outdir / "multirocket.parquet"
+    pq.write_table(
+        pa.table({
+            "id": pa.array(ids, type=pa.int64()),
+            "mr": pa.array(list(mr_features), type=pa.list_(pa.float64())),
+        }),
+        out,
+    )
+    return out
+
+
 def _per_group_export(outdir: Path) -> str:
     """Dump each group's own probabilities, not just the average over them.
 
@@ -331,7 +388,8 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
               model: str = MODEL, anofox_extension: Path | None = None,
               register_dir: Path | None = None, features: str = "rocket",
               ts_names: list[str] | None = None, catch22_names: list[str] | None = None,
-              catch22_parquet: str | None = None, per_group: bool = False,
+              catch22_parquet: str | None = None, multirocket_parquet: str | None = None,
+              per_group: bool = False,
               tabfm_max_memory: str | None = None, context_cache: bool = False) -> str:
     # Which feature families the classifier sees. `rocket` is the 500 random-convolution features
     # per group that every result so far uses. `ts` is anofox_forecast's 116 statistics, which beat
@@ -343,8 +401,12 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     # datasets) for `both`, and `both22` exists to ask whether catch22 recovers any of that.
     #
     # 500 + 116 = 616 and 500 + 22 = 522 both stay inside the max_features raised above.
-    if features not in ("rocket", "ts", "catch22", "both", "both22"):
-        raise ValueError(f"features must be rocket, ts, catch22, both or both22, not {features!r}")
+    # 'multirocket' is a full swap of the rocket_transform bank for aeon's MultiRocket, run G
+    # independent times (write_multirocket_parquet) -- not a family to concatenate, so it has no
+    # 'both'-style variant here.
+    if features not in ("rocket", "ts", "catch22", "both", "both22", "multirocket"):
+        raise ValueError(f"features must be rocket, ts, catch22, both, both22 or multirocket, "
+                         f"not {features!r}")
     ts_names = list(ts_names or [])
     catch22_names = list(catch22_names or [])
     if features in ("ts", "both") and not ts_names:
@@ -355,13 +417,20 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     if features in ("catch22", "both22") and not catch22_parquet:
         raise ValueError(f"features={features} needs catch22_parquet; compute it with "
                          f"write_catch22_parquet()")
+    if features == "multirocket" and not multirocket_parquet:
+        raise ValueError("features=multirocket needs multirocket_parquet; compute it with "
+                         "write_multirocket_parquet()")
 
     n_features = config.features_per_group
     use_rocket = features in ("rocket", "both", "both22")
+    use_multirocket = features == "multirocket"
     use_ts = features in ("ts", "both")
     use_catch22 = features in ("catch22", "both22")
 
-    rocket_names = [f"f{j}" for j in range(n_features)] if use_rocket else []
+    # multirocket's feat_cur.f is exactly as wide and exactly as classifier-visible as rocket's --
+    # only fill_feat's body differs -- so it shares rocket's naming and projection rather than
+    # getting a parallel set of branches that would have to be kept in step with them by hand.
+    rocket_names = [f"f{j}" for j in range(n_features)] if (use_rocket or use_multirocket) else []
     ts_only_names = list(ts_names) if use_ts else []
     catch22_only_names = list(catch22_names) if use_catch22 else []
     # Mutually exclusive by construction (features admits only one non-rocket family at a time), so
@@ -414,7 +483,8 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     # a near-constant series makes a variance-normalised one non-finite -- and the ts screen measured
     # between 101 and 540 non-finite values per dataset. A NaN reaching the classifier is not a loud
     # failure, it is a quietly worse number.
-    proj_parts = [f"r.f[{j + 1}] AS f{j}" for j in range(n_features)] if use_rocket else []
+    proj_parts = ([f"r.f[{j + 1}] AS f{j}" for j in range(n_features)]
+                  if (use_rocket or use_multirocket) else [])
     proj_parts += [f'CASE WHEN isfinite(t."{n}") THEN t."{n}" ELSE 0.0 END AS "{n}"'
                    for n in second_only_names]
     projection = ", ".join(proj_parts)
@@ -591,6 +661,17 @@ SELECT CASE WHEN (SELECT count(*) FROM c22feat) <> (SELECT count(*) FROM raw)
             THEN CAST('c22feat has a different row count than raw' AS BIGINT) ELSE 0 END AS c22_check;
 """)
 
+    if use_multirocket:
+        # Same read_parquet-not-an-extension shape as c22feat above, but the column is a single
+        # DOUBLE[] of width n_groups * n_features rather than one named column per statistic --
+        # group g's slice is cut out of it by fill_feat below with a list-slice, not a join.
+        parts.append(f"""
+CREATE OR REPLACE TABLE mrraw AS SELECT * FROM read_parquet('{multirocket_parquet}');
+
+SELECT CASE WHEN (SELECT count(*) FROM mrraw) <> (SELECT count(*) FROM raw)
+            THEN CAST('mrraw has a different row count than raw' AS BIGINT) ELSE 0 END AS mr_check;
+""")
+
     parts.append(f"""
 CREATE OR REPLACE TABLE feat_cur (id BIGINT, split VARCHAR, label VARCHAR, f DOUBLE[]);
 CREATE OR REPLACE TABLE train_cur (y VARCHAR, {schema_cols});
@@ -616,10 +697,14 @@ CREATE OR REPLACE TABLE all_groups (grp BIGINT, id BIGINT, proba MAP(VARCHAR, DO
 
 PREPARE fill_feat AS
   INSERT INTO feat_cur
-  SELECT id, split, label,
-         rocket_transform(values, {config.kernels_per_group}, {config.seed},
-                          CAST($1 AS BIGINT))
-  FROM raw;
+  {("SELECT r.id, r.split, r.label, "
+    f"m.mr[CAST($1 AS BIGINT) + 1 : CAST($1 AS BIGINT) + {n_features}] "
+    "FROM raw r JOIN mrraw m USING (id)"
+    ) if use_multirocket else
+   ("SELECT id, split, label, "
+    f"rocket_transform(values, {config.kernels_per_group}, {config.seed}, CAST($1 AS BIGINT)) "
+    "FROM raw"
+    )};
 
 -- ORDER BELOW IS LOAD-BEARING. Nothing may be PREPAREd against an empty source table.
 --
@@ -695,11 +780,19 @@ PREPARE score AS
 """)
 
     for g in range(config.n_groups):
-        first_kernel = g * config.kernels_per_group
+        # fill_feat's $1 means two different things depending on the mode: a kernel-bank offset
+        # for rocket_transform, or a feature-list offset into mrraw.mr for multirocket -- they
+        # are not the same arithmetic (features_per_group is 2x kernels_per_group), so using one
+        # where the other is wanted would silently score every group against a shifted or
+        # overlapping slice.
+        first_kernel = g * n_features if use_multirocket else g * config.kernels_per_group
+        group_desc = (f"feature offset [{first_kernel}, {first_kernel + n_features})"
+                     if use_multirocket else
+                     f"global kernel indices [{first_kernel}, {first_kernel + config.kernels_per_group})")
         # DELETE rather than CREATE OR REPLACE: replacing the table swaps the catalog entry the
         # prepared statements are bound to. Refilling keeps the entry, which is the whole point.
         parts.append(f"""
--- Group {g}: global kernel indices [{first_kernel}, {first_kernel + config.kernels_per_group}).
+-- Group {g}: {group_desc}.
 INSERT INTO timings VALUES ({g}, 'group_start', current_timestamp);
 DELETE FROM feat_cur;
 EXECUTE fill_feat({first_kernel});
@@ -874,7 +967,7 @@ def main() -> int:
     parser.add_argument(
         "--features",
         default="rocket",
-        choices=("rocket", "ts", "catch22", "both", "both22"),
+        choices=("rocket", "ts", "catch22", "both", "both22", "multirocket"),
         help="Which feature families the classifier sees. 'rocket' is the 500 "
              "random-convolution features per group behind every result so far. 'ts' is "
              "anofox_forecast's 116 in-database statistics -- univariate only, and it forces "
@@ -883,7 +976,12 @@ def main() -> int:
              "at +0.0092 mean (p~0.019, R=1 over 27 hard datasets, PLAN.md 7b') but not shippable "
              "for the same licence reason. 'catch22' is the distributable stand-in -- 22 aeon "
              "statistics (MIT, already a dependency), same univariate/--n-groups 1 restriction. "
-             "'both22' is rocket+catch22: the shippable version of the 'both' measurement.",
+             "'both22' is rocket+catch22: the shippable version of the 'both' measurement. "
+             "'multirocket' swaps rocket_transform out entirely for aeon's MultiRocket (MIT, "
+             "already a dependency), run as G independently-seeded groups the same shape as "
+             "rocket's -- an extractor-choice experiment, not a concatenation, motivated by "
+             "TS2TabPFN (arXiv 2608.04174) reporting a bigger Rocket-vs-MultiRocket gap under a "
+             "TabPFN-family classifier than RocketPFN's own ablation found.",
     )
     parser.add_argument(
         "--anofox-extension",
@@ -1025,10 +1123,11 @@ def main() -> int:
     ts_names: list[str] = []
     catch22_names: list[str] = []
     catch22_parquet: Path | None = None
-    if args.features in ("ts", "catch22", "both", "both22"):
+    multirocket_parquet: Path | None = None
+    if args.features in ("ts", "catch22", "both", "both22", "multirocket"):
         if meta["multivariate"]:
-            print(f"      --features {args.features} is univariate only: ts_features_by and "
-                  f"catch22 both take one channel and {args.dataset} has "
+            print(f"      --features {args.features} is univariate only: ts_features_by, "
+                  f"catch22 and MultiRocket all take one channel and {args.dataset} has "
                   f"{meta['n_channels']} channels")
             return 1
     if args.features in ("ts", "both"):
@@ -1041,6 +1140,12 @@ def main() -> int:
         catch22_parquet = write_catch22_parquet(meta["raw_parquet"], workdir)
         print(f"      + {len(catch22_names)} catch22 statistics per series "
               f"({args.features}); MIT, distributable", flush=True)
+    if args.features == "multirocket":
+        multirocket_parquet = write_multirocket_parquet(
+            meta["raw_parquet"], workdir, config.n_groups, config.features_per_group, config.seed)
+        print(f"      + multirocket replaces rocket_transform entirely: {config.n_groups} "
+              f"independently-seeded groups of {config.features_per_group} features "
+              f"(aeon MultiRocket, MIT)", flush=True)
 
     sql = build_sql(config, meta, workdir, args.threads, memory_limit, workdir,
                     args.test_chunk, onnx_threads, load_rocket,
@@ -1050,6 +1155,8 @@ def main() -> int:
                     features=args.features, ts_names=ts_names,
                     catch22_names=catch22_names,
                     catch22_parquet=(catch22_parquet.as_posix() if catch22_parquet else None),
+                    multirocket_parquet=(multirocket_parquet.as_posix()
+                                        if multirocket_parquet else None),
                     per_group=args.per_group_soft,
                     tabfm_max_memory=args.tabfm_max_memory,
                     context_cache=args.context_cache)

@@ -968,6 +968,23 @@ computed. **Do not size a further resample campaign from the old estimate.**
 
 ## Phase 8 — MultiRocket as an extractor swap (literature-motivated, not a Phase 7 reopen)
 
+> **PHASE 8 CLOSED, 2026-08-22. Negative, and the strongest negative this project has measured.**
+> Same 29 hard datasets, same `resample_power.py --arms features_mr` pairing `features22` used.
+> Mean delta **−0.05972**, SE 0.01662, t=−3.59 on 28 df (p≈0.0013 — this clears significance even
+> at R=1, unlike `both22`'s p≈0.12). 7 wins, 1 tie, 21 losses; net 513 rows lost of 7,943. Full
+> table and the fingerprint bug found and fixed mid-campaign: RESULTS.md, "MultiRocket as an
+> extractor swap." Not resampled further — the sign is not in question at this SE, and per the
+> checklist below a clear negative closes rather than invites another variant.
+>
+> **Caveat that matters for anyone revisiting this:** the MultiRocket instances tested were forced
+> to `n_kernels=84` (aeon's floor) to fit `features_per_group=500` per independent group, which
+> gives exactly one dilation — a far weaker configuration than either paper that motivated this
+> phase actually ran (TS2TabPFN uses thousands of kernels and dozens of dilations in one shared
+> transform). This result closes "MultiRocket forced into ROCKET's G=40-independent-groups
+> scheme at the minimum viable kernel count," not "MultiRocket as a feature family" in general. A
+> fair test of the latter would need one well-powered shared transform rather than G independent
+> floor-strength ones, which is a differently-shaped experiment, not a bigger version of this one.
+
 Phase 7 closed the *concatenation* route (add a second feature family, `both`/`both22`) as not
 shippable. This is a different axis: swap `rocket_transform` itself for aeon's MultiRocket, same
 G=40 independent groups, same 500 features/group, same 29 hard datasets, same paired driver. It
@@ -1004,11 +1021,13 @@ Verified end to end on GunPoint (CPU, local): `mr_check`/`prime_check`/`features
 the 92-dataset table). Precompute cost checked on the longest hard dataset, InlineSkate (650
 series, 1,882 timepoints): 22.6 s for all 40 groups — negligible next to `tabfm_classify`.
 
-- [ ] Run `resample_power.py --arms features_mr` over the same 29 hard datasets `features22` used
-      (`reference/resample/features22/`'s dataset names), R=1 first, same growable design.
-- [ ] If it moves anything, resample further before reading the sign; if not, close it the same
+- [x] Run `resample_power.py --arms features_mr` over the same 29 hard datasets `features22` used
+      (`reference/resample/features22/`'s dataset names), R=1 first, same growable design. **Done
+      2026-08-22**, 399.1 min at `--jobs 2` on a 20.4-core / 116 GB pod.
+- [x] If it moves anything, resample further before reading the sign; if not, close it the same
       honest way `both22` closed — a measured negative is still the answer, not a reason to keep
-      trying variants.
+      trying variants. **Closed negative** — see the verdict block above; not resampled further
+      because p≈0.0013 already settles the sign.
 
 ## Standing risks
 

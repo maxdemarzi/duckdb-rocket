@@ -2249,6 +2249,98 @@ guard beside the existing `D < 2` one: mean and SE are returned (both valid at R
 and every plan sized from it are withheld. Resampling here would nearly halve the SE (R=3 → 0.0025,
 108 new runs, ~28 h), the opposite of what was printed.
 
+## Phase 8 — MultiRocket as an extractor swap: negative, and worse than either feature-family experiment
+
+A literature check (2026-08-22, see PLAN.md Phase 8) found two things in tension. RocketPFN's own
+ablation (arXiv 2606.21786 S4.7, read directly) says extractor choice — Rocket, MiniRocket or
+MultiRocket — differs by under 0.006 mean accuracy once G>=5, which should make this experiment a
+non-event. TS2TabPFN (arXiv 2608.04174, ECML PKDD 2026 — the paper and its code repository were
+both verified to actually exist before citing them) measured a much bigger gap: MultiROCKET
+reaching HC2 parity where plain ROCKET was significantly worse, under a TabPFN-family classifier.
+Different ensembling scheme (TabPFN's own internal feature subsampling, not a manual G-group
+average) and it never compares against RocketPFN, so cheap to test directly rather than referee
+between two papers that don't cite each other. This is a different axis from Phase 7b′'s
+concatenation experiments above — an extractor swap, not a second family added alongside ROCKET —
+so it is its own phase rather than a Phase 7 reopen; see PLAN.md.
+
+`--features multirocket` runs G=40 **independently-seeded** `aeon.MultiRocket` instances, one per
+group, each producing `features_per_group` columns exactly where `rocket_transform` would — see
+`write_multirocket_parquet()`. The one implementation constraint worth stating plainly: aeon's
+MultiRocket needs `n_kernels >= 84` (its fixed kernel-shape count; anything smaller divides by
+zero), and at that floor it produces 672 features, more than enough to crop to 500 but resting on
+a single dilation (`max_dilations_per_kernel` never gets exercised at 84 kernels). **This is a far
+weaker MultiRocket than either paper ran** — TS2TabPFN's own config uses thousands of kernels and
+dozens of dilations in one transform. What this experiment actually measures is "MultiRocket
+forced into ROCKET's G=40-independent-groups-of-500 scheme at the minimum viable kernel count," not
+MultiRocket at the scale either paper used it.
+
+**A real bug, found on the pod, fixed before any number was trusted.** The per-group
+duplicate-refill guard (`f0_checks.fingerprint`, `distinct_group_banks == 40`) reuses ROCKET's
+design: `sum(r.f[1])` is a safe fingerprint for `rocket_transform` because kernel 0 is a literally
+different kernel in every group (the PRNG stream is sliced by `first_kernel`). MultiRocket has no
+such guarantee at feature *index* 0 specifically — at the 84-kernel floor the one available
+dilation is fixed regardless of `random_state`, so column 0 collides across many groups even
+though the full 500-wide vectors differ. First live symptom: `Lightning2` arm B failed with "33
+distinct kernel banks across 40 groups" on an otherwise-clean run (accuracy and row alignment both
+fine). Reproduced locally on synthetic data (20/40 distinct on a fresh RNG draw) and confirmed
+`sum(list_sum(r.f))` — the whole vector, not one column — gives 40/40 distinct on the same data.
+Fixed, re-verified end to end on the same dataset, and the four already-affected sidecars were
+deleted and recomputed before the campaign continued (`e128997`).
+
+**Result: negative, and the strongest negative in this project.** Same 29 hard datasets, same
+`resample_power.py` pairing as `features22`. Mean delta **−0.05972**, SE 0.01662, t=−3.59 on 28 df
+(p≈0.0013 — unlike `both22`'s p≈0.12, this clears significance even at R=1). B (multirocket) wins
+7 datasets, ties 1, loses 21 — net **513 rows lost of 7,943**, an order of magnitude past
+`both22`'s net 43.
+
+| dataset | delta | in test rows |
+|---|---|---|
+| InlineSkate | +0.0891 | +49 of 550 |
+| Lightning7 | +0.0274 | +2 of 73 |
+| WormsTwoClass | +0.0260 | +2 of 77 |
+| ProximalPhalanxTW | +0.0244 | +5 of 205 |
+| SmallKitchenAppliances | +0.0187 | +7 of 375 |
+| DistalPhalanxOutlineAgeGroup | +0.0144 | +2 of 139 |
+| ProximalPhalanxOutlineAgeGroup | +0.0049 | +1 of 205 |
+| Earthquakes | 0.0000 | +0 of 139 |
+| Worms | −0.0130 | −1 of 77 |
+| DistalPhalanxOutlineCorrect | −0.0145 | −4 of 276 |
+| MiddlePhalanxOutlineAgeGroup, MiddlePhalanxTW | −0.0195 | −3 of 154 (each) |
+| ACSF1 | −0.0300 | −3 of 100 |
+| Computers, LargeKitchenAppliances | −0.0320 | −8 of 250, −12 of 375 |
+| MedicalImages | −0.0421 | −32 of 760 |
+| ScreenType | −0.0533 | −20 of 375 |
+| DistalPhalanxTW | −0.0576 | −8 of 139 |
+| RefrigerationDevices | −0.0720 | −27 of 375 |
+| MiddlePhalanxOutlineCorrect | −0.0825 | −24 of 291 |
+| Herring | −0.0938 | −6 of 64 |
+| ArrowHead | −0.0971 | −17 of 175 |
+| Lightning2 | −0.0984 | −6 of 61 |
+| SemgHandSubjectCh2 | −0.1311 | −59 of 450 |
+| Beef | −0.1333 | −4 of 30 |
+| Haptics | −0.1591 | −49 of 308 |
+| Ham | −0.1810 | −19 of 105 |
+| SemgHandMovementCh2 | −0.2289 | −103 of 450 |
+| EthanolLevel | −0.3460 | −173 of 500 |
+
+**Reading the tails, not just the mean.** `EthanolLevel` (−173 rows) and `SemgHandMovementCh2`
+(−103 rows) are the two heaviest losses by a wide margin, and both are long, noisy series where a
+single-dilation extractor has the least to work with — consistent with the "weaker MultiRocket
+than either paper ran" caveat above, not with a claim that MultiRocket itself is worse than ROCKET
+in general. The result closes *this* configuration — G independent floor-kernel-count instances —
+not the general question of MultiRocket as a feature family, which would need a differently-shaped
+experiment (one shared, well-powered MultiRocket transform, the way both source papers actually run
+it) to test honestly. That experiment is not free: it would need either abandoning the per-group
+independence this pipeline's ensembling assumes, or accepting the column-layout risk documented in
+`write_multirocket_parquet()` from slicing one transform's dilation-block-ordered output into
+groups. Not run here; PLAN.md Phase 8 closes on the configuration actually tested.
+
+Campaign wall clock: 399.1 min ≈ 6.65 h at `--jobs 2` on a 20.4-core CFS quota / 116 GB pod — under
+half of `features22`'s 14.0 h despite testing more expensive per-run code (each `multirocket` run
+also pays a G x `MultiRocket(n_kernels=84)` Python precompute, measured at 22.6 s on the longest
+hard dataset and negligible against `tabfm_classify`). Artefacts: `reference/features_mr_r1.json`,
+`reference/resample/features_mr/` (116 sidecars), `reference/resample/feat_mr_r1.log`.
+
 ## Not done
 
 - **A noise floor worth the name, and it is now the binding constraint.** One was measured (0.0509)

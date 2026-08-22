@@ -1,0 +1,97 @@
+memory_limit 34GB per run x 2 jobs
+29 datasets x 1 resamples x 2 arms = 58 runs
+comparison 'features_mr':
+  A --num-kernels 10000 --n-groups 40 --features rocket
+  B --num-kernels 10000 --n-groups 40 --features multirocket
+warming the dataset cache for 29 datasets
+  Herring r1 A  acc=0.6719  127s
+  Lightning2 r1 A  acc=0.7541  131s
+  Lightning2 r1 B  acc=0.6557  131s
+  MiddlePhalanxTW r1 A  acc=0.5649  733s
+  Herring r1 B  acc=0.5781  134s
+  Lightning7 r1 A  acc=0.7534  145s
+  Lightning7 r1 B  acc=0.7808  147s
+  Ham r1 A  acc=0.7714  199s
+  Ham r1 B  acc=0.5905  196s
+  Beef r1 A  acc=0.7333  91s
+  MiddlePhalanxTW r1 B  acc=0.5455  730s
+  Beef r1 B  acc=0.6000  90s
+  ACSF1 r1 B  acc=0.8100  180s
+  ACSF1 r1 A  acc=0.8400  200s
+  Worms r1 A  acc=0.7662  241s
+  Worms r1 B  acc=0.7532  226s
+  WormsTwoClass r1 B  acc=0.8182  226s
+  WormsTwoClass r1 A  acc=0.7922  241s
+  ArrowHead r1 A  acc=0.8857  255s
+  ArrowHead r1 B  acc=0.7886  256s
+  Haptics r1 B  acc=0.4545  657s
+  Haptics r1 A  acc=0.6136  690s
+  RefrigerationDevices r1 B  acc=0.7067  1148s
+  RefrigerationDevices r1 A  acc=0.7787  1184s
+  ScreenType r1 B  acc=0.6133  1148s
+  ScreenType r1 A  acc=0.6667  1169s
+  Earthquakes r1 A  acc=0.7482  637s
+  Earthquakes r1 B  acc=0.7482  630s
+  InlineSkate r1 B  acc=0.5782  907s
+  InlineSkate r1 A  acc=0.4891  974s
+  DistalPhalanxTW r1 A  acc=0.7554  728s
+  DistalPhalanxTW r1 B  acc=0.6978  741s
+  Computers r1 A  acc=0.8840  613s
+  Computers r1 B  acc=0.8520  599s
+  DistalPhalanxOutlineAgeGroup r1 A  acc=0.8273  736s
+  DistalPhalanxOutlineAgeGroup r1 B  acc=0.8417  746s
+  ProximalPhalanxOutlineAgeGroup r1 A  acc=0.8683  763s
+  ProximalPhalanxOutlineAgeGroup r1 B  acc=0.8732  780s
+  ProximalPhalanxTW r1 A  acc=0.8098  768s
+  ProximalPhalanxTW r1 B  acc=0.8341  782s
+  SmallKitchenAppliances r1 A  acc=0.8240  1174s
+  SmallKitchenAppliances r1 B  acc=0.8427  1151s
+  LargeKitchenAppliances r1 A  acc=0.9280  1174s
+  LargeKitchenAppliances r1 B  acc=0.8960  1143s
+  MiddlePhalanxOutlineCorrect r1 A  acc=0.8454  1542s
+  MiddlePhalanxOutlineCorrect r1 B  acc=0.7629  1555s
+  DistalPhalanxOutlineCorrect r1 A  acc=0.8551  1539s
+  DistalPhalanxOutlineCorrect r1 B  acc=0.8406  1537s
+  SemgHandSubjectCh2 r1 A  acc=0.9333  1787s
+  SemgHandSubjectCh2 r1 B  acc=0.8022  1694s
+  EthanolLevel r1 A  acc=0.7980  1852s
+  EthanolLevel r1 B  acc=0.4520  1850s
+  SemgHandMovementCh2 r1 B  acc=0.6111  1702s
+  SemgHandMovementCh2 r1 A  acc=0.8400  1782s
+  MedicalImages r1 A  acc=0.8447  2305s
+  MedicalImages r1 B  acc=0.8026  2327s
+  MiddlePhalanxOutlineAgeGroup r1 A  acc=0.6948  737s
+  MiddlePhalanxOutlineAgeGroup r1 B  acc=0.6753  742s
+  ACSF1                      R=1 mean delta -0.0300
+  ArrowHead                  R=1 mean delta -0.0971
+  Beef                       R=1 mean delta -0.1333
+  Computers                  R=1 mean delta -0.0320
+  DistalPhalanxOutlineAgeGroup R=1 mean delta +0.0144
+  DistalPhalanxOutlineCorrect R=1 mean delta -0.0145
+  DistalPhalanxTW            R=1 mean delta -0.0576
+  Earthquakes                R=1 mean delta +0.0000
+  EthanolLevel               R=1 mean delta -0.3460
+  Ham                        R=1 mean delta -0.1810
+  Haptics                    R=1 mean delta -0.1591
+  Herring                    R=1 mean delta -0.0938
+  InlineSkate                R=1 mean delta +0.0891
+  LargeKitchenAppliances     R=1 mean delta -0.0320
+  Lightning2                 R=1 mean delta -0.0984
+  Lightning7                 R=1 mean delta +0.0274
+  MedicalImages              R=1 mean delta -0.0421
+  MiddlePhalanxOutlineAgeGroup R=1 mean delta -0.0195
+  MiddlePhalanxOutlineCorrect R=1 mean delta -0.0825
+  MiddlePhalanxTW            R=1 mean delta -0.0195
+  ProximalPhalanxOutlineAgeGroup R=1 mean delta +0.0049
+  ProximalPhalanxTW          R=1 mean delta +0.0244
+  RefrigerationDevices       R=1 mean delta -0.0720
+  ScreenType                 R=1 mean delta -0.0533
+  SemgHandMovementCh2        R=1 mean delta -0.2289
+  SemgHandSubjectCh2         R=1 mean delta -0.1311
+  SmallKitchenAppliances     R=1 mean delta +0.0187
+  Worms                      R=1 mean delta -0.0130
+  WormsTwoClass              R=1 mean delta +0.0260
+
+  R=1 on every dataset: var_within is UNMEASURABLE, not zero, so the between/within split and every campaign plan built on it are withheld. The effect itself is unaffected: mean -0.05972, SE 0.01661 over 29 paired datasets. Do NOT read this as evidence that resampling cannot help -- that question needs R>=2 to even ask. Re-run with --resamples 3 to size anything.
+
+wrote reference/features_mr_r1.json  (399.1 min)

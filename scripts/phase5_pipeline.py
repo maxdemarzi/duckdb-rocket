@@ -432,6 +432,17 @@ def build_sql(config: RocketPFNConfig, meta: dict, outdir: Path, threads: int,
     # getting a parallel set of branches that would have to be kept in step with them by hand.
     rocket_names = [f"f{j}" for j in range(n_features)] if (use_rocket or use_multirocket) else []
     ts_only_names = list(ts_names) if use_ts else []
+
+    # sum(r.f[1]) is a reliable per-group fingerprint for rocket_transform because kernel 0 is
+    # LITERALLY a different kernel in every group (the PRNG stream is sliced by first_kernel), so
+    # distinct groups guarantee a distinct column 1. MultiRocket has no such guarantee at feature
+    # INDEX 0 specifically: at n_kernels=84 (the floor write_multirocket_parquet uses) the single
+    # available dilation is fixed regardless of random_state, and empirically a large fraction of
+    # groups collide on column 0 alone even though their FULL feature vectors differ (measured: 20
+    # of 40 distinct on synthetic data, 33 of 40 on Lightning2 -- both false failures on a real
+    # ensemble). list_sum(r.f) fingerprints the whole 500-wide vector instead of one column, and
+    # measured distinct on all 40 groups where the single-column check falsely failed.
+    fingerprint_expr = "sum(list_sum(r.f))" if use_multirocket else "sum(r.f[1])"
     catch22_only_names = list(catch22_names) if use_catch22 else []
     # Mutually exclusive by construction (features admits only one non-rocket family at a time), so
     # concatenating rather than branching keeps every line below oblivious to which family it is.
@@ -808,8 +819,8 @@ INSERT INTO f0_checks
 -- The failure the old column stood in for is covered directly by min/max groups per row.
 -- Counted on the actual join key, not on the rocket vector: under --features ts/catch22 the key is
 -- the statistics and a duplicate count over `f` would describe columns the classifier never saw.
--- The fingerprint stays r.f[1], which is the kernel bank and is what that column is for.
-SELECT {g}, count(*) - count(DISTINCT ({key_from_list})), sum(r.f[1])
+-- The fingerprint is {fingerprint_expr}, which is the kernel bank and is what that column is for.
+SELECT {g}, count(*) - count(DISTINCT ({key_from_list})), {fingerprint_expr}
   FROM {feat_from} WHERE r.split = 'test';
 DELETE FROM train_cur;
 EXECUTE fill_train;

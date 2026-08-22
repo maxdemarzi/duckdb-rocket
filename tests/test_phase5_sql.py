@@ -514,6 +514,16 @@ def test_multirocket_does_not_force_a_single_group():
     build_features("multirocket", n_groups=40)  # must not raise
 
 
+def test_multirocket_fingerprint_sums_the_whole_vector_not_one_column():
+    # sum(r.f[1]) is reliable for rocket_transform because kernel 0 is a different kernel in every
+    # group by construction. MultiRocket has no such guarantee at feature index 0 specifically --
+    # measured 20/40 and 33/40 false collisions on column 0 alone across groups whose full 500-wide
+    # vectors genuinely differed. list_sum(r.f) fingerprints the whole vector instead.
+    sql = build_features("multirocket")
+    assert "list_sum(r.f)" in sql
+    assert "sum(r.f[1])" not in sql
+
+
 def test_multirocket_group_offsets_are_feature_indexed_not_kernel_indexed():
     # fill_feat's $1 means "kernel-bank offset" for rocket_transform but "feature-list offset
     # into mrraw.mr" for multirocket -- 500 features/group here, not 250 kernels/group, so group 1

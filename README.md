@@ -178,6 +178,22 @@ labelled training set before it looks at a single query row**. That re-encoding 
 call, whether or not the context changed since the last one. "Large table" almost always means
 "many rows to classify," and the fixed fee is what makes that expensive, not the convolution.
 
+Concretely, this is the call every group of every batch makes (`build_sql` in
+`scripts/phase5_pipeline.py`, trimmed here to the shape that matters):
+
+```sql
+-- train_cur is the labelled context; test_cur is however many test rows this call carries.
+-- The cost below is dominated by ENCODING train_cur, which happens fresh on every call --
+-- there is no prepare-the-context-once, query-it-many-times split in this API.
+SELECT * FROM tabfm_classify('train_cur', 'y', test := 'test_cur',
+                             model := 'tabicl-v2', features := ['f0', 'f1', ..., 'f499']);
+```
+
+Ten calls against a 100-row `train_cur`, one row of `test_cur` each, pay that encoding ten times.
+One call against the same context with all ten test rows pays it once. Same `train_cur`, same
+answers — the only thing that changed is how many times the fixed fee was charged. That's the
+whole argument behind items 2 and 3 below.
+
 That reframes "should I sample?" into two different questions with different answers:
 
 - **Sampling the *test* rows** — the ones you're classifying — doesn't save you anything you
@@ -207,6 +223,12 @@ That reframes "should I sample?" into two different questions with different ans
   rows** ([arXiv:2502.05564](https://arxiv.org/pdf/2502.05564)) — is a reasonable starting point,
   well inside TabPFN's 10,000-row ceiling.
 
+  ```bash
+  # Stratified by class, deterministic given --seed. Reaches for memory-fit or the TabPFN
+  # ceiling, NOT speed -- see the 1.48x-for--0.0168 trade above before reaching for this first.
+  uv run python scripts/phase5_pipeline.py --dataset YourDataset --max-train-rows 5000
+  ```
+
 In the order they're worth trying, measured on 28-29 hard UCR datasets
 ([docs/ROUTING.md](docs/ROUTING.md), [reference/RESULTS.md](reference/RESULTS.md)):
 
@@ -214,6 +236,12 @@ In the order they're worth trying, measured on 28-29 hard UCR datasets
    paper's G=40 measured **3.7-3.8x faster** for −0.0033 mean accuracy (not statistically
    different from zero). This is the single biggest lever with the smallest accuracy cost, and
    it's why `--n-groups 10` is the shipped default rather than 40.
+
+   ```bash
+   # 40 groups x 250 kernels (the paper's config) -> 10 groups x 250 kernels: ~4x faster
+   uv run python scripts/phase5_pipeline.py --dataset YourDataset \
+       --num-kernels 2500 --n-groups 10
+   ```
 2. **Batch calls; don't shrink them.** The context-encoding fee is per *call*, not per row, so one
    big `--test-chunk` amortises it and many small ones re-pay it every time — chunking finer than
    necessary measured **2.18x slower** on whole-dataset runs. Set `--test-chunk` to the largest
@@ -221,6 +249,12 @@ In the order they're worth trying, measured on 28-29 hard UCR datasets
    that feels safe. TabPFN's own guidance for large test sets converges on the same idea from the
    opposite direction — chunk test inference into batches on the order of 1,000 rows rather than
    one call per row — which is a floor to start from, not a ceiling to stay under.
+
+   ```bash
+   # One tabfm_classify call per 1,024 test rows instead of the default one call per group's
+   # WHOLE test set (unchunked) or a too-small chunk you picked out of caution.
+   uv run python scripts/phase5_pipeline.py --dataset YourDataset --test-chunk 1024
+   ```
 3. **Route: run a cheap model on everything, escalate only what it's unsure of.** This is the
    lever aimed specifically at "many rows." Train a ROCKET-features-plus-ridge (or
    `MultiRocketHydraClassifier`) student — milliseconds per row — and send only its
@@ -229,8 +263,18 @@ In the order they're worth trying, measured on 28-29 hard UCR datasets
    cost. The student's own uncertainty picks better-than-random rows to escalate — about 3x the
    signal of escalating a random 20% (p≈0.01), which is the actual claim, not just "escalating
    helps." Full method, the confidence-margin code, and the "why this works but distillation
-   doesn't" analysis: [docs/ROUTING.md](docs/ROUTING.md). Tooling:
-   `scripts/distill_gate.py --route` and `scripts/route_serve.py`.
+   doesn't" analysis: [docs/ROUTING.md](docs/ROUTING.md).
+
+   ```bash
+   # Fit the student + calibrate the escalation threshold once (per dataset):
+   uv run python scripts/distill_gate.py --route \
+       --from-gate reference/distill_gate.json --max-student 0.90 \
+       --jobs 7 --out reference/distill_route.json
+
+   # Deploy it, then serve a batch through the real extension end to end:
+   uv run python scripts/route_serve.py deploy --dataset YourDataset --target 0.20
+   uv run python scripts/route_serve.py serve --dataset YourDataset --batch 128 --compare
+   ```
 4. **Distillation — replacing the teacher entirely — is the one that sounds obvious and measured
    negative.** Label an unlabelled pool once with the teacher, train a cheap student on those
    pseudo-labels, then never run the teacher again. Gated on 67 datasets and it does not clear the

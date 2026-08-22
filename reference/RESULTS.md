@@ -1934,16 +1934,31 @@ project and not new to this result:**
    (ECG5000, Phase 5). The capped datasets scored **0.8667** on average against **0.8793** for
    the other 75 — a 1.3-point gap that may be the cap's cost, or may just be that these
    particular datasets are harder; the two are not disentangled by this run.
-3. **`HandOutlines` ran on CPU, not GPU.** It hit a reproducible ORT VRAM allocation failure
-   specific to it — `Failed to allocate memory for requested buffer of size 4420336384` on a
-   Softmax node, with 48 GB of VRAM completely free at the time, and *worse* (41 GB used and
-   climbing, killed rather than let run) when the context and test-chunk were both shrunk, which
-   rules out simple memory pressure. Not chased further: one dataset, and the CPU path is this
-   project's most heavily verified code path. Same `--max-train-rows 500 --test-chunk 128`
-   otherwise; accuracy is deterministic given device, precision and split, so CPU vs. GPU should
-   not itself move the number (Phase 5's GunPoint control already established this) — flagged as
-   an open question rather than asserted, since a genuine device-dependent numerical difference
-   has not been ruled out for this one dataset the way it was for GunPoint.
+3. **`HandOutlines` ran on CPU, not GPU, after a crash that would not reproduce standalone.**
+   Mid-sweep it hit `Failed to allocate memory for requested buffer of size 4420336384` on a
+   Softmax node, with 48 GB of VRAM completely free, and got *worse* (41 GB used and climbing,
+   killed rather than let run) when the context and test-chunk were both shrunk — which already
+   argued against ordinary memory pressure. The leading hypothesis afterward was the data itself:
+   `HandOutlines`, at this exact series length (2,709) and seed, produces an unusually high count
+   of fully-constant ROCKET/PPV columns (46 of 500, against 0-20 for other long-series datasets
+   checked) — a real, measured property, not a guess. **That hypothesis did not survive testing.**
+   Two isolated reproductions on a fresh pod — the exact failing feature matrix with the 46
+   constant columns perturbed by noise, and separately the pipeline's own `build_sql`-generated
+   SQL run standalone for just this dataset's first group — both completed cleanly with the GPU
+   fully idle before and after. The crash did not depend on the data being constant, and did not
+   depend on anything specific to this dataset's SQL. What's left, unconfirmed: `HandOutlines` was
+   the 53rd of 92 sequential `phase5_pipeline.py` subprocesses on one long-running GPU, each
+   creating and tearing down its own CUDA context, and the failure may be transient driver/ORT
+   allocator state from that history rather than anything this project's code controls — plausible
+   but **not demonstrated**, since later datasets (`ElectricDevices` #91, `StarLightCurves` #92)
+   ran fine despite far more preceding subprocess launches, which a simple "fragmentation only
+   accumulates" story does not explain either. **Not filed upstream**: a bug report needs a
+   reproduction, and this project does not have one — only a failure that happened once, in a
+   context that could not be reconstructed in isolation. Ran on CPU instead, same
+   `--max-train-rows 500 --test-chunk 128` otherwise; accuracy is deterministic given device,
+   precision and split, so this should not itself move the number (Phase 5's GunPoint control
+   established that for the general case), but a device-dependent difference specific to this one
+   dataset has not been ruled out the way it was for GunPoint.
 
 **Range: 0.4909 (`InlineSkate`) to 1.0000 (four datasets tied).** `InlineSkate`'s low score is not
 a new finding — Phase 7's write-up already recorded that 29 of its 550 test series are

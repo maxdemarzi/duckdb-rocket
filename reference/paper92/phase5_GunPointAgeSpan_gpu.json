@@ -1,0 +1,70 @@
+{
+  "dataset": "GunPointAgeSpan",
+  "model": "tabicl-v2",
+  "device": "cuda",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "catch22_feature_source": null,
+  "anofox_extension": "/workspace/anofox_gpu/anofox_tabfm.duckdb_extension",
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "resample": 0,
+    "threads": 4,
+    "memory_limit": "50GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128,
+    "context_cache": false,
+    "onnx_threads": 2,
+    "cpu_count_source": "cgroup v1 cfs_quota"
+  },
+  "shape": {
+    "dataset": "GunPointAgeSpan",
+    "n_train": 135,
+    "n_test": 316,
+    "n_channels": 1,
+    "n_timepoints": 150,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/GunPointAgeSpan/raw.parquet"
+  },
+  "accuracy": 0.9841772151898734,
+  "row_alignment": {
+    "predicted_rows": 316,
+    "distinct_ids": 316,
+    "group_rows": 12640,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 6.01,
+    "classify_seconds": 52.99,
+    "classify_share": 0.8981,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 1.213,
+      "classify_median": 1.287,
+      "classify_max": 2.49,
+      "max_over_median": 1.93
+    }
+  },
+  "failures": [],
+  "seconds": 59.9,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.5.0-35-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 112,
+    "containerised": true
+  },
+  "caveat": null
+}

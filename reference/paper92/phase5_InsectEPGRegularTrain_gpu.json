@@ -1,0 +1,70 @@
+{
+  "dataset": "InsectEPGRegularTrain",
+  "model": "tabicl-v2",
+  "device": "cuda",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "catch22_feature_source": null,
+  "anofox_extension": "/workspace/anofox_gpu/anofox_tabfm.duckdb_extension",
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "resample": 0,
+    "threads": 4,
+    "memory_limit": "50GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128,
+    "context_cache": false,
+    "onnx_threads": 2,
+    "cpu_count_source": "cgroup v1 cfs_quota"
+  },
+  "shape": {
+    "dataset": "InsectEPGRegularTrain",
+    "n_train": 62,
+    "n_test": 249,
+    "n_channels": 1,
+    "n_timepoints": 601,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/InsectEPGRegularTrain/raw.parquet"
+  },
+  "accuracy": 0.9879518072289156,
+  "row_alignment": {
+    "predicted_rows": 249,
+    "distinct_ids": 249,
+    "group_rows": 9960,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 12.27,
+    "classify_seconds": 34.64,
+    "classify_share": 0.7385,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 0.766,
+      "classify_median": 0.829,
+      "classify_max": 2.046,
+      "max_over_median": 2.47
+    }
+  },
+  "failures": [],
+  "seconds": 48.0,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.5.0-35-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 112,
+    "containerised": true
+  },
+  "caveat": null
+}

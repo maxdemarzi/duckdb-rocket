@@ -505,7 +505,17 @@ step.
       re-run on the same GPU build immediately before and returned its recorded CPU accuracy
       exactly (0.9933), which is what makes the GPU row comparable rather than a separate result.
       `reference/RESULTS.md` has both, archived as `reference/phase5_{ECG5000,GunPoint}_gpu.json`.
-- [ ] Expand toward the paper's 92-dataset / 30-resample protocol if timing permits
+- [x] **Expand toward the paper's 92-dataset protocol, 2026-08-21.** Not the 30-resample average
+      — one split each (the archive's own, resample 0), which is what made this affordable now
+      that the GPU build is real: **6.3h GPU pod time for all 92**, at ~$0.74/hr. **Mean accuracy
+      0.8770**, against the paper's 0.900 — a 2.3-point gap, on a single split rather than their
+      30-resample average, `tabicl-v2` e=1 G=40 rather than their `tabpfn-v2-5` e=8, and 17 of 92
+      datasets with their training context capped at 500 rows (stratified) because their native
+      train split (up to `ElectricDevices`' 8926) was far past anything this pipeline had run
+      through `tabfm_classify` before. Full table, methodology and the capped-vs-uncapped
+      breakdown in RESULTS.md, "The paper's 92-dataset protocol." One dataset
+      (`HandOutlines`) hit a reproducible ORT VRAM allocation failure on CUDA specific to it and
+      ran on CPU instead — same config otherwise, disclosed in the table.
 - [x] Compare wall-clock against the paper's ~30s/fold median — **answerable now that transform
       and classify are timed separately**, and the answer is that the two halves land on opposite
       sides of it.

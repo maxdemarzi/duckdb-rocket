@@ -1,0 +1,70 @@
+{
+  "dataset": "FreezerSmallTrain",
+  "model": "tabicl-v2",
+  "device": "cuda",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "catch22_feature_source": null,
+  "anofox_extension": "/workspace/anofox_gpu/anofox_tabfm.duckdb_extension",
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "resample": 0,
+    "threads": 4,
+    "memory_limit": "50GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128,
+    "context_cache": false,
+    "onnx_threads": 2,
+    "cpu_count_source": "cgroup v1 cfs_quota"
+  },
+  "shape": {
+    "dataset": "FreezerSmallTrain",
+    "n_train": 28,
+    "n_test": 2850,
+    "n_channels": 1,
+    "n_timepoints": 301,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/FreezerSmallTrain/raw.parquet"
+  },
+  "accuracy": 0.9782456140350877,
+  "row_alignment": {
+    "predicted_rows": 2850,
+    "distinct_ids": 2850,
+    "group_rows": 114000,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 4,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 61.47,
+    "classify_seconds": 358.28,
+    "classify_share": 0.8535,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 8.545,
+      "classify_median": 8.915,
+      "classify_max": 10.198,
+      "max_over_median": 1.14
+    }
+  },
+  "failures": [],
+  "seconds": 422.4,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.5.0-35-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 112,
+    "containerised": true
+  },
+  "caveat": null
+}

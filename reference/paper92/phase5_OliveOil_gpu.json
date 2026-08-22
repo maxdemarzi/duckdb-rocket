@@ -1,0 +1,70 @@
+{
+  "dataset": "OliveOil",
+  "model": "tabicl-v2",
+  "device": "cuda",
+  "features": "rocket",
+  "n_feature_columns": 500,
+  "ts_feature_source": null,
+  "catch22_feature_source": null,
+  "anofox_extension": "/workspace/anofox_gpu/anofox_tabfm.duckdb_extension",
+  "registered_graph": null,
+  "config": {
+    "num_kernels": 10000,
+    "n_groups": 40,
+    "kernels_per_group": 250,
+    "features_per_group": 500,
+    "n_estimators": 1,
+    "seed": 0,
+    "resample": 0,
+    "threads": 4,
+    "memory_limit": "50GB",
+    "memory_budget_source": "cgroup v1",
+    "test_chunk": 128,
+    "context_cache": false,
+    "onnx_threads": 2,
+    "cpu_count_source": "cgroup v1 cfs_quota"
+  },
+  "shape": {
+    "dataset": "OliveOil",
+    "n_train": 30,
+    "n_test": 30,
+    "n_channels": 1,
+    "n_timepoints": 570,
+    "multivariate": false,
+    "raw_parquet": "/workspace/duckdb-rocket/data/phase5/OliveOil/raw.parquet"
+  },
+  "accuracy": 0.8333333333333334,
+  "row_alignment": {
+    "predicted_rows": 30,
+    "distinct_ids": 30,
+    "group_rows": 1200,
+    "min_groups_per_row": 40,
+    "max_groups_per_row": 40,
+    "duplicate_test_series": 0,
+    "distinct_group_banks": 40
+  },
+  "time_split": {
+    "transform_seconds": 2.38,
+    "classify_seconds": 14.94,
+    "classify_share": 0.8624,
+    "groups_timed": 40,
+    "per_group_classify_spread": {
+      "classify_min": 0.291,
+      "classify_median": 0.344,
+      "classify_max": 1.45,
+      "max_over_median": 4.22
+    }
+  },
+  "failures": [],
+  "seconds": 18.0,
+  "comparison": null,
+  "environment": {
+    "system": "Linux",
+    "release": "6.5.0-35-generic",
+    "machine": "x86_64",
+    "python": "3.12.13",
+    "cpu_count": 112,
+    "containerised": true
+  },
+  "caveat": null
+}

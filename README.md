@@ -31,10 +31,18 @@ many-class datasets: ShapesAll (60), the three Pig sets (52), FiftyWords (50), P
 
 ## Status
 
-The pipeline runs end to end, entirely inside DuckDB. Phases 1–5 of [PLAN.md](PLAN.md) are done:
-the ten-dataset UCR subset is measured, **mean accuracy 0.9630**, every dataset reproducing its
-local accuracy exactly. That is a subset chosen for spread, not the paper's 92-dataset protocol,
-and the two numbers measure different things — see [reference/RESULTS.md](reference/RESULTS.md).
+The pipeline runs end to end, entirely inside DuckDB, and has now been measured on the paper's own
+92-dataset protocol (the reachable 92 of the UCR archive's 112 equal-length univariate datasets —
+the other 20 exceed every `anofox_tabfm` model's 10-class cap): **mean accuracy 0.8770**, against
+the paper's reported **0.900**. Not resampled — one split per dataset, the archive's own, which is
+the honest form of a number this cheap to get (6.3 GPU-hours) rather than their 30-resample
+average. Full table, and the two ways this run's configuration differs from the paper's, in
+[reference/RESULTS.md](reference/RESULTS.md#the-papers-92-dataset-protocol-2026-08-21).
+
+A ten-dataset subset chosen for spread rather than difficulty — Phases 1–5 of [PLAN.md](PLAN.md) —
+measures **0.9630**, every dataset reproducing its local accuracy exactly; the two numbers measure
+different things and are not the same claim. See
+[reference/RESULTS.md](reference/RESULTS.md) for both.
 
 The extension builds on **nine platforms** — Linux (amd64/arm64), macOS (amd64/arm64), Windows
 (MSVC and mingw) and all three wasm targets — and is **merged into community-extensions**
@@ -141,9 +149,12 @@ itself.
 
 ### It fits badly when
 
-- **The test set is large.** Cost is linear in test rows with no amortisation: ItalyPowerDemand's
-  1,029 rows took 1,010 s on 16 vCPU. ECG5000's 4,500 rows never finished on CPU at all — four
-  attempts, >5h46m, ~44 GB — and needed a GPU to land in 18m39s.
+- **The test set is large, on CPU.** Cost is linear in test rows with no amortisation:
+  ItalyPowerDemand's 1,029 rows took 1,010 s on 16 vCPU. ECG5000's 4,500 rows never finished on
+  CPU at all — four attempts, >5h46m, ~44 GB — and needed a GPU to land in 18m39s (17m04s in the
+  92-dataset run). A GPU build is no longer something you have to self-build:
+  [this repo publishes one](https://github.com/maxdemarzi/duckdb-rocket/releases/tag/prebuilt)
+  (`anofox_tabfm-cuda-*`, linux_x86_64), since none exists upstream.
 - **The training context is large.** Memory scales with context rows × features and lives outside
   DuckDB's `memory_limit`, so it cannot be bounded by configuration — only by `--test-chunk`, and
   only for the test half. A 500-row context is already heavy.

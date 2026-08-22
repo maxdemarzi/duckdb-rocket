@@ -1902,6 +1902,165 @@ It computes none of the result. The generation is mechanical templating that can
 avoided, because `tabfm_classify` needs N named scalar columns — the `LIST` form crashes the
 engine — so a 40-group run is ~1.1 MB of SQL.
 
+## The paper's 92-dataset protocol (2026-08-21)
+
+Every accuracy above this line is a subset chosen for spread (10 datasets) or for difficulty (29
+hard datasets) — never the paper's own protocol, so never directly comparable to its headline
+0.900. This is that comparison, on the reachable universe: of the UCR archive's 112 equal-length
+univariate datasets, 92 have ≤10 classes (`max_classes: 10` on every `anofox_tabfm` model); the
+other 20 (`Phoneme`, `ShapesAll`, the three `Pig*` sets, and so on — TASKS.md has the full list)
+cannot be attempted by this backbone family at all, and that is a property of the model, not of
+this pipeline.
+
+**Mean accuracy 0.8770 over 92 datasets, against the paper's 0.900 — a 2.3-point gap.** Not a
+resampled number: one split per dataset, the archive's own (resample 0), because that is what
+made this affordable the same day the GPU build became real (see "GPU: works, but only if you
+build it" — now published) rather than a multi-day campaign. The paper reports a 30-resample
+average; a single split is read here as the honest, cheaper measurement it is, not as their
+number with the caveat quietly dropped. Row-weighted instead of per-dataset-averaged, the number
+is 0.8923 over 90,592 test rows — higher, because the largest test sets (`StarLightCurves`,
+`ElectricDevices`, `Wafer`) score above the unweighted mean.
+
+**Three ways this run is not the paper's configuration, all already documented elsewhere in this
+project and not new to this result:**
+
+1. **`tabicl-v2`, e=1, G=40 — not `tabpfn-v2-5`, e=8.** Settled in Phase 2/7c: the paper's own
+   backbone doesn't load in the anofox_tabfm build this pipeline uses, and `e=8` isn't reachable
+   through it at all. Every number this project has ever published carries this substitution.
+2. **17 of 92 datasets had their training context capped at 500 rows (stratified), because their
+   native train split was far past anything this pipeline had run through `tabfm_classify`
+   before** — up to `ElectricDevices`' 8,926, against the previous ceiling of ECG5000's 500. 500
+   was chosen because it is the one config already proven to fit on this exact GPU build
+   (ECG5000, Phase 5). The capped datasets scored **0.8667** on average against **0.8793** for
+   the other 75 — a 1.3-point gap that may be the cap's cost, or may just be that these
+   particular datasets are harder; the two are not disentangled by this run.
+3. **`HandOutlines` ran on CPU, not GPU.** It hit a reproducible ORT VRAM allocation failure
+   specific to it — `Failed to allocate memory for requested buffer of size 4420336384` on a
+   Softmax node, with 48 GB of VRAM completely free at the time, and *worse* (41 GB used and
+   climbing, killed rather than let run) when the context and test-chunk were both shrunk, which
+   rules out simple memory pressure. Not chased further: one dataset, and the CPU path is this
+   project's most heavily verified code path. Same `--max-train-rows 500 --test-chunk 128`
+   otherwise; accuracy is deterministic given device, precision and split, so CPU vs. GPU should
+   not itself move the number (Phase 5's GunPoint control already established this) — flagged as
+   an open question rather than asserted, since a genuine device-dependent numerical difference
+   has not been ruled out for this one dataset the way it was for GunPoint.
+
+**Range: 0.4909 (`InlineSkate`) to 1.0000 (four datasets tied).** `InlineSkate`'s low score is not
+a new finding — Phase 7's write-up already recorded that 29 of its 550 test series are
+byte-identical to another test series (RESULTS.md, "The id-recovery key"), which puts a ceiling on
+any classifier if those duplicates carry different true labels; not confirmed here, but consistent
+with the worst score in the set landing exactly there. `ScreenType`, `Haptics` and
+`RefrigerationDevices` are three of Phase 7's own "hard" 29 and score accordingly low here too —
+this run and that one agree on which datasets are difficult, for whatever that cross-check is
+worth given they share a backbone and a feature family.
+
+**Cost: 6.3 hours of GPU pod time (RTX 6000 Ada, $0.74/hr) plus one CPU fallback run (~22 min).**
+Affordable specifically because of the GPU build published earlier the same day — the built-in
+per-test-row cost estimate this project already had (0.25 s/row, from an A40 measurement) put the
+92-dataset total near 6.3 hours before a single dataset ran, and the outcome landed within a few
+percent of that estimate.
+
+| Dataset | Accuracy | Test rows | Train rows | Device |
+|---|---|---|---|---|
+| InlineSkate | 0.4909 | 550 | 100 | cuda |
+| ScreenType | 0.5200 | 375 | 375 | cuda |
+| Haptics | 0.5552 | 308 | 155 | cuda |
+| RefrigerationDevices | 0.5573 | 375 | 375 | cuda |
+| MiddlePhalanxTW | 0.6104 | 154 | 399 | cuda |
+| MiddlePhalanxOutlineAgeGroup | 0.6169 | 154 | 400 | cuda |
+| Herring | 0.6562 | 64 | 64 | cuda |
+| ElectricDevices | 0.7042 | 7711 | 500 (capped) | cuda |
+| EthanolLevel | 0.7160 | 500 | 500 (capped) | cuda |
+| DistalPhalanxTW | 0.7194 | 139 | 400 | cuda |
+| ChlorineConcentration | 0.7302 | 3840 | 467 | cuda |
+| DistalPhalanxOutlineAgeGroup | 0.7410 | 139 | 400 | cuda |
+| Earthquakes | 0.7482 | 139 | 322 | cuda |
+| Beef | 0.7667 | 30 | 30 | cuda |
+| Lightning7 | 0.7671 | 73 | 70 | cuda |
+| UWaveGestureLibraryY | 0.7697 | 3582 | 500 (capped) | cuda |
+| FordB | 0.7741 | 810 | 500 (capped) | cuda |
+| UWaveGestureLibraryZ | 0.7778 | 3582 | 500 (capped) | cuda |
+| Ham | 0.7810 | 105 | 109 | cuda |
+| Computers | 0.7840 | 250 | 250 | cuda |
+| ProximalPhalanxTW | 0.8000 | 205 | 400 | cuda |
+| DistalPhalanxOutlineCorrect | 0.8007 | 276 | 500 (capped) | cuda |
+| SmallKitchenAppliances | 0.8160 | 375 | 375 | cuda |
+| WormsTwoClass | 0.8182 | 77 | 181 | cuda |
+| Worms | 0.8182 | 77 | 181 | cuda |
+| MedicalImages | 0.8184 | 760 | 381 | cuda |
+| PhalangesOutlinesCorrect | 0.8240 | 858 | 500 (capped) | cuda |
+| SemgHandMovementCh2 | 0.8267 | 450 | 450 | cuda |
+| ProximalPhalanxOutlineAgeGroup | 0.8293 | 205 | 400 | cuda |
+| OliveOil | 0.8333 | 30 | 30 | cuda |
+| Wine | 0.8333 | 54 | 57 | cuda |
+| Rock | 0.8400 | 50 | 20 | cuda |
+| UWaveGestureLibraryX | 0.8400 | 3582 | 500 (capped) | cuda |
+| BeetleFly | 0.8500 | 20 | 20 | cuda |
+| Lightning2 | 0.8525 | 61 | 60 | cuda |
+| LargeKitchenAppliances | 0.8560 | 375 | 375 | cuda |
+| CinCECGTorso | 0.8609 | 1380 | 40 | cuda |
+| ArrowHead | 0.8629 | 175 | 36 | cuda |
+| MiddlePhalanxOutlineCorrect | 0.8694 | 291 | 500 (capped) | cuda |
+| ProximalPhalanxOutlineCorrect | 0.8935 | 291 | 500 (capped) | cuda |
+| Yoga | 0.8993 | 3000 | 300 | cuda |
+| BirdChicken | 0.9000 | 20 | 20 | cuda |
+| ECG200 | 0.9000 | 100 | 100 | cuda |
+| SonyAIBORobotSurface2 | 0.9087 | 953 | 27 | cuda |
+| ToeSegmentation2 | 0.9154 | 130 | 36 | cuda |
+| MixedShapesSmallTrain | 0.9249 | 2425 | 100 | cuda |
+| InsectEPGSmallTrain | 0.9277 | 249 | 17 | cuda |
+| SemgHandSubjectCh2 | 0.9289 | 450 | 450 | cuda |
+| FordA | 0.9311 | 1320 | 500 (capped) | cuda |
+| Car | 0.9333 | 60 | 60 | cuda |
+| Meat | 0.9333 | 60 | 60 | cuda |
+| HandOutlines | 0.9351 | 370 | 500 (capped) | cpu |
+| ACSF1 | 0.9400 | 100 | 100 | cuda |
+| MoteStrain | 0.9417 | 1252 | 20 | cuda |
+| SemgHandGenderCh2 | 0.9467 | 600 | 300 | cuda |
+| ECG5000 | 0.9480 | 4500 | 500 | cuda |
+| HouseTwenty | 0.9496 | 119 | 40 | cuda |
+| UWaveGestureLibraryAll | 0.9523 | 3582 | 500 (capped) | cuda |
+| SonyAIBORobotSurface1 | 0.9551 | 601 | 20 | cuda |
+| PowerCons | 0.9556 | 180 | 180 | cuda |
+| Fish | 0.9600 | 175 | 175 | cuda |
+| ToeSegmentation1 | 0.9605 | 228 | 40 | cuda |
+| SmoothSubspace | 0.9667 | 150 | 150 | cuda |
+| MixedShapesRegularTrain | 0.9682 | 2425 | 500 | cuda |
+| Strawberry | 0.9703 | 370 | 500 (capped) | cuda |
+| DiatomSizeReduction | 0.9706 | 306 | 16 | cuda |
+| OSULeaf | 0.9711 | 242 | 200 | cuda |
+| ItalyPowerDemand | 0.9718 | 1029 | 67 | cuda |
+| Mallat | 0.9727 | 2345 | 55 | cuda |
+| FaceFour | 0.9773 | 88 | 24 | cuda |
+| FreezerSmallTrain | 0.9782 | 2850 | 28 | cuda |
+| Symbols | 0.9799 | 995 | 25 | cuda |
+| StarLightCurves | 0.9822 | 8236 | 500 (capped) | cuda |
+| GunPointAgeSpan | 0.9842 | 316 | 135 | cuda |
+| Chinatown | 0.9854 | 343 | 20 | cuda |
+| SyntheticControl | 0.9867 | 300 | 300 | cuda |
+| InsectEPGRegularTrain | 0.9880 | 249 | 62 | cuda |
+| GunPointOldVersusYoung | 0.9905 | 315 | 136 | cuda |
+| UMD | 0.9931 | 144 | 36 | cuda |
+| BME | 0.9933 | 150 | 30 | cuda |
+| GunPoint | 0.9933 | 150 | 50 | cuda |
+| Wafer | 0.9963 | 6164 | 500 (capped) | cuda |
+| ECGFiveDays | 0.9965 | 861 | 23 | cuda |
+| GunPointMaleVersusFemale | 0.9968 | 316 | 135 | cuda |
+| TwoPatterns | 0.9978 | 4000 | 500 (capped) | cuda |
+| TwoLeadECG | 0.9982 | 1139 | 23 | cuda |
+| FreezerRegularTrain | 0.9986 | 2850 | 150 | cuda |
+| CBF | 0.9989 | 900 | 30 | cuda |
+| Coffee | 1.0000 | 28 | 28 | cuda |
+| Plane | 1.0000 | 105 | 105 | cuda |
+| ShapeletSim | 1.0000 | 180 | 20 | cuda |
+| Trace | 1.0000 | 100 | 100 | cuda |
+
+Artefacts: `reference/paper92/` (184 files — one report plus one soft-label file per dataset).
+Driver: `scripts/teacher_sweep.py --device cuda --anofox-extension <published cuda build>
+--max-train-rows 500 --test-chunk 128 --out-dir reference/paper92`, which already existed for the
+distillation gate and needed only a `--max-train-rows` passthrough (added the same session) to
+run this.
+
 ## Phase 7b′ — does concatenating feature families raise the ceiling? (2026-08-18)
 
 **Yes, by about nine tenths of an accuracy point, and it is not free.**

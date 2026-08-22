@@ -257,3 +257,32 @@ Best-shaped candidates, because pool/context ratio is what should drive the gain
   later. For a one-off batch, just run the teacher and stop.
 - **Calibration is assumed, not measured.** Averaging 40 group posteriors *should* calibrate well,
   but nobody has checked; if it is overconfident, KL against it inherits that.
+
+## A literature check (2026-08-22), and one correctness requirement it hands us
+
+Prompted by a user question about scaling this pipeline to large tables, not by anything reopening
+the gate above. Arm B's failure here (correlated teacher errors, not error *rate*) is a different
+mechanism from the one below, and this section does not revise that verdict.
+
+**"Pocket Foundation Models" ([arXiv:2605.18654](https://arxiv.org/pdf/2605.18654)) distils a
+tabular foundation model (TabICLv2, the same family `anofox_tabfm` serves) into gradient-boosted
+trees and states a hard precondition for any of this to work at all: the teacher must never score
+a row that sits in its own in-context support set.** An in-context model conditioned on a row it
+can already see effectively echoes the true label back — the soft output collapses toward one-hot,
+carrying none of the inter-class structure a student needs. Their fix is **stratified
+out-of-fold (OOF) labelling**: partition the labelling pool into folds, and for each fold, use only
+the *other* folds as the teacher's context when labelling it.
+
+**This does not apply to what was measured here** — arm B's pool was already disjoint from the
+context (`context` = the real train split, `pool` = held-out test rows never used as context), so
+label leakage was never the failure mode; the correlated-error mechanism above is a separate,
+harder problem OOF labelling does not touch. It matters for anything built *next*: if a future
+attempt ever draws the labelling pool from the same rows that could appear in context — a larger
+unlabelled table sampled alongside the labelled one, or a context that itself grows by absorbing
+prior pseudo-labels — OOF partitioning is not optional, it is the difference between a real
+measurement and one that looks good because the teacher was shown the answer.
+
+Their reported result (153 datasets, TabICLv2 -> XGBoost, 96.5% of teacher AUC at 38-860x speedup,
+gains concentrated on ≤21-feature tasks) is for generic tabular data, not time series or ROCKET
+features, and nothing found ties this pattern to either — a genuine gap, not one this project
+happens to already have an answer for.

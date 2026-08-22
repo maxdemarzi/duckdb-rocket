@@ -48,7 +48,10 @@ from duckdb_rocket.budget import (  # noqa: E402
 )
 from duckdb_rocket.datasets import load  # noqa: E402
 from duckdb_rocket.shells import built_shell, rocket_shell  # noqa: E402
-from duckdb_rocket.pipeline import RocketPFNConfig  # noqa: E402
+from duckdb_rocket.pipeline import (  # noqa: E402
+    RocketPFNConfig,
+    TABPFN_SUGGESTED_MAX_CONTEXT_ROWS,
+)
 from duckdb_rocket.rocket import normalize_series  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -355,6 +358,23 @@ def write_multirocket_parquet(raw_parquet: str, outdir: Path, n_groups: int,
         out,
     )
     return out
+
+
+def context_size_warning(n_train: int) -> str | None:
+    """None if `n_train` is within TabPFN v2's suggested regime, else a message worth printing.
+
+    A pure function rather than an inline check in `main()` so it is testable without a dataset,
+    a shell, or a network call -- the whole reason to have it at all is a number worth getting
+    right, and the arithmetic here is one comparison.
+    """
+    if n_train <= TABPFN_SUGGESTED_MAX_CONTEXT_ROWS:
+        return None
+    return (f"{n_train} training rows exceeds TabPFN v2's suggested "
+            f"{TABPFN_SUGGESTED_MAX_CONTEXT_ROWS:,}-row context ceiling. anofox_tabfm's ONNX "
+            f"path does not enforce this itself, so the run will proceed, but past this size "
+            f"you are outside the regime the model was evaluated on -- real-world reports "
+            f"describe a cliff, not graceful decay. Consider --max-train-rows "
+            f"{TABPFN_SUGGESTED_MAX_CONTEXT_ROWS}.")
 
 
 def _per_group_export(outdir: Path) -> str:
@@ -1109,6 +1129,9 @@ def main() -> int:
                                      args.max_train_rows, args.seed, args.resample)
     print(f"      {meta['n_train']} train / {meta['n_test']} test, "
           f"{meta['n_timepoints']} timepoints")
+    ctx_warning = context_size_warning(meta["n_train"])
+    if ctx_warning:
+        print(f"      WARNING: {ctx_warning}", file=sys.stderr)
 
     memory_limit = args.memory_limit or default_memory_limit()
     _, budget_source = binding_memory_bytes()

@@ -163,6 +163,106 @@ itself.
 - **You need low latency.** Per-call cost is seconds, not milliseconds.
 - **Licences matter.** The model weights are third-party and some are non-commercial; see below.
 
+### Your table is large: what actually helps
+
+**The premise needs correcting first.** `rocket_transform` itself is not what gets slow — it is a
+convolution over your series, embarrassingly parallel across rows, and every timing this project
+has recorded puts it under 2% of wall clock. That matches the literature, not just our own
+numbers: [MiniRocket](https://arxiv.org/abs/2012.08791) transformed and classified all 109 UCR
+datasets combined in under ten minutes and was validated up to MosquitoSound's 139,780 training
+series with no reported scaling breakdown — ROCKET-family feature extraction is linear in series
+count and length, full stop. What dominates is `tabfm_classify`: it is an
+in-context model with no trained weights for your task, so **every call re-encodes your entire
+labelled training set before it looks at a single query row**. That re-encoding is measured at
+71-80% of a call's cost ([docs/ROUTING.md](docs/ROUTING.md)) — a fixed fee, paid again on every
+call, whether or not the context changed since the last one. "Large table" almost always means
+"many rows to classify," and the fixed fee is what makes that expensive, not the convolution.
+
+That reframes "should I sample?" into two different questions with different answers:
+
+- **Sampling the *test* rows** — the ones you're classifying — doesn't save you anything you
+  wanted: you'd just get predictions for fewer rows. What you actually want is to batch them, not
+  drop them (below).
+- **Sampling the *training* context** — the labelled rows the model conditions on — is possible
+  (`--max-train-rows`, stratified by class) but **measured to be a bad trade for speed**: halving
+  the context bought 1.48x, not 2x, because the fixed per-call fee doesn't shrink — only the
+  per-row term does. That 1.48x cost −0.0168 accuracy, worse than the −0.0033 that reducing the
+  group count buys for a 4x speedup (below). Shrink the context only when a run doesn't fit in
+  memory otherwise — it's a memory lever, not a speed lever. It is worth doing regardless past a
+  point, though: TabPFN v2's own suggested regime tops out at 10,000 rows / 500 features / 10
+  classes, enforced as a hard `ValueError` in the reference implementation
+  ([PriorLabs/TabPFN#115](https://github.com/PriorLabs/TabPFN/issues/115)), and real-world reports
+  past that ceiling describe a cliff, not graceful decay. `anofox_tabfm` doesn't expose that guard,
+  so `phase5_pipeline.py` does: it warns (not errors — the ONNX path might still be fine) when your
+  training context exceeds 10,000 rows, pointing at `--max-train-rows`. **Don't bother building
+  anything smarter than stratified random
+  sampling to pick which rows survive the cap**: a dedicated study
+  ([arXiv:2607.26628](https://arxiv.org/abs/2607.26628)) tested K-Means and farthest-point
+  selection against plain random sampling for TabPFN context and found them statistically tied —
+  what predicts accuracy is the context's diversity/coverage, not how cleverly it's chosen, and
+  forcing a context to match the full training distribution's feature means measured *worse* than
+  random. Cheap random sampling already covers the space in expectation. If you're capping a
+  context from a genuinely huge table with no measurement of your own to go on yet, TabICL's own
+  practitioner guidance for million-row tables — subsample the context to somewhere in **500-5,000
+  rows** ([arXiv:2502.05564](https://arxiv.org/pdf/2502.05564)) — is a reasonable starting point,
+  well inside TabPFN's 10,000-row ceiling.
+
+In the order they're worth trying, measured on 28-29 hard UCR datasets
+([docs/ROUTING.md](docs/ROUTING.md), [reference/RESULTS.md](reference/RESULTS.md)):
+
+1. **Reduce `--n-groups`.** Cost is exactly linear in the group count, and G=10 against the
+   paper's G=40 measured **3.7-3.8x faster** for −0.0033 mean accuracy (not statistically
+   different from zero). This is the single biggest lever with the smallest accuracy cost, and
+   it's why `--n-groups 10` is the shipped default rather than 40.
+2. **Batch calls; don't shrink them.** The context-encoding fee is per *call*, not per row, so one
+   big `--test-chunk` amortises it and many small ones re-pay it every time — chunking finer than
+   necessary measured **2.18x slower** on whole-dataset runs. Set `--test-chunk` to the largest
+   batch your memory allows (see "It fits badly when" above for the memory math), not the smallest
+   that feels safe. TabPFN's own guidance for large test sets converges on the same idea from the
+   opposite direction — chunk test inference into batches on the order of 1,000 rows rather than
+   one call per row — which is a floor to start from, not a ceiling to stay under.
+3. **Route: run a cheap model on everything, escalate only what it's unsure of.** This is the
+   lever aimed specifically at "many rows." Train a ROCKET-features-plus-ridge (or
+   `MultiRocketHydraClassifier`) student — milliseconds per row — and send only its
+   least-confident rows (by decision margin, not top score) to the teacher. At a 20% escalation
+   budget: **+0.0200** over the student alone (ridge) for **26%** of the teacher-on-everything
+   cost. The student's own uncertainty picks better-than-random rows to escalate — about 3x the
+   signal of escalating a random 20% (p≈0.01), which is the actual claim, not just "escalating
+   helps." Full method, the confidence-margin code, and the "why this works but distillation
+   doesn't" analysis: [docs/ROUTING.md](docs/ROUTING.md). Tooling:
+   `scripts/distill_gate.py --route` and `scripts/route_serve.py`.
+4. **Distillation — replacing the teacher entirely — is the one that sounds obvious and measured
+   negative.** Label an unlabelled pool once with the teacher, train a cheap student on those
+   pseudo-labels, then never run the teacher again. Gated on 67 datasets and it does not clear the
+   bar: on datasets with real headroom the teacher's own soft labels recovered only 25% of what
+   real labels would have bought (+0.0119 against a +0.0474 ceiling, p=0.13), and its hard labels
+   recovered 2%. **The reason isn't the teacher's error rate** — it tolerates 25.6% label noise
+   and the teacher's error rate is 21.6%, comfortably inside that — it's that a teacher's mistakes
+   aren't noise: they land on the same ambiguous rows every time, so a student trained on them
+   learns a coherent wrong rule instead of one that averages out. Swapping the same error rate for
+   *random* errors is worth +0.0516. This is why routing (above) wins where distillation loses:
+   routing never asks a wrong-but-confident prediction to be trusted, it just costs one escalated
+   row. Full gate, the label-noise sweep that found this, and what would make it worth revisiting:
+   [docs/DISTILLATION_PLAN.md](docs/DISTILLATION_PLAN.md).
+
+**One more idea, checked and left unimplemented on purpose.** "Bag the context" — run several
+calls with different random subsamples of a large training set and average, recovering some of
+what any one small context misses. It's a real, named pattern elsewhere (ConTextTab uses 8-fold
+context bagging at inference, [arXiv:2506.10707](https://arxiv.org/pdf/2506.10707)), but nothing
+found ties a number to how much it recovers versus just picking one larger context, and the cost
+is linear in the number of resamples — on top of a cost this pipeline already spends most of its
+time on. Not implemented here; flagged rather than built, per this project's own rule of not
+shipping a lever before it's measured.
+
+**What none of this fixes.** The context-encoding cost is architectural — `tabfm_classify` takes
+train and test in one call with no prepare-then-query split to cache between, so there's nothing
+to expose from SQL. An unreleased upstream context cache
+([anofox-tabfm#40](https://github.com/DataZooDE/anofox-tabfm/pull/40)) helps only across chunks
+that already share a context (1.85x at nine chunks, a net loss at one — see `--context-cache`
+above), and doesn't touch the per-call fee itself. If your table is large enough that none of the
+above gets you to an acceptable cost, this pipeline is the wrong tool for serving it — train
+something, per "It fits badly when" above.
+
 ### Against the alternatives
 
 **ROCKET + ridge regression** — the original 2020 pipeline — is the honest comparison, and it has

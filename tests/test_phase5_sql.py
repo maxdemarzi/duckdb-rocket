@@ -82,6 +82,21 @@ class TestChunkWindows:
         assert windows(build(28, 28, 9999))[0] == (28, 56)
 
 
+class TestContextSizeWarning:
+    """TabPFN v2's suggested 10,000-row context ceiling: anofox_tabfm enforces nothing of the
+    kind, so this is the only thing that tells a user they've left the model's validated regime."""
+
+    def test_within_the_suggested_regime_is_silent(self):
+        assert p5.context_size_warning(10_000) is None
+        assert p5.context_size_warning(500) is None
+
+    def test_past_the_ceiling_names_the_row_count_and_the_flag(self):
+        msg = p5.context_size_warning(10_001)
+        assert msg is not None
+        assert "10001" in msg
+        assert "--max-train-rows" in msg
+
+
 class TestPrepareOrder:
     """DuckDB prunes a filtered PREPARE against an empty source to a permanent no-op."""
 

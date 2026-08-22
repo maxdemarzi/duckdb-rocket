@@ -34,6 +34,14 @@ gets. Between the two, features are subsampled per estimator, so full coverage o
 group takes at least four of them -- which `anofox_tabfm`, capped at one, cannot supply.
 """
 
+TABPFN_SUGGESTED_MAX_CONTEXT_ROWS = 10_000
+"""TabPFN v2's stated "suggested regime": 10,000 samples, 500 features, 10 classes. The reference
+implementation hard-throws past this (`ValueError` unless `ignore_pretraining_limits=True`,
+PriorLabs/TabPFN#115); `anofox_tabfm`'s ONNX path enforces nothing of the kind, so a training
+context past this size runs silently, outside the regime the model was ever evaluated on. Real-
+world reports describe a cliff past ~9-10k rows, not graceful decay -- this is the one number in
+this file that names a hard architectural ceiling rather than a cost/accuracy trade."""
+
 
 @dataclass(frozen=True)
 class RocketPFNConfig:
